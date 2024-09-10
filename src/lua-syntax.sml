@@ -38,7 +38,13 @@ sig
   | NOTEQUAL
   | AND
   | OR
-  datatype UnaryOp = NEGATE | NOT | LENGTH | BITNOT
+  | INDEX (* a[b] *)
+  datatype UnaryOp =
+    NEGATE (* -a *)
+  | NOT (* not a *)
+  | LENGTH (* #a *)
+  | BITNOT (* ~a *)
+  | SINGLE_VALUE (* (f(...)) *)
   datatype Exp =
     ConstExp of LuaConst
   | VarExp of Id
@@ -49,8 +55,6 @@ sig
       Id vector * Stat vector (* function parameters are implicitly const *)
   | BinExp of BinaryOp * Exp * Exp
   | UnaryExp of UnaryOp * Exp
-  | IndexExp of Exp * Exp
-  | SingleValueExp of Exp (* (f(...)) *)
   and Stat =
     LocalStat of
       (TypedSyntax.VId * VarAttr) list * Exp list (* vars must not be empty *)
@@ -69,6 +73,8 @@ sig
   | GotoStat of Label
   | LabelStat of Label
   type Block = Stat vector
+  val IndexExp: Exp * Exp -> Exp
+  val SingleValueExp: Exp -> Exp
   val makeDoStat: {loopLike: bool, body: Stat list} -> Stat list
   val MultiAssignStat: Id list * Exp list -> Stat list
   val predefinedIdsInBlock: Block * StringSet.set -> StringSet.set
@@ -120,7 +126,13 @@ struct
   | NOTEQUAL
   | AND
   | OR
-  datatype UnaryOp = NEGATE | NOT | LENGTH | BITNOT
+  | INDEX (* a[b] *)
+  datatype UnaryOp =
+    NEGATE (* -a *)
+  | NOT (* not a *)
+  | LENGTH (* #a *)
+  | BITNOT (* ~a *)
+  | SINGLE_VALUE (* (f(...)) *)
   datatype Exp =
     ConstExp of LuaConst
   | VarExp of Id
@@ -131,8 +143,6 @@ struct
       Id vector * Block (* function parameters are implicitly const *)
   | BinExp of BinaryOp * Exp * Exp
   | UnaryExp of UnaryOp * Exp
-  | IndexExp of Exp * Exp
-  | SingleValueExp of Exp (* (f(...)) *)
   and Stat =
     LocalStat of
       (TypedSyntax.VId * VarAttr) list * Exp list (* vars must not be empty *)
@@ -148,6 +158,9 @@ struct
   | GotoStat of Label
   | LabelStat of Label
   withtype Block = Stat vector
+
+  fun IndexExp (x, y) = BinExp (INDEX, x, y)
+  fun SingleValueExp x = UnaryExp (SINGLE_VALUE, x)
 
   fun makeDoStat {loopLike: bool, body: Stat list} =
     if
@@ -176,10 +189,6 @@ struct
     | freeVarsInExp (bound, BinExp (_, x, y), acc) =
         freeVarsInExp (bound, y, freeVarsInExp (bound, x, acc))
     | freeVarsInExp (bound, UnaryExp (_, x), acc) =
-        freeVarsInExp (bound, x, acc)
-    | freeVarsInExp (bound, IndexExp (x, y), acc) =
-        freeVarsInExp (bound, y, freeVarsInExp (bound, x, acc))
-    | freeVarsInExp (bound, SingleValueExp x, acc) =
         freeVarsInExp (bound, x, acc)
   and freeVarsInStat (LocalStat (lhs, rhs), (bound, acc)) =
         let
@@ -280,9 +289,6 @@ struct
     | predefinedIdsInExp (BinExp (_, x, y), acc) =
         predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
     | predefinedIdsInExp (UnaryExp (_, x), acc) = predefinedIdsInExp (x, acc)
-    | predefinedIdsInExp (IndexExp (x, y), acc) =
-        predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
-    | predefinedIdsInExp (SingleValueExp x, acc) = predefinedIdsInExp (x, acc)
   and predefinedIdsInStat (LocalStat (_, xs), acc) =
         List.foldl predefinedIdsInExp acc xs
     | predefinedIdsInStat (AssignStat (xs, ys), acc) =
@@ -436,11 +442,6 @@ struct
             (y, createNameMapForExp unavailableNames (x, nameMap))
       | createNameMapForExp unavailableNames (L.UnaryExp (_, x), nameMap) =
           createNameMapForExp unavailableNames (x, nameMap)
-      | createNameMapForExp unavailableNames (L.IndexExp (x, y), nameMap) =
-          createNameMapForExp unavailableNames
-            (y, createNameMapForExp unavailableNames (x, nameMap))
-      | createNameMapForExp unavailableNames (L.SingleValueExp x, nameMap) =
-          createNameMapForExp unavailableNames (x, nameMap)
     and createNameMapForStat
           (L.LocalStat (vars, exps), unavailableNamesAndNameMap) =
           let
@@ -535,11 +536,6 @@ struct
           createLabelMapForExp unavailableLabels
             (y, createLabelMapForExp unavailableLabels (x, labelMap))
       | createLabelMapForExp unavailableLabels (L.UnaryExp (_, x), labelMap) =
-          createLabelMapForExp unavailableLabels (x, labelMap)
-      | createLabelMapForExp unavailableLabels (L.IndexExp (x, y), labelMap) =
-          createLabelMapForExp unavailableLabels
-            (y, createLabelMapForExp unavailableLabels (x, labelMap))
-      | createLabelMapForExp unavailableLabels (L.SingleValueExp x, labelMap) =
           createLabelMapForExp unavailableLabels (x, labelMap)
     and createLabelMapForStat unavailableLabels
           (L.LocalStat (_, exps), labelMap) =
@@ -706,6 +702,7 @@ struct
   datatype BinaryOp =
     InfixOp of (* prec *) int * string
   | InfixOpR of (* prec *) int * string
+  | IndexOp
 
   fun binOpInfo LuaSyntax.PLUS = InfixOp (4, "+")
     | binOpInfo LuaSyntax.MINUS = InfixOp (4, "-")
@@ -728,6 +725,7 @@ struct
     | binOpInfo LuaSyntax.NOTEQUAL = InfixOp (10, "~=")
     | binOpInfo LuaSyntax.AND = InfixOp (11, "and")
     | binOpInfo LuaSyntax.OR = InfixOp (12, "or")
+    | binOpInfo LuaSyntax.INDEX = IndexOp
 
   fun commaSep ([]: (Fragment list) list) : Fragment list = []
     | commaSep (x :: xs) = x @ commaSep1 xs
@@ -812,10 +810,10 @@ struct
                 Fragment ")" :: LineTerminator :: IncreaseIndent
                 :: doBlock body @ [DecreaseIndent, Indent, Fragment "end"]
             }
-        | doExp (LuaSyntax.BinExp (binOp, exp1, exp2)) =
+        | doExp (LuaSyntax.BinExp (binOp, exp1, exp2raw)) =
             let
               val exp1 = doExp exp1
-              val exp2 = doExp exp2
+              val exp2 = doExp exp2raw
             in
               case binOpInfo binOp of
                 InfixOp (prec, luaop) =>
@@ -830,6 +828,25 @@ struct
                       paren (prec - 1) exp1
                       @ Fragment (" " ^ luaop ^ " ") :: paren prec exp2
                   }
+              | IndexOp =>
+                  (case exp2raw of
+                     LuaSyntax.ConstExp (LuaSyntax.LiteralString key) =>
+                       if isLuaIdentifier key then
+                         { prec = ~1
+                         , exp = paren ~1 exp1 @ [Fragment ("." ^ key)]
+                         }
+                       else
+                         { prec = ~1
+                         , exp =
+                             paren ~1 exp1
+                             @ Fragment "[" :: #exp exp2 @ [Fragment "]"]
+                         }
+                   | _ =>
+                       { prec = ~1
+                       , exp =
+                           paren ~1 exp1
+                           @ Fragment "[" :: #exp exp2 @ [Fragment "]"]
+                       })
             end
         | doExp
             (LuaSyntax.UnaryExp
@@ -859,39 +876,23 @@ struct
             end
         | doExp (LuaSyntax.UnaryExp (unOp, exp)) =
             let
+              val exp' = doExp exp
               val unOp =
                 case unOp of
                   LuaSyntax.NEGATE =>
                     (case exp of
-                       LuaSyntax.ConstExp (LuaSyntax.Numeral _) => "-"
-                     | _ => "- ")
-                | LuaSyntax.NOT => "not "
-                | LuaSyntax.LENGTH => "#"
-                | LuaSyntax.BITNOT => "~ "
+                       LuaSyntax.ConstExp (LuaSyntax.Numeral _) => SOME "-"
+                     | _ => SOME "- ")
+                | LuaSyntax.NOT => SOME "not "
+                | LuaSyntax.LENGTH => SOME "#"
+                | LuaSyntax.BITNOT => SOME "~ "
+                | LuaSyntax.SINGLE_VALUE => NONE
             in
-              {prec = 2, exp = Fragment unOp :: paren 2 (doExp exp)}
+              case unOp of
+                SOME unOp => {prec = 2, exp = Fragment unOp :: paren 2 exp'}
+              | NONE =>
+                  {prec = ~1, exp = Fragment "(" :: #exp exp' @ [Fragment ")"]}
             end
-        | doExp (LuaSyntax.IndexExp (exp1, exp2)) =
-            (case exp2 of
-               LuaSyntax.ConstExp (LuaSyntax.LiteralString key) =>
-                 if isLuaIdentifier key then
-                   { prec = ~1
-                   , exp = paren ~1 (doExp exp1) @ [Fragment ("." ^ key)]
-                   }
-                 else
-                   { prec = ~1
-                   , exp =
-                       paren ~1 (doExp exp1)
-                       @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
-                   }
-             | _ =>
-                 { prec = ~1
-                 , exp =
-                     paren ~1 (doExp exp1)
-                     @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
-                 })
-        | doExp (LuaSyntax.SingleValueExp exp) =
-            {prec = ~1, exp = Fragment "(" :: #exp (doExp exp) @ [Fragment ")"]}
       and doStat ([], acc) = acc
         | doStat
             ( LuaSyntax.AssignStat

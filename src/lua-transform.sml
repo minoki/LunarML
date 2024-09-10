@@ -50,9 +50,6 @@ struct
     | hasInnerFunction (L.BinExp (_, x, y)) =
         hasInnerFunction x orelse hasInnerFunction y
     | hasInnerFunction (L.UnaryExp (_, x)) = hasInnerFunction x
-    | hasInnerFunction (L.IndexExp (x, y)) =
-        hasInnerFunction x orelse hasInnerFunction y
-    | hasInnerFunction (L.SingleValueExp x) = hasInnerFunction x
   fun hasInnerFunctionStat (L.LocalStat (_, xs)) =
         List.exists hasInnerFunction xs
     | hasInnerFunctionStat (L.AssignStat (xs, ys)) =
@@ -107,10 +104,6 @@ struct
     | freeVarsExp (bound, L.BinExp (_, x, y)) acc =
         freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
     | freeVarsExp (bound, L.UnaryExp (_, x)) acc =
-        freeVarsExp (bound, x) acc
-    | freeVarsExp (bound, L.IndexExp (x, y)) acc =
-        freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
-    | freeVarsExp (bound, L.SingleValueExp x) acc =
         freeVarsExp (bound, x) acc
   and freeVarsStat (bound, L.LocalStat (vids, exps)) acc =
         let
@@ -200,10 +193,6 @@ struct
         L.BinExp (binOp, substExp map x, substExp map y)
     | substExp map (L.UnaryExp (unOp, x)) =
         L.UnaryExp (unOp, substExp map x)
-    | substExp map (L.IndexExp (x, y)) =
-        L.IndexExp (substExp map x, substExp map y)
-    | substExp map (L.SingleValueExp x) =
-        L.SingleValueExp (substExp map x)
   and substStat map (L.LocalStat (lhs, rhs)) =
         let
           val rhs = List.map (substExp map) rhs
@@ -477,10 +466,6 @@ struct
           L.BinExp (p, doExp x, doExp y)
       | doExp (L.UnaryExp (p, x)) =
           L.UnaryExp (p, doExp x)
-      | doExp (L.IndexExp (x, y)) =
-          L.IndexExp (doExp x, doExp y)
-      | doExp (L.SingleValueExp x) =
-          L.SingleValueExp (doExp x)
     and doBlock (numOuter, block) =
       let
         val (_, annotatedBlock) =
@@ -680,10 +665,6 @@ struct
           L.BinExp (binOp, doExp ctx x, doExp ctx y)
       | doExp ctx (L.UnaryExp (unOp, x)) =
           L.UnaryExp (unOp, doExp ctx x)
-      | doExp ctx (L.IndexExp (x, y)) =
-          L.IndexExp (doExp ctx x, doExp ctx y)
-      | doExp ctx (L.SingleValueExp x) =
-          L.SingleValueExp (doExp ctx x)
     and doStat ctx (L.LocalStat (vars, xs)) =
           L.LocalStat (vars, List.map (doExp ctx) xs)
       | doStat ctx (L.AssignStat (xs, ys)) =
@@ -827,17 +808,6 @@ struct
       | doExp ctx env (L.UnaryExp (unOp, a)) =
           let val (decs, a) = doExp ctx env a
           in (decs, L.UnaryExp (unOp, a))
-          end
-      | doExp ctx env (L.IndexExp (a, b)) =
-          let
-            val (decs, a) = doExp ctx env a
-            val (decs', b) = doExp ctx env b
-          in
-            (decs @ decs', L.IndexExp (a, b))
-          end
-      | doExp ctx env (L.SingleValueExp a) =
-          let val (decs, a) = doExp ctx env a
-          in (decs, L.SingleValueExp a)
           end
     and doStat ctx env (L.LocalStat (vars, exps)) =
           let
@@ -1100,10 +1070,6 @@ struct
           L.BinExp (binOp, doExp ctx env a, doExp ctx env b)
       | doExp ctx env (L.UnaryExp (unOp, a)) =
           L.UnaryExp (unOp, doExp ctx env a)
-      | doExp ctx env (L.IndexExp (a, b)) =
-          L.IndexExp (doExp ctx env a, doExp ctx env b)
-      | doExp ctx env (L.SingleValueExp a) =
-          L.SingleValueExp (doExp ctx env a)
     and doStat ctx env (L.LocalStat (vars, exps)) =
           let
             val newLocals = #currentLocals env + List.length vars
@@ -1244,9 +1210,6 @@ struct
       | usedLabelsExp (L.BinExp (_, x, y), acc) =
           usedLabelsExp (y, usedLabelsExp (x, acc))
       | usedLabelsExp (L.UnaryExp (_, x), acc) = usedLabelsExp (x, acc)
-      | usedLabelsExp (L.IndexExp (x, y), acc) =
-          usedLabelsExp (y, usedLabelsExp (x, acc))
-      | usedLabelsExp (L.SingleValueExp x, acc) = usedLabelsExp (x, acc)
     and usedLabelsStat (L.LocalStat (_, rhs), acc) =
           List.foldl usedLabelsExp acc rhs
       | usedLabelsStat (L.AssignStat (lhs, rhs), acc) =
@@ -1281,10 +1244,6 @@ struct
               L.BinExp (p, goExp x, goExp y)
           | goExp (L.UnaryExp (p, x)) =
               L.UnaryExp (p, goExp x)
-          | goExp (L.IndexExp (x, y)) =
-              L.IndexExp (goExp x, goExp y)
-          | goExp (L.SingleValueExp x) =
-              L.SingleValueExp (goExp x)
         and goStat (L.LocalStat (lhs, rhs), acc) =
               L.LocalStat (lhs, List.map goExp rhs) :: acc
           | goStat (L.AssignStat (lhs, rhs), acc) =
