@@ -162,6 +162,7 @@ struct
             LuaTransform.ProcessLocal.doBlock
               {nextId = nextId, maxUpvalue = 255}
               LuaTransform.ProcessLocal.initialEnv lua
+          val lua = LuaTransform.Reassociate.doBlock lua
           val codetransTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val usedLib = StringSet.toList
@@ -222,6 +223,7 @@ struct
           val lua =
             LuaTransform.ProcessLocal.doBlock {nextId = nextId, maxUpvalue = 60}
               LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
+          val lua = LuaTransform.Reassociate.doBlock lua
           val codetransTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val usedLib = StringSet.toList

@@ -34,6 +34,10 @@ sig
   sig
     val doBlock: LuaSyntax.Block -> LuaSyntax.Block
   end
+  structure Reassociate:
+  sig
+    val doBlock: LuaSyntax.Block -> LuaSyntax.Block
+  end
 end =
 struct
   structure L = LuaSyntax
@@ -1239,5 +1243,18 @@ struct
       in
         L.recursePost {exp = fn x => x, stat = fn x => x, block = doBlock} block
       end
+  end
+  structure Reassociate =
+  struct
+    fun collectConcat (L.BinExp (L.CONCAT, x, y), acc) =
+          collectConcat (x, collectConcat (y, acc))
+      | collectConcat (x, acc) = x :: acc
+    fun doExp (L.BinExp (L.CONCAT, L.BinExp (L.CONCAT, x, y), z)) =
+          let val xs = collectConcat (x, collectConcat (y, []))
+          in List.foldr (fn (a, acc) => L.BinExp (L.CONCAT, a, acc)) z xs
+          end
+      | doExp x = x
+    fun doBlock block =
+      L.recursePre {exp = doExp, stat = fn x => x, block = fn x => x} block
   end
 end;
