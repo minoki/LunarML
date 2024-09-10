@@ -2829,19 +2829,31 @@ struct
                (case (decs, finalExp) of
                   ([], N.App {applied, cont, args, attr = _}) =>
                     if cont = name then
-                      List.revAppend
-                        ( revStats
-                        , L.LocalStat
-                            ( List.map
-                                (fn SOME p => (p, L.CONST)
-                                  | NONE => (genSym ctx, L.CONST)) params
-                            , [L.CallExp
-                                 ( doExp (ctx, env, applied)
-                                 , Vector.map (fn x => doExp (ctx, env, x))
-                                     (vector args)
-                                 )]
-                            ) :: doCExp (ctx, env, defaultCont, body)
-                        )
+                      let
+                        val stat =
+                          if List.exists Option.isSome params then
+                            L.LocalStat
+                              ( List.map
+                                  (fn SOME p => (p, L.CONST)
+                                    | NONE => (genSym ctx, L.CONST)) params
+                              , [L.CallExp
+                                   ( doExp (ctx, env, applied)
+                                   , Vector.map (fn x => doExp (ctx, env, x))
+                                       (vector args)
+                                   )]
+                              )
+                          else
+                            L.CallStat
+                              ( doExp (ctx, env, applied)
+                              , Vector.map (fn x => doExp (ctx, env, x))
+                                  (vector args)
+                              )
+                      in
+                        List.revAppend
+                          ( revStats
+                          , stat :: doCExp (ctx, env, defaultCont, body)
+                          )
+                      end
                     else
                       List.revAppend
                         ( revStats
