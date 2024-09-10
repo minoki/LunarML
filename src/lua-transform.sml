@@ -1111,7 +1111,7 @@ struct
                     SOME (locals, r) => (#currentLocals env, locals, r, [])
                   | NONE =>
                       let
-                        val locals = genSym (ctx, "LOCAL")
+                        val locals = genSym (ctx, "_L")
                       in
                         ( #currentLocals env + 1
                         , locals
@@ -1189,7 +1189,7 @@ struct
           (case #locals env of
              SOME _ =>
                let
-                 val locals = genSym (ctx, "LOCAL")
+                 val locals = genSym (ctx, "_L")
                  val env' =
                    { currentLocals = #currentLocals env + 1
                    , locals = SOME (locals, ref 1)
