@@ -134,9 +134,7 @@ struct
         , (VId_Real_abs, "_Real_abs")
         (* Vector and Array *)
         , (VId_Vector_concat, "_Vector_concat")
-        , (VId_Vector_fromList, "_VectorOrArray_fromList")
         , (VId_Array_array, "_Array_array")
-        , (VId_Array_fromList, "_VectorOrArray_fromList")
         (* JS interface *)
         , (VId_JavaScript_undefined, "undefined")
         , (VId_JavaScript_null, "null")
@@ -1127,6 +1125,16 @@ struct
                              (a, J.ConstExp (J.asciiStringAsWide "length"))
                        , PURE
                        )
+                 | Primitives.Vector_fromList =>
+                     doUnaryExp
+                       ( fn xs =>
+                           J.CallExp
+                             ( J.VarExp
+                                 (J.PredefinedId "_VectorOrArray_fromList")
+                             , vector [xs]
+                             )
+                       , PURE
+                       )
                  | Primitives.Vector_unsafeFromListRevN Primitives.I54 =>
                      doBinaryExp
                        ( fn (n, xs) =>
@@ -1143,6 +1151,16 @@ struct
                        ( fn a =>
                            J.IndexExp
                              (a, J.ConstExp (J.asciiStringAsWide "length"))
+                       , PURE
+                       )
+                 | Primitives.Array_fromList =>
+                     doUnaryExp
+                       ( fn xs =>
+                           J.CallExp
+                             ( J.VarExp
+                                 (J.PredefinedId "_VectorOrArray_fromList")
+                             , vector [xs]
+                             )
                        , PURE
                        )
                  | Primitives.Unsafe_cast => doUnaryExp (fn a => a, PURE)

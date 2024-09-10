@@ -10,6 +10,6 @@ fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                              else
                                  Unsafe.Array.update (arr, i, value)
 val array = _Prim.Array.array
-val fromList = _Prim.Array.fromList
+fun fromList xs = _primCall "Array.fromList" (xs)
 end;
 (* equality is defined in equal.sml *)

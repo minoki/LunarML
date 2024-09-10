@@ -765,6 +765,13 @@ do
       discardable = true,
     },
     {
+      name = "Vector.fromList",
+      srcname = "Vector_fromList",
+      type = { vars = {TV.a}, args = {list(TV.a)}, results = {vector(TV.a)} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Vector.unsafeFromListRevN{.i}",
       srcname = "Vector_unsafeFromListRevN",
       type = { vars = {TV.a}, args = {intA, list(TV.a)}, results = {vector(TV.a)} },
@@ -782,6 +789,13 @@ do
       name = "Array.length{.i}",
       srcname = "Array_length",
       type = { vars = {TV.a}, args = {array(TV.a)}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Array.fromList",
+      srcname = "Array_fromList",
+      type = { vars = {TV.a}, args = {list(TV.a)}, results = {array(TV.a)} },
       mayraise = false,
       discardable = true,
     },

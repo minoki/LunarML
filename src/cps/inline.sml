@@ -45,7 +45,7 @@ struct
     fun max3 (x, y, z) =
       IntInf.max (x, IntInf.max (y, z))
     fun simplifySimpleExp (_: env, C.Record _) = NOT_SIMPLIFIED
-      | simplifySimpleExp (env, C.PrimOp {primOp, tyargs = _, args}) =
+      | simplifySimpleExp (env, C.PrimOp {primOp, tyargs, args}) =
           (case (primOp, args) of
              (F.ListOp, []) => VALUE C.Nil (* empty list *)
            | (F.PrimCall P.JavaScript_call, [f, C.Var args]) =>
@@ -680,6 +680,16 @@ struct
                  VALUE (C.Char16Const (Int.fromLarge c))
                else
                  NOT_SIMPLIFIED
+           | (F.PrimCall P.Vector_fromList, [C.Nil]) =>
+               SIMPLE_EXP (C.PrimOp
+                 {primOp = F.VectorOp, tyargs = [List.hd tyargs], args = []})
+           | (F.PrimCall P.Vector_fromList, [C.Var v]) =>
+               (case TypedSyntax.VIdMap.find (env, v) of
+                  SOME {exp = SOME (C.PrimOp {primOp = F.ListOp, tyargs, args})} =>
+                    SIMPLE_EXP
+                      (C.PrimOp
+                         {primOp = F.VectorOp, tyargs = tyargs, args = args})
+                | _ => NOT_SIMPLIFIED)
            | _ => NOT_SIMPLIFIED)
       | simplifySimpleExp (_, C.ExnTag _) = NOT_SIMPLIFIED
       | simplifySimpleExp (env, C.Projection {label, record, fieldTypes = _}) =
@@ -940,10 +950,65 @@ struct
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
             }
       | C.Unreachable => e
+    val Vector_fromList =
+      let
+        val k = C.CVar.fromInt ~1
+        val xs = TypedSyntax.MkVId ("xs", ~1000)
+        val result = TypedSyntax.MkVId ("v", ~1001)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Vector_fromList
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {isWrapper = false}
+          }
+      end
+    val Array_fromList =
+      let
+        val k = C.CVar.fromInt ~2
+        val xs = TypedSyntax.MkVId ("xs", ~1002)
+        val result = TypedSyntax.MkVId ("a", ~1003)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Array_fromList
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {isWrapper = false}
+          }
+      end
+    val initialEnv: value_info TypedSyntax.VIdMap.map =
+      List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
+        [ (InitialEnv.VId_Vector_fromList, {exp = SOME Vector_fromList})
+        , (InitialEnv.VId_Array_fromList, {exp = SOME Array_fromList})
+        ]
     fun goCExp (ctx: CpsSimplify.Context, exp) =
       simplifyCExp
         ( ctx
-        , TypedSyntax.VIdMap.empty
+        , initialEnv
         , C.CVarMap.empty
         , TypedSyntax.VIdMap.empty
         , C.CVarMap.empty

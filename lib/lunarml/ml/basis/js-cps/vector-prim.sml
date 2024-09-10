@@ -5,7 +5,7 @@ fun sub (vec, i) = if i < 0 orelse length vec <= i then
                        raise Subscript
                    else
                        Unsafe.Vector.sub (vec, i)
-val fromList = _Prim.Vector.fromList
+fun fromList xs = _primCall "Vector.fromList" (xs)
 fun tabulate (n, f) = fromList (List.tabulate (n, f))
 val concat = _Prim.Vector.concat
 end

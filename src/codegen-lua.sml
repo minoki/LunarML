@@ -1388,6 +1388,15 @@ struct
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))
                      , PURE
                      )
+               | Primitives.Vector_fromList =>
+                   doUnaryExp
+                     ( fn xs =>
+                         L.CallExp
+                           ( L.VarExp (L.PredefinedId "_VectorOrArray_fromList")
+                           , vector [xs]
+                           )
+                     , PURE
+                     )
                | Primitives.Vector_unsafeFromListRevN _ =>
                    doBinaryExp
                      ( fn (n, xs) =>
@@ -1402,6 +1411,15 @@ struct
                | Primitives.Array_length _ =>
                    doUnaryExp
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))
+                     , PURE
+                     )
+               | Primitives.Array_fromList =>
+                   doUnaryExp
+                     ( fn xs =>
+                         L.CallExp
+                           ( L.VarExp (L.PredefinedId "_VectorOrArray_fromList")
+                           , vector [xs]
+                           )
                      , PURE
                      )
                | Primitives.Unsafe_Vector_sub _ =>
