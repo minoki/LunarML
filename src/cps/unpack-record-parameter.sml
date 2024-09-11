@@ -809,6 +809,10 @@ in
                       #indirect
                         (CpsUsageAnalysis.getContUsage (#cont_usage ctx, name))
                       = NEVER
+                      andalso
+                      #indirect
+                        (CpsUsageAnalysis.getContUsage
+                           (#cont_rec_usage ctx, name)) = NEVER
                     then
                       let
                         val t =
