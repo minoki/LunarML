@@ -188,10 +188,17 @@ struct
              fields) @ [P.Fragment "}"]
     | doExp prec (F.LetExp (decs, exp)) =
         showParen (prec >= 1)
-          (P.Fragment "let "
+          (P.Fragment "let" :: P.IncreaseIndent 2 :: P.LineTerminator
            ::
-           P.semicolonSep (List.map doDec decs)
-           @ P.Fragment " in " :: doExp 0 exp @ [P.Fragment " end"])
+           List.concat
+             (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator])
+                decs) (* (List.map doDec decs) *)
+           @
+           P.DecreaseIndent 2 :: P.Indent :: P.Fragment "in" :: P.LineTerminator
+           :: P.IncreaseIndent 2 :: P.Indent
+           ::
+           doExp 0 exp
+           @ [P.DecreaseIndent 2, P.LineTerminator, P.Indent, P.Fragment "end"])
     | doExp prec (F.AppExp (applied, arg)) =
         showParen (prec >= 2) (doExp 1 applied @ P.Fragment " " :: doExp 2 arg)
     | doExp prec (F.HandleExp {body, exnName, handler}) =
