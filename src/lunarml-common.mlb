@@ -47,6 +47,7 @@ cps/ref-cell.sml
 cps/inline.sml
 cps/decompose-recursive.sml
 cps/unpack-record-parameter.sml
+cps/eta.sml
 nested.sml
 lua-transform.sml
 codegen-lua.sml

@@ -112,6 +112,7 @@ struct
           val cexp = CpsDecomposeRecursive.goCExp (ctx', cexp)
           val cexp = CpsConstantRefCell.goCExp (ctx', cexp)
           val cexp = CpsInline.goCExp (ctx', cexp)
+          val cexp = CpsEtaConvert.go (ctx', cexp)
         in
           if #printTimings ctx then
             print
