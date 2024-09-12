@@ -30,7 +30,8 @@ sig
   | Char16Const of int
   | StringConst of string
   | String16Const of int vector
-  type AbsAttr = {isWrapper: bool}
+  type AbsAttr = {alwaysInline: bool}
+  type ContAttr = {alwaysInline: bool}
   type AppAttr = {}
   datatype SimpleExp =
     PrimOp of
@@ -52,7 +53,8 @@ sig
     ValDec of {exp: SimpleExp, results: (Var option) list}
   | RecDec of
       {name: Var, contParam: CVar, params: Var list, body: CExp, attr: AbsAttr} list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option) list, body: CExp}
+  | ContDec of
+      {name: CVar, params: (Var option) list, body: CExp, attr: ContAttr}
   | RecContDec of (CVar * (Var option) list * CExp) list
   | ESImportDec of
       {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
@@ -124,7 +126,8 @@ struct
   (*
                  | RealConst of Numeric.float_notation
   *)
-  type AbsAttr = {isWrapper: bool}
+  type AbsAttr = {alwaysInline: bool}
+  type ContAttr = {alwaysInline: bool}
   type AppAttr = {}
   datatype SimpleExp =
     PrimOp of
@@ -146,7 +149,8 @@ struct
     ValDec of {exp: SimpleExp, results: (Var option) list}
   | RecDec of
       {name: Var, contParam: CVar, params: Var list, body: CExp, attr: AbsAttr} list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option) list, body: CExp}
+  | ContDec of
+      {name: CVar, params: (Var option) list, body: CExp, attr: ContAttr}
   | RecContDec of (CVar * (Var option) list * CExp) list
   | ESImportDec of
       {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
@@ -241,7 +245,8 @@ struct
 
     fun containsAppDec (ValDec _) = false
       | containsAppDec (RecDec _) = false
-      | containsAppDec (ContDec {name = _, params = _, body}) = containsApp body
+      | containsAppDec (ContDec {name = _, params = _, body, attr = _}) =
+          containsApp body
       | containsAppDec (RecContDec defs) =
           List.exists (fn (_, _, body) => containsApp body) defs
       | containsAppDec (ESImportDec _) = false
@@ -311,7 +316,7 @@ struct
           in
             (bound, acc)
           end
-      | freeVarsInDec (ContDec {name = _, params, body}, (bound, acc)) =
+      | freeVarsInDec (ContDec {name = _, params, body, attr = _}, (bound, acc)) =
           let val bound = List.foldl VIdSet_addOpt bound params
           in (bound, freeVarsInExp (bound, body, acc))
           end
@@ -383,8 +388,9 @@ struct
                       , body = goExp body
                       , attr = attr
                       }) defs)
-          | goDec (ContDec {name, params, body}) =
-              ContDec {name = name, params = params, body = goExp body}
+          | goDec (ContDec {name, params, body, attr}) =
+              ContDec
+                {name = name, params = params, body = goExp body, attr = attr}
           | goDec (RecContDec defs) =
               RecContDec
                 (List.map
@@ -482,8 +488,12 @@ struct
               | SOME x => x
           in
             prependRevDecs
-              ( C.ContDec {name = k, params = [SOME x], body = m ([], C.Var x)}
-                :: revDecs
+              ( C.ContDec
+                  { name = k
+                  , params = [SOME x]
+                  , body = m ([], C.Var x)
+                  , attr = {alwaysInline = false}
+                  } :: revDecs
               , f k
               )
           end
@@ -754,7 +764,7 @@ struct
                                   , params = [param]
                                   , body =
                                       transformT (ctx, env) body ([], contParam)
-                                  , attr = {isWrapper = false}
+                                  , attr = {alwaysInline = false}
                                   }
                               | _ => raise Fail "RecValDec"
                             end) decs')
@@ -848,7 +858,7 @@ struct
                   { contParam = kk
                   , params = [vid]
                   , body = transformT (ctx, env) body ([], kk)
-                  , attr = {isWrapper = false}
+                  , attr = {alwaysInline = false}
                   }
               , results = [SOME f]
               }
@@ -1007,7 +1017,8 @@ struct
         | C.RecDec defs =>
             List.foldl (fn ({body, ...}, t) => sizeOfCExp (body, t)) threshold
               defs
-        | C.ContDec {name = _, params = _, body} => sizeOfCExp (body, threshold)
+        | C.ContDec {name = _, params = _, body, attr = _} =>
+            sizeOfCExp (body, threshold)
         | C.RecContDec defs =>
             List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold
               defs
@@ -1075,9 +1086,13 @@ struct
                 , body = substCExp (subst, csubst, body)
                 , attr = attr
                 }) defs)
-       | C.ContDec {name, params, body} =>
+       | C.ContDec {name, params, body, attr} =>
         C.ContDec
-          {name = name, params = params, body = substCExp (subst, csubst, body)}
+          { name = name
+          , params = params
+          , body = substCExp (subst, csubst, body)
+          , attr = attr
+          }
        | C.RecContDec defs =>
         C.RecContDec
           (List.map
@@ -1218,7 +1233,7 @@ struct
           in
             (subst, csubst, dec' :: acc)
           end
-      | C.ContDec {name, params, body} =>
+      | C.ContDec {name, params, body, attr} =>
           let
             val (params', subst') =
               List.foldr
@@ -1235,7 +1250,8 @@ struct
             val body = alphaConvert (ctx, subst', csubst, body)
             val name' = renewCVar (ctx, name)
             val csubst = C.CVarMap.insert (csubst, name, name')
-            val dec' = C.ContDec {name = name', params = params', body = body}
+            val dec' = C.ContDec
+              {name = name', params = params', body = body, attr = attr}
           in
             (subst, csubst, dec' :: acc)
           end
@@ -1371,7 +1387,7 @@ struct
                end
            | _ => if C.isDiscardable exp then SOME env else NONE)
       | C.RecDec _ => SOME env
-      | C.ContDec {name = _, params = _, body} =>
+      | C.ContDec {name = _, params = _, body, attr = _} =>
           if isDiscardableExp (env, body) then SOME env else NONE
       | C.RecContDec _ => NONE
       | C.ESImportDec {pure = _, specs = _, moduleName = _} => SOME env
@@ -1425,6 +1441,7 @@ struct
                  { name = name
                  , params = [SOME result]
                  , body = prependDecs (decs, cont)
+                 , attr = {alwaysInline = false}
                  }]
             , C.App {applied = f, cont = name, args = [arg], attr = {}}
             )
@@ -1470,10 +1487,14 @@ struct
           in
             (dec :: decs, cont)
           end
-      | C.ContDec {name, params, body} =>
+      | C.ContDec {name, params, body, attr} =>
           let
             val dec = C.ContDec
-              {name = name, params = params, body = finalizeCExp (ctx, body)}
+              { name = name
+              , params = params
+              , body = finalizeCExp (ctx, body)
+              , attr = attr
+              }
           in
             (dec :: decs, cont)
           end
@@ -1586,7 +1607,7 @@ struct
                    )
                ; go (table, 0, body, acc)
                )) acc defs
-      | C.ContDec {name, params = _, body} =>
+      | C.ContDec {name, params = _, body, attr = _} =>
           let
             val free = go (table, level + 1, body, C.CVarSet.empty)
           in

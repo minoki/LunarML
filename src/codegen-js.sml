@@ -1544,7 +1544,7 @@ struct
                         , List.revAppend (decs' @ assignments, revStats)
                         )
                     end)
-           | C.ContDec {name, params, body} =>
+           | C.ContDec {name, params, body, attr = _} =>
                let
                  val escape =
                    case #style ctx of

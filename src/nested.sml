@@ -146,7 +146,7 @@ struct
                   , body = goCExp body
                   , attr = attr
                   }) decs)
-      | goDec (C.ContDec {name, params, body}) =
+      | goDec (C.ContDec {name, params, body, attr = _}) =
           ContDec {name = name, params = params, body = goCExp body}
       | goDec (C.RecContDec decs) =
           RecContDec

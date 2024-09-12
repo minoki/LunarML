@@ -45,7 +45,7 @@ struct
         in
           (env, C.RecDec defs :: acc)
         end
-    | C.ContDec {name, params, body as C.AppCont {applied, args}} =>
+    | C.ContDec {name, params, body as C.AppCont {applied, args}, attr} =>
         (* Eta conversion *)
         if
           ListPair.allEq (fn (SOME p, C.Var q) => p = q | _ => false)
@@ -54,13 +54,21 @@ struct
           (C.CVarMap.insert (env, name, goCont (env, applied)), acc)
         else
           ( env
-          , C.ContDec {name = name, params = params, body = goCExp (env, body)}
-            :: acc
+          , C.ContDec
+              { name = name
+              , params = params
+              , body = goCExp (env, body)
+              , attr = attr
+              } :: acc
           )
-    | C.ContDec {name, params, body} =>
+    | C.ContDec {name, params, body, attr} =>
         ( env
-        , C.ContDec {name = name, params = params, body = goCExp (env, body)}
-          :: acc
+        , C.ContDec
+            { name = name
+            , params = params
+            , body = goCExp (env, body)
+            , attr = attr
+            } :: acc
         )
     | C.RecContDec defs =>
         let

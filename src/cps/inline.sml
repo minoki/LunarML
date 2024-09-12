@@ -740,7 +740,9 @@ struct
                     | _ => exp
                 in
                   case (exp, results) of
-                    (C.Abs {contParam, params, body, attr}, [SOME result]) =>
+                    ( C.Abs {contParam, params, body, attr as {alwaysInline}}
+                    , [SOME result]
+                    ) =>
                       let
                         val body = simplifyCExp
                           (ctx, env, cenv, subst, csubst, body)
@@ -754,7 +756,10 @@ struct
                           ( env
                           , result
                           , {exp =
-                               if CpsSimplify.sizeOfCExp (body, 10) >= 0 then (* Inline small functions *)
+                               if
+                                 alwaysInline
+                                 orelse CpsSimplify.sizeOfCExp (body, 10) >= 0
+                               then (* Inline small functions *)
                                  SOME exp
                                else
                                  NONE (*, isDiscardableFunction = isDiscardableExp (env, body) *)}
@@ -800,20 +805,21 @@ struct
           in
             (env, cenv, subst, csubst, C.RecDec defs :: acc)
           end
-      | C.ContDec {name, params, body} =>
+      | C.ContDec {name, params, body, attr as {alwaysInline}} =>
           let
             val body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
             val cenv = C.CVarMap.insert
               ( cenv
               , name
               , ( params
-                , if CpsSimplify.sizeOfCExp (body, 3) >= 0 then (* Inline very small continuations *)
+                , if alwaysInline orelse CpsSimplify.sizeOfCExp (body, 3) >= 0 then (* Inline very small continuations *)
                     SOME body
                   else
                     NONE
                 )
               )
-            val dec = C.ContDec {name = name, params = params, body = body}
+            val dec = C.ContDec
+              {name = name, params = params, body = body, attr = attr}
           in
             (env, cenv, subst, csubst, dec :: acc)
           end
@@ -972,7 +978,7 @@ struct
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {isWrapper = false}
+          , attr = {alwaysInline = true}
           }
       end
     val Array_fromList =
@@ -997,7 +1003,7 @@ struct
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {isWrapper = false}
+          , attr = {alwaysInline = true}
           }
       end
     val initialEnv: value_info TypedSyntax.VIdMap.map =

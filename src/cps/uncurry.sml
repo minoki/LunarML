@@ -16,7 +16,7 @@ struct
              , params
              , body as
                  C.Let {decs, cont = C.AppCont {applied = k, args = [C.Var v]}}
-             , attr = {isWrapper = false}
+             , attr = {alwaysInline = false}
              }) =
           (case decs of
              [C.ValDec {exp, results = [SOME f]}] =>
@@ -40,7 +40,7 @@ struct
                   { contParam = k
                   , params = params @ List.concat pp
                   , body = body
-                  , attr = {isWrapper = false}
+                  , attr = {alwaysInline = false}
                   }
               , results = [SOME workerName]
               }
@@ -67,7 +67,7 @@ struct
                                  { contParam = l
                                  , params = params
                                  , body = mkWrapper (l, pp)
-                                 , attr = {isWrapper = true}
+                                 , attr = {alwaysInline = true}
                                  }
                              , results = [SOME name]
                              }]
@@ -81,7 +81,7 @@ struct
                   { contParam = l
                   , params = params'
                   , body = mkWrapper (l, pp')
-                  , attr = {isWrapper = true}
+                  , attr = {alwaysInline = true}
                   }
               , results = [SOME name]
               } :: workerDec :: acc
@@ -107,10 +107,13 @@ struct
           in
             C.RecDec defs :: acc
           end
-      | C.ContDec {name, params, body} =>
+      | C.ContDec {name, params, body, attr} =>
           C.ContDec
-            {name = name, params = params, body = simplifyCExp (ctx, body)}
-          :: acc
+            { name = name
+            , params = params
+            , body = simplifyCExp (ctx, body)
+            , attr = attr
+            } :: acc
       | C.RecContDec defs =>
           let
             val defs =

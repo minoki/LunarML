@@ -167,7 +167,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.ContDec {name = _, params, body} =>
+           | C.ContDec {name = _, params, body, attr = _} =>
             ( List.app (Option.app (fn p => add (env, p))) params
             ; goCExp (env, renv, body)
             )
@@ -344,10 +344,11 @@ in
             in
               (env, subst, decs)
             end
-        | C.ContDec {name, params, body} =>
+        | C.ContDec {name, params, body, attr} =>
             let
               val body = simplifyCExp (ctx, env, subst, body)
-              val dec = C.ContDec {name = name, params = params, body = body}
+              val dec = C.ContDec
+                {name = name, params = params, body = body, attr = attr}
             in
               (env, subst, dec :: acc)
             end

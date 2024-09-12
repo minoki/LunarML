@@ -98,9 +98,13 @@ struct
                    dec :: decs
                  end) acc sccs
           end
-      | C.ContDec {name, params, body} =>
-          C.ContDec {name = name, params = params, body = goCExp (ctx, body)}
-          :: acc
+      | C.ContDec {name, params, body, attr} =>
+          C.ContDec
+            { name = name
+            , params = params
+            , body = goCExp (ctx, body)
+            , attr = attr
+            } :: acc
       | C.RecContDec defs =>
           let
             val defs =

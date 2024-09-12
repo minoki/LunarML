@@ -58,7 +58,7 @@ local
                 (fn {name, ...} => TypedSyntax.VIdTable.insert g (name, s)) defs;
               acc
             end
-        | goDec g (C.ContDec {name = _, params = _, body}, acc) =
+        | goDec g (C.ContDec {name = _, params = _, body, attr = _}, acc) =
             goExp (g, body, acc)
         | goDec g (C.RecContDec defs, acc) =
             List.foldl (fn ((_, _, body), acc) => goExp (g, body, acc)) acc defs
@@ -273,7 +273,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.ContDec {name, params, body} =>
+           | C.ContDec {name, params, body, attr = _} =>
             ( List.app (Option.app (fn p => add (env, p))) params
             ; goCExp (env, renv, cenv, crenv, body)
             ; addC (cenv, name)
@@ -486,7 +486,7 @@ in
               ( #simplificationOccurred (#base ctx) := true
               ; (env, cenv, subst, csubst, acc)
               )
-        | C.ContDec {name, params, body} =>
+        | C.ContDec {name, params, body, attr} =>
             (case CpsUsageAnalysis.getContUsage (#cont_usage ctx, name) of
                {direct = NEVER, indirect = NEVER} =>
                  ( #simplificationOccurred (#base ctx) := true
@@ -522,8 +522,8 @@ in
                              | _ => SOME p)
                            | NONE => NONE) params
                      val cenv = C.CVarMap.insert (cenv, name, (params, NONE))
-                     val dec =
-                       C.ContDec {name = name, params = params, body = body}
+                     val dec = C.ContDec
+                       {name = name, params = params, body = body, attr = attr}
                    in
                      (env, cenv, subst, csubst, dec :: acc)
                    end)

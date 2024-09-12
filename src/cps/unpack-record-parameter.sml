@@ -228,7 +228,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.ContDec {name, params, body} =>
+           | C.ContDec {name, params, body, attr = _} =>
             ( List.app (Option.app (fn p => add (env, p))) params
             ; goCExp (env, renv, cenv, crenv, body)
             ; addC (cenv, name)
@@ -479,7 +479,7 @@ in
                                   , attr = {}
                                   }
                               }
-                          , attr = {isWrapper = true}
+                          , attr = {alwaysInline = true}
                           }
                       end
                     val workerDec = C.ValDec
@@ -607,7 +607,7 @@ in
                                     , attr = {}
                                     }
                                 }
-                            , attr = {isWrapper = true}
+                            , attr = {alwaysInline = true}
                             }
                           end
                         val wrappers =
@@ -685,7 +685,7 @@ in
                    C.ValDec {exp = C.Abs wrapper, results = [SOME name]} :: acc)
                 (C.RecDec defs :: acc) wrappers
             end
-        | C.ContDec {name, params, body} =>
+        | C.ContDec {name, params, body, attr} =>
             let
               val shouldTransformParams =
                 if
@@ -779,12 +779,14 @@ in
                               { decs = decs
                               , cont = C.AppCont {applied = name', args = args}
                               }
+                          , attr = {alwaysInline = true}
                           }
                       end
                     val dec = C.ContDec
                       { name = name'
                       , params = List.map SOME params'
                       , body = body
+                      , attr = attr
                       }
                   in
                     wrapper :: dec :: acc
@@ -795,6 +797,7 @@ in
                       { name = name
                       , params = params
                       , body = simplifyCExp (ctx, body)
+                      , attr = attr
                       }
                   in
                     dec :: acc
@@ -959,8 +962,11 @@ in
               List.foldl
                 (fn ({origName, inline = (params, SOME wrapperBody), ...}, acc) =>
                    C.ContDec
-                     {name = origName, params = params, body = wrapperBody}
-                   :: acc
+                     { name = origName
+                     , params = params
+                     , body = wrapperBody
+                     , attr = {alwaysInline = true}
+                     } :: acc
                   | (_, acc) => acc) (dec :: acc) defs'
             end
         | C.ESImportDec _ => dec :: acc
