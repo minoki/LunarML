@@ -292,9 +292,13 @@ struct
                 | _ => NOT_SIMPLIFIED)
            | (F.PrimCall P.String_EQUAL, [C.StringConst x, C.StringConst y]) =>
                VALUE (C.BoolConst (x = y))
+           | (F.PrimCall P.String_HAT, [C.StringConst x, C.StringConst y]) =>
+               VALUE (C.StringConst (x ^ y))
            | ( F.PrimCall P.String16_EQUAL
              , [C.String16Const x, C.String16Const y]
              ) => VALUE (C.BoolConst (x = y))
+           | (F.PrimCall P.String16_HAT, [C.String16Const x, C.String16Const y]) =>
+               VALUE (C.String16Const (Vector.concat [x, y]))
            | ( F.PrimCall (P.Int_EQUAL w)
              , [C.IntConst (w', x), C.IntConst (w'', y)]
              ) =>
