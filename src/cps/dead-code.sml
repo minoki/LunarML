@@ -131,8 +131,8 @@ local
     val neverUsedCont: cont_usage
     type usage_table
     type cont_usage_table
-    val getValueUsage: usage_table * TypedSyntax.VId -> usage
-    val getContUsage: cont_usage_table * CSyntax.CVar -> cont_usage
+    val getValueUsage: usage_table * TypedSyntax.VId -> usage option
+    val getContUsage: cont_usage_table * CSyntax.CVar -> cont_usage option
     val analyze:
       CSyntax.CExp
       -> { usage: usage_table
@@ -157,12 +157,12 @@ local
       type cont_usage_table = (cont_usage ref) CSyntax.CVarTable.hash_table
       fun getValueUsage (table: usage_table, v) =
         case TypedSyntax.VIdTable.find table v of
-          SOME r => !r
-        | NONE => {call = MANY, other = MANY} (* unknown *)
+          SOME r => SOME (!r)
+        | NONE => NONE (* unknown *)
       fun getContUsage (table: cont_usage_table, c) =
         case CSyntax.CVarTable.find table c of
-          SOME r => !r
-        | NONE => {direct = MANY, indirect = MANY} (* unknown *)
+          SOME r => SOME (!r)
+        | NONE => NONE (* unknown *)
       fun useValue env (C.Var v) =
             (case TypedSyntax.VIdTable.find env v of
                SOME r =>
@@ -394,11 +394,11 @@ in
               case (exp, results) of
                 (C.Abs {contParam, params, body, attr}, [SOME result]) =>
                   (case CpsUsageAnalysis.getValueUsage (#usage ctx, result) of
-                     {call = NEVER, other = NEVER} =>
+                     SOME {call = NEVER, other = NEVER} =>
                        ( #simplificationOccurred (#base ctx) := true
                        ; (env, cenv, subst, csubst, acc)
                        )
-                   | {call = ONCE, other = NEVER} =>
+                   | SOME {call = ONCE, other = NEVER} =>
                        let
                          val body = simplifyCExp
                            (ctx, env, cenv, subst, csubst, body)
@@ -488,11 +488,11 @@ in
               )
         | C.ContDec {name, params, body, attr} =>
             (case CpsUsageAnalysis.getContUsage (#cont_usage ctx, name) of
-               {direct = NEVER, indirect = NEVER} =>
+               SOME {direct = NEVER, indirect = NEVER} =>
                  ( #simplificationOccurred (#base ctx) := true
                  ; (env, cenv, subst, csubst, acc)
                  )
-             | {direct = direct_usage, indirect = indirect_usage} =>
+             | SOME {direct = direct_usage, indirect = indirect_usage} =>
                  if
                    direct_usage = ONCE andalso indirect_usage = NEVER
                    andalso
@@ -518,7 +518,7 @@ in
                        List.map
                          (fn SOME p =>
                             (case CpsUsageAnalysis.getValueUsage (#usage ctx, p) of
-                               {call = NEVER, other = NEVER, ...} => NONE
+                               SOME {call = NEVER, other = NEVER, ...} => NONE
                              | _ => SOME p)
                            | NONE => NONE) params
                      val cenv = C.CVarMap.insert (cenv, name, (params, NONE))
@@ -526,13 +526,15 @@ in
                        {name = name, params = params, body = body, attr = attr}
                    in
                      (env, cenv, subst, csubst, dec :: acc)
-                   end)
+                   end
+             | NONE =>
+                 raise Fail "CpsDeadCodeElimination: undefined continuation")
         | C.RecContDec defs =>
             if
               List.all
                 (fn (f, _, _) =>
                    CpsUsageAnalysis.getContUsage (#cont_usage ctx, f)
-                   = {direct = NEVER, indirect = NEVER}) defs
+                   = SOME {direct = NEVER, indirect = NEVER}) defs
             then
               ( #simplificationOccurred (#base ctx) := true
               ; (env, cenv, subst, csubst, acc)
@@ -643,13 +645,12 @@ in
                                        CpsUsageAnalysis.getValueUsage
                                          (#usage ctx, applied)
                                      of
-                                       {call = ONCE, other = NEVER} =>
+                                       SOME {call = ONCE, other = NEVER} =>
                                          (case
                                             CpsUsageAnalysis.getValueUsage
                                               (#rec_usage ctx, applied)
                                           of
-                                            {call = NEVER, other = NEVER} =>
-                                              true
+                                            NONE => true
                                           | _ => false)
                                      | _ => false
                                  in
@@ -704,12 +705,12 @@ in
                       case
                         CpsUsageAnalysis.getContUsage (#cont_usage ctx, applied)
                       of
-                        {direct = ONCE, indirect = NEVER} =>
+                        SOME {direct = ONCE, indirect = NEVER} =>
                           (case
                              CpsUsageAnalysis.getContUsage
                                (#cont_rec_usage ctx, applied)
                            of
-                             {direct = NEVER, indirect = NEVER} => true
+                             NONE => true
                            | _ => false)
                       | _ => false
                   in
