@@ -218,6 +218,9 @@ struct
           , L.ConstExp (L.Numeral "1")
           , L.IndexExp (x, L.ConstExp (L.LiteralString "n"))
           ])
+    | TableUnpackN (x as L.CallExp (L.VarExp (L.PredefinedId "table_pack"), a)) =
+        if Vector.length a = 1 then Vector.sub (a, 0)
+        else L.CallExp (L.VarExp (L.PredefinedId "table_unpackN"), vector [x])
     | TableUnpackN x =
         L.CallExp (L.VarExp (L.PredefinedId "table_unpackN"), vector [x])
 
