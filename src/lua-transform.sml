@@ -30,6 +30,10 @@ sig
     val initialEnvForLuaJIT: Env
     val doBlock: Context -> Env -> LuaSyntax.Block -> LuaSyntax.Block
   end
+  structure StripRedundantGoto:
+  sig
+    val doBlock: LuaSyntax.Block -> LuaSyntax.Block
+  end
   structure StripUnusedLabels:
   sig
     val doBlock: LuaSyntax.Block -> LuaSyntax.Block
@@ -1192,6 +1196,55 @@ struct
            (fn (stat, (env, acc)) => let val (env, stat) = doStat ctx env stat
                                      in (env, stat :: acc)
                                      end) (env, []) stats))))
+  end
+  structure StripRedundantGoto =
+  struct
+    fun goExp (x as L.ConstExp _) = x
+      | goExp (x as L.VarExp _) = x
+      | goExp (L.TableExp fields) =
+          L.TableExp (Vector.map (fn (k, v) => (k, goExp v)) fields)
+      | goExp (L.CallExp (x, args)) =
+          L.CallExp (goExp x, Vector.map goExp args)
+      | goExp (L.MethodExp (x, name, args)) =
+          L.MethodExp (goExp x, name, Vector.map goExp args)
+      | goExp (L.FunctionExp (params, body)) =
+          L.FunctionExp (params, goFunction body)
+      | goExp (L.BinExp (p, x, y)) =
+          L.BinExp (p, goExp x, goExp y)
+      | goExp (L.UnaryExp (p, x)) =
+          L.UnaryExp (p, goExp x)
+    and goStat (L.LocalStat (lhs, rhs), (_, acc)) =
+          (NONE, L.LocalStat (lhs, List.map goExp rhs) :: acc)
+      | goStat (L.AssignStat (lhs, rhs), (_, acc)) =
+          (NONE, L.AssignStat (List.map goExp lhs, List.map goExp rhs) :: acc)
+      | goStat (L.CallStat (x, args), (_, acc)) =
+          (NONE, L.CallStat (goExp x, Vector.map goExp args) :: acc)
+      | goStat (L.MethodStat (x, name, args), (_, acc)) =
+          (NONE, L.MethodStat (goExp x, name, Vector.map goExp args) :: acc)
+      | goStat (L.IfStat (x, y, z), (next, acc)) =
+          ( NONE
+          , L.IfStat (goExp x, goBlock (next, y), goBlock (next, z)) :: acc
+          )
+      | goStat (L.ReturnStat xs, (_, acc)) =
+          (NONE, L.ReturnStat (Vector.map goExp xs) :: acc)
+      | goStat (L.DoStat {loopLike, body}, (next, acc)) =
+          ( NONE
+          , L.DoStat {loopLike = loopLike, body = goBlock (next, body)} :: acc
+          )
+      | goStat (stat as L.GotoStat label, acc' as (next, acc)) =
+          let
+            val redundant =
+              case next of
+                NONE => false
+              | SOME label' => label = label'
+          in
+            if redundant then acc' else (NONE, stat :: acc)
+          end
+      | goStat (stat as L.LabelStat label, (_, acc)) = (SOME label, stat :: acc)
+    and goBlock (next, block) =
+      Vector.fromList (#2 (Vector.foldr goStat (next, []) block))
+    and goFunction block = goBlock (NONE, block)
+    val doBlock = goFunction
   end
   structure StripUnusedLabels =
   struct
