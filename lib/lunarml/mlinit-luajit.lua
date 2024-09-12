@@ -58,6 +58,11 @@ local table_pack = table.pack or function(...) return { n = select("#", ...), ..
 --BEGIN table_unpack: table
 local table_unpack = table.unpack or unpack
 --END
+--BEGIN table_unpackN: table_unpack
+local function table_unpackN(t)
+  return table_unpack(t, 1, t.n)
+end
+--END
 --BEGIN tonumber
 local tonumber = tonumber
 --END
@@ -95,6 +100,12 @@ local uint64_t = ffi.typeof("uint64_t")
 --BEGIN _id
 local function _id(x)
   return x
+end
+--END
+
+--BEGIN _method
+local function _method(obj, name, ...)
+  return obj[name](obj, ...)
 end
 --END
 

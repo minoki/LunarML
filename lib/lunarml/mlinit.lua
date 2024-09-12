@@ -55,10 +55,21 @@ local table_pack = table.pack
 --BEGIN table_unpack: table
 local table_unpack = table.unpack
 --END
+--BEGIN table_unpackN: table_unpack
+local function table_unpackN(t)
+  return table_unpack(t, 1, t.n)
+end
+--END
 
 --BEGIN _id
 local function _id(x)
   return x
+end
+--END
+
+--BEGIN _method
+local function _method(obj, name, ...)
+  return obj[name](obj, ...)
 end
 --END
 

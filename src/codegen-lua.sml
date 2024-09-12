@@ -212,6 +212,53 @@ struct
     | ExpStat e =
         [L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [e])]
 
+  fun TableUnpackN (x as L.VarExp _) =
+        L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector
+          [ x
+          , L.ConstExp (L.Numeral "1")
+          , L.IndexExp (x, L.ConstExp (L.LiteralString "n"))
+          ])
+    | TableUnpackN x =
+        L.CallExp (L.VarExp (L.PredefinedId "table_unpackN"), vector [x])
+
+  fun MethodExp (obj, name, args) =
+    let
+      val name' =
+        case name of
+          L.ConstExp (L.LiteralString name) =>
+            if LuaWriter.isLuaIdentifier name then SOME name else NONE
+        | _ => NONE
+    in
+      case name' of
+        SOME name => L.MethodExp (obj, name, Vector.fromList args)
+      | NONE =>
+          case obj of
+            L.VarExp _ =>
+              L.CallExp (L.IndexExp (obj, name), vector (obj :: args))
+          | _ =>
+              L.CallExp (L.VarExp (L.PredefinedId "_method"), vector
+                (obj :: name :: args))
+    end
+
+  fun MethodStat (obj, name, args) =
+    let
+      val name' =
+        case name of
+          L.ConstExp (L.LiteralString name) =>
+            if LuaWriter.isLuaIdentifier name then SOME name else NONE
+        | _ => NONE
+    in
+      case name' of
+        SOME name => L.MethodStat (obj, name, Vector.fromList args)
+      | NONE =>
+          case obj of
+            L.VarExp _ =>
+              L.CallStat (L.IndexExp (obj, name), vector (obj :: args))
+          | _ =>
+              L.CallStat (L.VarExp (L.PredefinedId "_method"), vector
+                (obj :: name :: args))
+    end
+
   datatype cont_type =
     GOTO of {label: TypedSyntax.VId, params: (L.Id option) list}
   | RETURN
@@ -1496,144 +1543,22 @@ struct
                    doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
                | Primitives.Lua_call =>
                    doBinary (fn (f, args) =>
-                     let
-                       val arg = vector
-                         [L.CallExp
-                            ( L.VarExp (L.PredefinedId "table_unpack")
-                            , vector
-                                [ args
-                                , L.ConstExp (L.Numeral "1")
-                                , L.IndexExp
-                                    (args, L.ConstExp (L.LiteralString "n"))
-                                ]
-                            )]
-                     in
-                       L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
-                         [L.CallExp (f, arg)])
-                     end)
+                     L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
+                       [L.CallExp (f, vector [TableUnpackN args])]))
                | Primitives.Lua_call1 =>
                    doBinary (fn (f, args) =>
-                     let
-                       val arg = vector
-                         [L.CallExp
-                            ( L.VarExp (L.PredefinedId "table_unpack")
-                            , vector
-                                [ args
-                                , L.ConstExp (L.Numeral "1")
-                                , L.IndexExp
-                                    (args, L.ConstExp (L.LiteralString "n"))
-                                ]
-                            )]
-                     in
-                       L.CallExp (f, arg)
-                     end)
+                     L.CallExp (f, vector [TableUnpackN args]))
                | Primitives.Lua_call2 =>
                    raise CodeGenError "unexpected Lua.call2"
                | Primitives.Lua_call3 =>
                    raise CodeGenError "unexpected Lua.call3"
                | Primitives.Lua_method =>
-                   doTernary (fn (obj, rawName, args) =>
-                     let
-                       val name' =
-                         case rawName of
-                           L.ConstExp (L.LiteralString name) =>
-                             if LuaWriter.isLuaIdentifier name then SOME name
-                             else NONE
-                         | _ => NONE
-                     in
-                       case name' of
-                         SOME name =>
-                           let
-                             val arg = vector
-                               [L.CallExp
-                                  ( L.VarExp (L.PredefinedId "table_unpack")
-                                  , vector
-                                      [ args
-                                      , L.ConstExp (L.Numeral "1")
-                                      , L.IndexExp
-                                          ( args
-                                          , L.ConstExp (L.LiteralString "n")
-                                          )
-                                      ]
-                                  )]
-                           in
-                             L.CallExp
-                               ( L.VarExp (L.PredefinedId "table_pack")
-                               , vector [L.MethodExp (obj, name, arg)]
-                               )
-                           end
-                       | NONE =>
-                           let
-                             val arg = vector
-                               [ obj
-                               , L.CallExp
-                                   ( L.VarExp (L.PredefinedId "table_unpack")
-                                   , vector
-                                       [ args
-                                       , L.ConstExp (L.Numeral "1")
-                                       , L.IndexExp
-                                           ( args
-                                           , L.ConstExp (L.LiteralString "n")
-                                           )
-                                       ]
-                                   )
-                               ]
-                           in
-                             L.CallExp
-                               ( L.VarExp (L.PredefinedId "table_pack")
-                               , vector
-                                   [L.CallExp (L.IndexExp (obj, rawName), arg)]
-                               )
-                           end
-                     end)
+                   doTernary (fn (obj, name, args) =>
+                     L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
+                       [MethodExp (obj, name, [TableUnpackN args])]))
                | Primitives.Lua_method1 =>
-                   doTernary (fn (obj, rawName, args) =>
-                     let
-                       val name' =
-                         case rawName of
-                           L.ConstExp (L.LiteralString name) =>
-                             if LuaWriter.isLuaIdentifier name then SOME name
-                             else NONE
-                         | _ => NONE
-                     in
-                       case name' of
-                         SOME name =>
-                           let
-                             val arg = vector
-                               [L.CallExp
-                                  ( L.VarExp (L.PredefinedId "table_unpack")
-                                  , vector
-                                      [ args
-                                      , L.ConstExp (L.Numeral "1")
-                                      , L.IndexExp
-                                          ( args
-                                          , L.ConstExp (L.LiteralString "n")
-                                          )
-                                      ]
-                                  )]
-                           in
-                             L.MethodExp (obj, name, arg)
-                           end
-                       | NONE =>
-                           let
-                             val arg = vector
-                               [ obj
-                               , L.CallExp
-                                   ( L.VarExp (L.PredefinedId "table_unpack")
-                                   , vector
-                                       [ args
-                                       , L.ConstExp (L.Numeral "1")
-                                       , L.IndexExp
-                                           ( args
-                                           , L.ConstExp (L.LiteralString "n")
-                                           )
-                                       ]
-                                   )
-                               ]
-                           in
-                             L.CallExp (L.IndexExp (obj, rawName), arg)
-                           end
-                     end)
+                   doTernary (fn (obj, name, args) =>
+                     MethodExp (obj, name, [TableUnpackN args]))
                | Primitives.Lua_method2 =>
                    raise CodeGenError "unexpected Lua.method2"
                | Primitives.Lua_method3 =>
@@ -1898,16 +1823,7 @@ struct
                  | Primitives.Lua_call =>
                      doBinary (fn (f, args) =>
                        let
-                         val arg = vector
-                           [L.CallExp
-                              ( L.VarExp (L.PredefinedId "table_unpack")
-                              , vector
-                                  [ args
-                                  , L.ConstExp (L.Numeral "1")
-                                  , L.IndexExp
-                                      (args, L.ConstExp (L.LiteralString "n"))
-                                  ]
-                              )]
+                         val arg = vector [TableUnpackN args]
                        in
                          case results of
                            [SOME result] =>
@@ -1940,16 +1856,7 @@ struct
                  | Primitives.Lua_call2 =>
                      doBinary (fn (f, args) =>
                        let
-                         val arg = vector
-                           [L.CallExp
-                              ( L.VarExp (L.PredefinedId "table_unpack")
-                              , vector
-                                  [ args
-                                  , L.ConstExp (L.Numeral "1")
-                                  , L.IndexExp
-                                      (args, L.ConstExp (L.LiteralString "n"))
-                                  ]
-                              )]
+                         val arg = vector [TableUnpackN args]
                          val stmts =
                            case results of
                              [NONE, NONE] => [L.CallStat (f, arg)]
@@ -1984,16 +1891,7 @@ struct
                  | Primitives.Lua_call3 =>
                      doBinary (fn (f, args) =>
                        let
-                         val arg = vector
-                           [L.CallExp
-                              ( L.VarExp (L.PredefinedId "table_unpack")
-                              , vector
-                                  [ args
-                                  , L.ConstExp (L.Numeral "1")
-                                  , L.IndexExp
-                                      (args, L.ConstExp (L.LiteralString "n"))
-                                  ]
-                              )]
+                         val arg = vector [TableUnpackN args]
                          val stmts =
                            case results of
                              [NONE, NONE, NONE] => [L.CallStat (f, arg)]
@@ -2033,305 +1931,22 @@ struct
                            )
                        end)
                  | Primitives.Lua_method =>
-                     doTernary (fn (obj, rawName, args) =>
+                     doTernary (fn (obj, name, args) =>
                        let
-                         val name' =
-                           case rawName of
-                             L.ConstExp (L.LiteralString name) =>
-                               if LuaWriter.isLuaIdentifier name then SOME name
-                               else NONE
-                           | _ => NONE
-                       in
-                         case name' of
-                           SOME name =>
-                             let
-                               val arg = vector
-                                 [L.CallExp
-                                    ( L.VarExp (L.PredefinedId "table_unpack")
-                                    , vector
-                                        [ args
-                                        , L.ConstExp (L.Numeral "1")
-                                        , L.IndexExp
-                                            ( args
-                                            , L.ConstExp (L.LiteralString "n")
-                                            )
-                                        ]
-                                    )]
-                             in
-                               case results of
-                                 [SOME result] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.ConstStat
-                                         ( result
-                                         , L.CallExp
-                                             ( L.VarExp
-                                                 (L.PredefinedId "table_pack")
-                                             , vector
-                                                 [L.MethodExp (obj, name, arg)]
-                                             )
-                                         ) :: revStats
-                                     )
-                               | [NONE] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.MethodStat (obj, name, arg) :: revStats
-                                     )
-                               | _ =>
-                                   raise CodeGenError
-                                     "unexpected number of results"
-                             end
-                         | NONE =>
-                             let
-                               val arg = vector
-                                 [ obj
+                         val arg = [TableUnpackN args]
+                         val stat =
+                           case results of
+                             [SOME result] =>
+                               L.ConstStat
+                                 ( result
                                  , L.CallExp
-                                     ( L.VarExp (L.PredefinedId "table_unpack")
-                                     , vector
-                                         [ args
-                                         , L.ConstExp (L.Numeral "1")
-                                         , L.IndexExp
-                                             ( args
-                                             , L.ConstExp (L.LiteralString "n")
-                                             )
-                                         ]
+                                     ( L.VarExp (L.PredefinedId "table_pack")
+                                     , vector [MethodExp (obj, name, arg)]
                                      )
-                                 ]
-                             in
-                               case results of
-                                 [SOME result] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.ConstStat
-                                         ( result
-                                         , L.CallExp
-                                             ( L.VarExp
-                                                 (L.PredefinedId "table_pack")
-                                             , vector
-                                                 [L.CallExp
-                                                    ( L.IndexExp (obj, rawName)
-                                                    , arg
-                                                    )]
-                                             )
-                                         ) :: revStats
-                                     )
-                               | [NONE] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.CallStat
-                                         (L.IndexExp (obj, rawName), arg)
-                                       :: revStats
-                                     )
-                               | _ =>
-                                   raise CodeGenError
-                                     "unexpected number of results"
-                             end
-                       end)
-                 | Primitives.Lua_method1 =>
-                     doTernary (fn (obj, rawName, args) =>
-                       let
-                         val name' =
-                           case rawName of
-                             L.ConstExp (L.LiteralString name) =>
-                               if LuaWriter.isLuaIdentifier name then SOME name
-                               else NONE
-                           | _ => NONE
-                       in
-                         case name' of
-                           SOME name =>
-                             let
-                               val arg = vector
-                                 [L.CallExp
-                                    ( L.VarExp (L.PredefinedId "table_unpack")
-                                    , vector
-                                        [ args
-                                        , L.ConstExp (L.Numeral "1")
-                                        , L.IndexExp
-                                            ( args
-                                            , L.ConstExp (L.LiteralString "n")
-                                            )
-                                        ]
-                                    )]
-                             in
-                               case results of
-                                 [SOME result] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.ConstStat
-                                         (result, L.MethodExp (obj, name, arg))
-                                       :: revStats
-                                     )
-                               | [NONE] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.MethodStat (obj, name, arg) :: revStats
-                                     )
-                               | _ =>
-                                   raise CodeGenError
-                                     "unexpected number of results"
-                             end
-                         | NONE =>
-                             let
-                               val arg = vector
-                                 [ obj
-                                 , L.CallExp
-                                     ( L.VarExp (L.PredefinedId "table_unpack")
-                                     , vector
-                                         [ args
-                                         , L.ConstExp (L.Numeral "1")
-                                         , L.IndexExp
-                                             ( args
-                                             , L.ConstExp (L.LiteralString "n")
-                                             )
-                                         ]
-                                     )
-                                 ]
-                             in
-                               case results of
-                                 [SOME result] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.ConstStat (result, L.CallExp
-                                         (L.IndexExp (obj, rawName), arg))
-                                       :: revStats
-                                     )
-                               | [NONE] =>
-                                   doDecs
-                                     ( ctx
-                                     , env
-                                     , defaultCont
-                                     , decs
-                                     , finalExp
-                                     , L.CallStat
-                                         (L.IndexExp (obj, rawName), arg)
-                                       :: revStats
-                                     )
-                               | _ =>
-                                   raise CodeGenError
-                                     "unexpected number of results"
-                             end
-                       end)
-                 | Primitives.Lua_method2 =>
-                     doTernary (fn (obj, rawName, args) =>
-                       let
-                         val name' =
-                           case rawName of
-                             L.ConstExp (L.LiteralString name) =>
-                               if LuaWriter.isLuaIdentifier name then SOME name
-                               else NONE
-                           | _ => NONE
-                         val stmts =
-                           case name' of
-                             SOME name =>
-                               let
-                                 val arg = vector
-                                   [L.CallExp
-                                      ( L.VarExp (L.PredefinedId "table_unpack")
-                                      , vector
-                                          [ args
-                                          , L.ConstExp (L.Numeral "1")
-                                          , L.IndexExp
-                                              ( args
-                                              , L.ConstExp (L.LiteralString "n")
-                                              )
-                                          ]
-                                      )]
-                               in
-                                 case results of
-                                   [NONE, NONE] =>
-                                     [L.MethodStat (obj, name, arg)]
-                                 | [r0, r1] =>
-                                     let
-                                       val r0 =
-                                         case r0 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r1 =
-                                         case r1 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                     in
-                                       [L.LocalStat
-                                          ( [(r0, L.CONST), (r1, L.CONST)]
-                                          , [L.MethodExp (obj, name, arg)]
-                                          )]
-                                     end
-                                 | _ =>
-                                     raise CodeGenError
-                                       "unexpected number of results"
-                               end
-                           | NONE =>
-                               let
-                                 val arg = vector
-                                   [ obj
-                                   , L.CallExp
-                                       ( L.VarExp
-                                           (L.PredefinedId "table_unpack")
-                                       , vector
-                                           [ args
-                                           , L.ConstExp (L.Numeral "1")
-                                           , L.IndexExp
-                                               ( args
-                                               , L.ConstExp
-                                                   (L.LiteralString "n")
-                                               )
-                                           ]
-                                       )
-                                   ]
-                               in
-                                 case results of
-                                   [NONE, NONE] =>
-                                     [L.CallStat
-                                        (L.IndexExp (obj, rawName), arg)]
-                                 | [r0, r1] =>
-                                     let
-                                       val r0 =
-                                         case r0 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r1 =
-                                         case r1 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                     in
-                                       [L.LocalStat
-                                          ( [(r0, L.CONST), (r1, L.CONST)]
-                                          , [L.CallExp
-                                               (L.IndexExp (obj, rawName), arg)]
-                                          )]
-                                     end
-                                 | _ =>
-                                     raise CodeGenError
-                                       "unexpected number of results"
-                               end
+                                 )
+                           | [NONE] => MethodStat (obj, name, arg)
+                           | _ =>
+                               raise CodeGenError "unexpected number of results"
                        in
                          doDecs
                            ( ctx
@@ -2339,116 +1954,97 @@ struct
                            , defaultCont
                            , decs
                            , finalExp
-                           , List.revAppend (stmts, revStats)
+                           , stat :: revStats
+                           )
+                       end)
+                 | Primitives.Lua_method1 =>
+                     doTernary (fn (obj, name, args) =>
+                       let
+                         val arg = [TableUnpackN args]
+                         val stat =
+                           case results of
+                             [SOME result] =>
+                               L.ConstStat (result, MethodExp (obj, name, arg))
+                           | [NONE] => MethodStat (obj, name, arg)
+                           | _ =>
+                               raise CodeGenError "unexpected number of results"
+                       in
+                         doDecs
+                           ( ctx
+                           , env
+                           , defaultCont
+                           , decs
+                           , finalExp
+                           , stat :: revStats
+                           )
+                       end)
+                 | Primitives.Lua_method2 =>
+                     doTernary (fn (obj, name, args) =>
+                       let
+                         val arg = [TableUnpackN args]
+                         val stat =
+                           case results of
+                             [NONE, NONE] => MethodStat (obj, name, arg)
+                           | [r0, r1] =>
+                               let
+                                 val r0 =
+                                   case r0 of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                                 val r1 =
+                                   case r1 of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                               in
+                                 L.LocalStat
+                                   ( [(r0, L.CONST), (r1, L.CONST)]
+                                   , [MethodExp (obj, name, arg)]
+                                   )
+                               end
+                           | _ =>
+                               raise CodeGenError "unexpected number of results"
+                       in
+                         doDecs
+                           ( ctx
+                           , env
+                           , defaultCont
+                           , decs
+                           , finalExp
+                           , stat :: revStats
                            )
                        end)
                  | Primitives.Lua_method3 =>
-                     doTernary (fn (obj, rawName, args) =>
+                     doTernary (fn (obj, name, args) =>
                        let
-                         val name' =
-                           case rawName of
-                             L.ConstExp (L.LiteralString name) =>
-                               if LuaWriter.isLuaIdentifier name then SOME name
-                               else NONE
-                           | _ => NONE
-                         val stmts =
-                           case name' of
-                             SOME name =>
+                         val arg = [TableUnpackN args]
+                         val stat =
+                           case results of
+                             [NONE, NONE, NONE] => MethodStat (obj, name, arg)
+                           | [r0, r1, r2] =>
                                let
-                                 val arg = vector
-                                   [L.CallExp
-                                      ( L.VarExp (L.PredefinedId "table_unpack")
-                                      , vector
-                                          [ args
-                                          , L.ConstExp (L.Numeral "1")
-                                          , L.IndexExp
-                                              ( args
-                                              , L.ConstExp (L.LiteralString "n")
-                                              )
-                                          ]
-                                      )]
+                                 val r0 =
+                                   case r0 of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                                 val r1 =
+                                   case r1 of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                                 val r2 =
+                                   case r2 of
+                                     SOME r => r
+                                   | NONE => genSym ctx
                                in
-                                 case results of
-                                   [NONE, NONE, NONE] =>
-                                     [L.MethodStat (obj, name, arg)]
-                                 | [r0, r1, r2] =>
-                                     let
-                                       val r0 =
-                                         case r0 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r1 =
-                                         case r1 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r2 =
-                                         case r2 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                     in
-                                       [L.LocalStat
-                                          ( [ (r0, L.CONST)
-                                            , (r1, L.CONST)
-                                            , (r2, L.CONST)
-                                            ]
-                                          , [L.MethodExp (obj, name, arg)]
-                                          )]
-                                     end
-                                 | _ =>
-                                     raise CodeGenError
-                                       "unexpected number of results"
+                                 L.LocalStat
+                                   ( [ (r0, L.CONST)
+                                     , (r1, L.CONST)
+                                     , (r2, L.CONST)
+                                     ]
+                                   , [MethodExp (obj, name, arg)]
+                                   )
                                end
-                           | NONE =>
-                               let
-                                 val arg = vector
-                                   [ obj
-                                   , L.CallExp
-                                       ( L.VarExp
-                                           (L.PredefinedId "table_unpack")
-                                       , vector
-                                           [ args
-                                           , L.ConstExp (L.Numeral "1")
-                                           , L.IndexExp
-                                               ( args
-                                               , L.ConstExp
-                                                   (L.LiteralString "n")
-                                               )
-                                           ]
-                                       )
-                                   ]
-                               in
-                                 case results of
-                                   [NONE, NONE, NONE] =>
-                                     [L.CallStat
-                                        (L.IndexExp (obj, rawName), arg)]
-                                 | [r0, r1, r2] =>
-                                     let
-                                       val r0 =
-                                         case r0 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r1 =
-                                         case r1 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                       val r2 =
-                                         case r2 of
-                                           SOME r => r
-                                         | NONE => genSym ctx
-                                     in
-                                       [L.LocalStat
-                                          ( [ (r0, L.CONST)
-                                            , (r1, L.CONST)
-                                            , (r2, L.CONST)
-                                            ]
-                                          , [L.CallExp
-                                               (L.IndexExp (obj, rawName), arg)]
-                                          )]
-                                     end
-                                 | _ =>
-                                     raise CodeGenError
-                                       "unexpected number of results"
-                               end
+                           | _ =>
+                               raise CodeGenError "unexpected number of results"
                        in
                          doDecs
                            ( ctx
@@ -2456,7 +2052,7 @@ struct
                            , defaultCont
                            , decs
                            , finalExp
-                           , List.revAppend (stmts, revStats)
+                           , stat :: revStats
                            )
                        end)
                  | Primitives.Lua_setGlobal =>
@@ -2645,42 +2241,34 @@ struct
                      }
                , results = [result]
                } =>
-               (case result of
-                  NONE =>
-                    doDecs
-                      ( ctx
-                      , env
-                      , defaultCont
-                      , decs
-                      , finalExp
-                      , L.MethodStat
-                          ( doExp (ctx, env, obj)
-                          , name
-                          , Vector.map (fn x => doExp (ctx, env, x))
-                              (vector args)
-                          ) :: revStats
-                      )
-                | SOME result =>
-                    doDecs
-                      ( ctx
-                      , env
-                      , defaultCont
-                      , decs
-                      , finalExp
-                      , L.ConstStat
-                          ( result
-                          , L.CallExp
-                              ( L.VarExp (L.PredefinedId "table_pack")
-                              , vector
-                                  [L.MethodExp
-                                     ( doExp (ctx, env, obj)
-                                     , name
-                                     , Vector.map (fn x => doExp (ctx, env, x))
-                                         (vector args)
-                                     )]
-                              )
-                          ) :: revStats
-                      ))
+               let
+                 val stat =
+                   case result of
+                     NONE =>
+                       L.MethodStat
+                         ( doExp (ctx, env, obj)
+                         , name
+                         , Vector.map (fn x => doExp (ctx, env, x))
+                             (vector args)
+                         )
+                   | SOME result =>
+                       L.ConstStat
+                         ( result
+                         , L.CallExp
+                             ( L.VarExp (L.PredefinedId "table_pack")
+                             , vector
+                                 [L.MethodExp
+                                    ( doExp (ctx, env, obj)
+                                    , name
+                                    , Vector.map (fn x => doExp (ctx, env, x))
+                                        (vector args)
+                                    )]
+                             )
+                         )
+               in
+                 doDecs
+                   (ctx, env, defaultCont, decs, finalExp, stat :: revStats)
+               end
            | N.ValDec
                { exp =
                    N.PrimOp
@@ -2721,15 +2309,15 @@ struct
                , results
                } =>
                let
-                 val stmts =
+                 val stat =
                    case results of
                      [NONE, NONE] =>
-                       [L.MethodStat
-                          ( doExp (ctx, env, obj)
-                          , name
-                          , Vector.map (fn x => doExp (ctx, env, x))
-                              (vector args)
-                          )]
+                       L.MethodStat
+                         ( doExp (ctx, env, obj)
+                         , name
+                         , Vector.map (fn x => doExp (ctx, env, x))
+                             (vector args)
+                         )
                    | [r0, r1] =>
                        let
                          val r0 =
@@ -2741,26 +2329,20 @@ struct
                              SOME r => r
                            | NONE => genSym ctx
                        in
-                         [L.LocalStat
-                            ( [(r0, L.CONST), (r1, L.CONST)]
-                            , [L.MethodExp
-                                 ( doExp (ctx, env, obj)
-                                 , name
-                                 , Vector.map (fn x => doExp (ctx, env, x))
-                                     (vector args)
-                                 )]
-                            )]
+                         L.LocalStat
+                           ( [(r0, L.CONST), (r1, L.CONST)]
+                           , [L.MethodExp
+                                ( doExp (ctx, env, obj)
+                                , name
+                                , Vector.map (fn x => doExp (ctx, env, x))
+                                    (vector args)
+                                )]
+                           )
                        end
                    | _ => raise CodeGenError "unexpected number of results"
                in
                  doDecs
-                   ( ctx
-                   , env
-                   , defaultCont
-                   , decs
-                   , finalExp
-                   , List.revAppend (stmts, revStats)
-                   )
+                   (ctx, env, defaultCont, decs, finalExp, stat :: revStats)
                end
            | N.ValDec
                { exp =
@@ -2772,15 +2354,15 @@ struct
                , results
                } =>
                let
-                 val stmts =
+                 val stat =
                    case results of
                      [NONE, NONE, NONE] =>
-                       [L.MethodStat
-                          ( doExp (ctx, env, obj)
-                          , name
-                          , Vector.map (fn x => doExp (ctx, env, x))
-                              (vector args)
-                          )]
+                       L.MethodStat
+                         ( doExp (ctx, env, obj)
+                         , name
+                         , Vector.map (fn x => doExp (ctx, env, x))
+                             (vector args)
+                         )
                    | [r0, r1, r2] =>
                        let
                          val r0 =
@@ -2796,26 +2378,20 @@ struct
                              SOME r => r
                            | NONE => genSym ctx
                        in
-                         [L.LocalStat
-                            ( [(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)]
-                            , [L.MethodExp
-                                 ( doExp (ctx, env, obj)
-                                 , name
-                                 , Vector.map (fn x => doExp (ctx, env, x))
-                                     (vector args)
-                                 )]
-                            )]
+                         L.LocalStat
+                           ( [(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)]
+                           , [L.MethodExp
+                                ( doExp (ctx, env, obj)
+                                , name
+                                , Vector.map (fn x => doExp (ctx, env, x))
+                                    (vector args)
+                                )]
+                           )
                        end
                    | _ => raise CodeGenError "unexpected number of results"
                in
                  doDecs
-                   ( ctx
-                   , env
-                   , defaultCont
-                   , decs
-                   , finalExp
-                   , List.revAppend (stmts, revStats)
-                   )
+                   (ctx, env, defaultCont, decs, finalExp, stat :: revStats)
                end
            | N.ValDec {exp, results} =>
                (case results of
