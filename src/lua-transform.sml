@@ -964,41 +964,71 @@ struct
           in
             (newEnv, [L.DoStat {loopLike = loopLike, body = body}])
           end
-      | doStat _ env (stat as L.GotoStat _) = (env, [stat])
-      | doStat _ env (stat as L.LabelStat _) = (env, [stat])
+      | doStat _ env (stat as L.GotoStat _) =
+          (env, [stat]) (* TODO: The control flow should be properly handled *)
+      | doStat _ env (stat as L.LabelStat _) =
+          (env, [stat]) (* TODO: The control flow should be properly handled *)
     and doStats _ env [] acc =
           (env, List.concat (List.rev acc))
       | doStats ctx env
-          (stats as (L.AssignStat ([L.VarExp _], [L.FunctionExp (_, _)]) :: _))
-          acc =
-          let
-            val (env', defs, stats') = takeFunctionAssignments ctx env stats []
-            val (decs, inits, funcs) =
-              List.foldr
-                (fn ((v, f), (decs, inits, funcs)) =>
-                   case doExp ctx env' f of
-                     ([L.LocalStat ([(u, L.CONST)], init)], f') =>
-                       ( (u, L.LATE_INIT) :: decs
-                       , L.AssignStat ([L.VarExp (L.UserDefinedId u)], init)
-                         :: inits
-                       , L.AssignStat ([L.VarExp v], [f']) :: funcs
-                       )
-                   | ([], f') =>
-                       (decs, inits, L.AssignStat ([L.VarExp v], [f']) :: funcs)
-                   | _ => raise Fail "ProcessUpvalue: unexpected transformation")
-                ([], [], []) defs
-          in
-            case decs of
-              [] => doStats ctx env' stats' ([funcs @ inits] @ acc)
-            | _ :: _ =>
-                doStats ctx env' stats'
-                  ([L.DoStat
-                      { loopLike = false
-                      , body = vector
-                          (L.LocalStat (decs, [])
-                           :: List.rev funcs @ List.rev inits)
-                      }] :: acc)
-          end
+          (stats as
+             ((stat as L.AssignStat ([L.VarExp v0], [L.FunctionExp (_, _)])) ::
+                stats')) acc =
+          (case L.IdMap.find (#dynamic env, v0) of
+             SOME L.LATE_INIT =>
+               let
+                 val (env', defs, stats') =
+                   takeFunctionAssignments ctx env stats []
+                 val (decs, inits, funcs) =
+                   List.foldr
+                     (fn ((v, f), (decs, inits, funcs)) =>
+                        case doExp ctx env' f of
+                          ([L.LocalStat ([(u, L.CONST)], init)], f') =>
+                            ( (u, L.LATE_INIT) :: decs
+                            , L.AssignStat
+                                ([L.VarExp (L.UserDefinedId u)], init) :: inits
+                            , L.AssignStat ([L.VarExp v], [f']) :: funcs
+                            )
+                        | ([], f') =>
+                            ( decs
+                            , inits
+                            , L.AssignStat ([L.VarExp v], [f']) :: funcs
+                            )
+                        | _ =>
+                            raise Fail
+                              "ProcessUpvalue: unexpected transformation")
+                     ([], [], []) defs
+               in
+                 case decs of
+                   [] => doStats ctx env' stats' ([funcs @ inits] @ acc)
+                 | _ :: _ =>
+                     doStats ctx env' stats'
+                       ([L.DoStat
+                           { loopLike = false
+                           , body = vector
+                               (L.LocalStat (decs, [])
+                                :: List.rev funcs @ List.rev inits)
+                           }] :: acc)
+               end
+           (* | SOME L.CONST =>
+           let
+              val (newEnv, stat') = doStat ctx env stat
+           in doStats ctx newEnv stats' (stat' :: [L.LabelStat (genSym (ctx, "CONST"))] :: acc)
+           end
+           | SOME L.MUTABLE =>
+           let
+              val (newEnv, stat') = doStat ctx env stat
+           in doStats ctx newEnv stats' (stat' :: [L.LabelStat (genSym (ctx, "MUTABLE"))] :: acc)
+           end
+           | NONE =>
+           let
+              val (newEnv, stat') = doStat ctx env stat
+           in doStats ctx newEnv stats' (stat' :: [L.LabelStat (genSym (ctx, "UNKNOWN"))] :: acc)
+           end *)
+           | _ =>
+               let val (newEnv, stat') = doStat ctx env stat
+               in doStats ctx newEnv stats' (stat' :: acc)
+               end)
       | doStats ctx env (stat :: stats) acc =
           let val (newEnv, stat') = doStat ctx env stat
           in doStats ctx newEnv stats (stat' :: acc)
@@ -1017,6 +1047,9 @@ struct
                in
                  takeFunctionAssignments ctx newEnv stats' ((v, f) :: revAcc)
                end
+           (* | SOME L.CONST => raise Fail "ProcessUpvalue: assignment to CONST variable"
+           | SOME L.MUTABLE => raise Fail "ProcessUpvalue: assignment to MUTABLE variable"
+           | NONE => raise Fail "ProcessUpvalue: assignment to unknown variable" *)
            | _ => (env, List.rev revAcc, stats))
       | takeFunctionAssignments _ env stats revAcc =
           (env, List.rev revAcc, stats)
