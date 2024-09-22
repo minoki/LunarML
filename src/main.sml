@@ -156,7 +156,7 @@ struct
           val lua =
             LuaTransform.InsertDo.doBlock
               (0, lua) (* TODO: pre-declared locals *)
-          val lua = #2
+          val lua = #3
             (LuaTransform.ProcessUpvalue.doBlock
                {nextId = nextId, maxUpvalue = 255}
                LuaTransform.ProcessUpvalue.initialEnv lua)
@@ -219,7 +219,7 @@ struct
           val lua =
             LuaTransform.InsertDo.doBlock
               (0, lua) (* TODO: pre-declared locals *)
-          val lua = #2
+          val lua = #3
             (LuaTransform.ProcessUpvalue.doBlock
                {nextId = nextId, maxUpvalue = 60}
                LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)

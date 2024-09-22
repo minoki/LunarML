@@ -18,10 +18,13 @@ sig
     type Env
     val initialEnv: Env
     val initialEnvForLuaJIT: Env
-    val doBlock: Context
-                 -> Env
-                 -> LuaSyntax.Block
-                 -> LuaSyntax.VarAttr LuaSyntax.IdMap.map * LuaSyntax.Block
+    val doBlock:
+      Context
+      -> Env
+      -> LuaSyntax.Block
+      -> LuaSyntax.VarAttr LuaSyntax.IdMap.map
+         * (LuaSyntax.VarAttr LuaSyntax.IdMap.map) TypedSyntax.VIdMap.map
+         * LuaSyntax.Block
   end
   structure ProcessLocal:
   sig
@@ -698,10 +701,28 @@ struct
   end
   structure ProcessUpvalue =
   struct
-    type Env = {bound: L.VarAttr L.IdMap.map, dynamic: L.VarAttr L.IdMap.map}
-    val initialEnv: Env = {bound = mlinit_lua, dynamic = mlinit_lua}
+    type Env =
+      { bound: L.VarAttr L.IdMap.map
+      , dynamic: L.VarAttr L.IdMap.map
+      , labelDynamic: (L.VarAttr L.IdMap.map) TypedSyntax.VIdMap.map
+      }
+    val initialEnv: Env =
+      { bound = mlinit_lua
+      , dynamic = mlinit_lua
+      , labelDynamic = TypedSyntax.VIdMap.empty
+      }
     val initialEnvForLuaJIT: Env =
-      {bound = mlinit_luajit, dynamic = mlinit_luajit}
+      { bound = mlinit_luajit
+      , dynamic = mlinit_luajit
+      , labelDynamic = TypedSyntax.VIdMap.empty
+      }
+    fun mergeAttr (L.CONST, L.CONST) = L.CONST
+      | mergeAttr (L.MUTABLE, _) = L.MUTABLE
+      | mergeAttr (_, L.MUTABLE) = L.MUTABLE
+      | mergeAttr (_, _) = L.LATE_INIT
+    fun mergeDynamic (m1, m2) = L.IdMap.unionWith mergeAttr (m1, m2)
+    fun mergeLabelDynamic (m1, m2) =
+      TypedSyntax.VIdMap.unionWith mergeDynamic (m1, m2)
     fun doExp (_: Context) (_: Env) (exp as L.ConstExp _) = ([], exp)
       | doExp _ _ (exp as L.VarExp _) = ([], exp)
       | doExp ctx env (L.TableExp fields) =
@@ -748,6 +769,7 @@ struct
                   Vector.foldl
                     (fn (p, dynamic) => L.IdMap.insert (dynamic, p, L.CONST))
                     (#dynamic env) params
+              , labelDynamic = TypedSyntax.VIdMap.empty
               }
             val paramSet =
               Vector.foldl (fn (p, bound) => L.IdSet.add (bound, p))
@@ -800,13 +822,15 @@ struct
                   , dynamic =
                       L.IdMap.insert
                         (#dynamic innerEnv, L.UserDefinedId vid, L.CONST)
+                  , labelDynamic = TypedSyntax.VIdMap.empty
                   }
-                val (_, body') = doBlock ctx innerEnv' (substBlock subst body)
+                val (_, _, body') = doBlock ctx innerEnv'
+                  (substBlock subst body)
               in
                 ([dec], L.FunctionExp (params, body'))
               end
             else
-              let val (_, body') = doBlock ctx innerEnv body
+              let val (_, _, body') = doBlock ctx innerEnv body
               in ([], L.FunctionExp (params, body'))
               end
           end
@@ -834,6 +858,7 @@ struct
                     (fn ((vid, attr), m) =>
                        L.IdMap.insert (m, L.UserDefinedId vid, attr))
                     (#dynamic env) vars
+              , labelDynamic = #labelDynamic env
               }
             val (decs, exps) =
               List.foldr
@@ -889,6 +914,7 @@ struct
                             L.IdMap.insert (dynamic, id, L.CONST)
                         | SOME _ => dynamic)
                       | (_, dynamic) => dynamic) (#dynamic env) vars
+              , labelDynamic = #labelDynamic env
               }
           in
             (newEnv, decs @ decs' @ [L.AssignStat (vars, exps)])
@@ -918,8 +944,8 @@ struct
       | doStat ctx env (L.IfStat (cond, thenPart, elsePart)) =
           let
             val (decs, cond) = doExp ctx env cond
-            val (dynamic1, thenPart) = doBlock ctx env thenPart
-            val (dynamic2, elsePart) = doBlock ctx env elsePart
+            val (dynamic1, labelDynamic1, thenPart) = doBlock ctx env thenPart
+            val (dynamic2, labelDynamic2, elsePart) = doBlock ctx env elsePart
             val newEnv =
               { bound = #bound env
               , dynamic =
@@ -933,6 +959,7 @@ struct
                                SOME L.CONST => L.CONST
                              | _ => attr)
                         | _ => attr)) (#dynamic env)
+              , labelDynamic = mergeLabelDynamic (labelDynamic1, labelDynamic2)
               }
           in
             (newEnv, decs @ [L.IfStat (cond, thenPart, elsePart)])
@@ -944,12 +971,17 @@ struct
                 (fn (x, (decs, xs)) => let val (decs', x) = doExp ctx env x
                                        in (decs' @ decs, x :: xs)
                                        end) ([], []) results
+            val unreachableEnv =
+              { bound = #bound env
+              , dynamic = L.IdMap.empty
+              , labelDynamic = TypedSyntax.VIdMap.empty
+              }
           in
-            (env, decs @ [L.ReturnStat (vector results)])
+            (unreachableEnv, decs @ [L.ReturnStat (vector results)])
           end
       | doStat ctx env (L.DoStat {loopLike, body}) =
           let
-            val (dynamic, body) = doBlock ctx env body
+            val (dynamic, labelDynamic, body) = doBlock ctx env body
             val newEnv =
               { bound = #bound env
               , dynamic =
@@ -960,14 +992,36 @@ struct
                        (case L.IdMap.find (dynamic, id) of
                           SOME L.CONST => L.CONST
                         | _ => attr)) (#dynamic env)
+              , labelDynamic = labelDynamic
               }
           in
             (newEnv, [L.DoStat {loopLike = loopLike, body = body}])
           end
-      | doStat _ env (stat as L.GotoStat _) =
-          (env, [stat]) (* TODO: The control flow should be properly handled *)
-      | doStat _ env (stat as L.LabelStat _) =
-          (env, [stat]) (* TODO: The control flow should be properly handled *)
+      | doStat _ env (stat as L.GotoStat label) =
+          let
+            val newEnv =
+              { bound = #bound env
+              , dynamic = L.IdMap.empty
+              , labelDynamic =
+                  TypedSyntax.VIdMap.insertWith mergeDynamic
+                    (#labelDynamic env, label, #dynamic env)
+              }
+          in
+            (newEnv, [stat])
+          end
+      | doStat _ env (stat as L.LabelStat label) =
+          let
+            val newEnv =
+              { bound = #bound env
+              , dynamic =
+                  case TypedSyntax.VIdMap.find (#labelDynamic env, label) of
+                    SOME m => mergeDynamic (#dynamic env, m)
+                  | NONE => #dynamic env
+              , labelDynamic = #labelDynamic env
+              }
+          in
+            (newEnv, [stat])
+          end
     and doStats _ env [] acc =
           (env, List.concat (List.rev acc))
       | doStats ctx env
@@ -1010,12 +1064,9 @@ struct
                                 :: List.rev funcs @ List.rev inits)
                            }] :: acc)
                end
-           (* | SOME L.CONST =>
-           let
-              val (newEnv, stat') = doStat ctx env stat
-           in doStats ctx newEnv stats' (stat' :: [L.LabelStat (genSym (ctx, "CONST"))] :: acc)
-           end
-           | SOME L.MUTABLE =>
+           | SOME L.CONST =>
+               raise Fail "ProcessUpvalue: assignment to CONST variable"
+           (* | SOME L.MUTABLE =>
            let
               val (newEnv, stat') = doStat ctx env stat
            in doStats ctx newEnv stats' (stat' :: [L.LabelStat (genSym (ctx, "MUTABLE"))] :: acc)
@@ -1043,12 +1094,14 @@ struct
                  val newEnv =
                    { bound = #bound env
                    , dynamic = L.IdMap.insert (#dynamic env, v, L.CONST)
+                   , labelDynamic = #labelDynamic env
                    }
                in
                  takeFunctionAssignments ctx newEnv stats' ((v, f) :: revAcc)
                end
-           (* | SOME L.CONST => raise Fail "ProcessUpvalue: assignment to CONST variable"
-           | SOME L.MUTABLE => raise Fail "ProcessUpvalue: assignment to MUTABLE variable"
+           | SOME L.CONST =>
+               raise Fail "ProcessUpvalue: assignment to CONST variable"
+           (* | SOME L.MUTABLE => raise Fail "ProcessUpvalue: assignment to MUTABLE variable"
            | NONE => raise Fail "ProcessUpvalue: assignment to unknown variable" *)
            | _ => (env, List.rev revAcc, stats))
       | takeFunctionAssignments _ env stats revAcc =
@@ -1057,8 +1110,9 @@ struct
       let
         val (env', stats) = doStats ctx env (Vector.foldr (op::) [] stats) []
         val dynamic = #dynamic env' (* assumes no shadowing *)
+        val labelDynamic = #labelDynamic env'
       in
-        (dynamic, vector stats)
+        (dynamic, labelDynamic, vector stats)
       end
   end
   structure ProcessLocal =
