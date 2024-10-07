@@ -28,9 +28,10 @@ signature TIME = sig
     *)
 end;
 local
+    (* Avoid 1970-01-01 00:00:00 in local time, which might be negative *)
     val epoch = LunarML.assumeDiscardable (fn () =>
                                               let val t = Lua.newTable ()
-                                              in Lua.setField (t, "year", Lua.fromInt 1970)
+                                              in Lua.setField (t, "year", Lua.fromInt 2001)
                                                ; Lua.setField (t, "month", Lua.fromInt 1)
                                                ; Lua.setField (t, "day", Lua.fromInt 1)
                                                ; Lua.setField (t, "hour", Lua.fromInt 0)
@@ -91,7 +92,7 @@ fun toLuaTime (x : Int54.int) : Lua.value
           val hour = hour' mod 24
           val day' = hour' div 24
           val t = Lua.newTable ()
-      in Lua.setField (t, "year", Lua.fromInt 1970)
+      in Lua.setField (t, "year", Lua.fromInt 2001)
        ; Lua.setField (t, "month", Lua.fromInt 1)
        ; Lua.setField (t, "day", Lua.fromInt54 (day' + 1))
        ; Lua.setField (t, "hour", Lua.fromInt54 hour)
