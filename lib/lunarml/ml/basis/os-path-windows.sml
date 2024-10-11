@@ -6,44 +6,87 @@ exception InvalidArc = InvalidArc
 (*
  * The arc separator: #"/" and #"\\".
  * Canonical paths are entirely lowercase.
- * Example volume names are "", "A:", and "C:".
+ * Example volume names are "", "A:", "C:", "\\\\server\\share", and "//server/share".
  *)
 val parentArc = ".."
 val currentArc = "."
-fun hasVolume path = String.size path >= 2 andalso String.sub (path, 1) = #":" andalso Char.isAlpha (String.sub (path, 0))
-fun stripVolume path = if hasVolume path then
+fun hasDOSVolume path = String.size path >= 2 andalso String.sub (path, 1) = #":" andalso Char.isAlpha (String.sub (path, 0))
+fun isSlash #"/" = true
+  | isSlash #"\\" = true
+  | isSlash _ = false
+(*: val testUNCPath : string -> int option *)
+fun testUNCPath path = if String.size path >= 5 andalso isSlash (String.sub (path, 0)) andalso isSlash (String.sub (path, 1)) andalso not (isSlash (String.sub (path, 2))) then
+                           let fun goShare i = if String.size path <= i then
+                                                   SOME i
+                                               else if isSlash (String.sub (path, i)) then
+                                                   SOME i
+                                               else
+                                                   goShare (i + 1)
+                               fun goServer i = if String.size path <= i then
+                                                    NONE
+                                                else if isSlash (String.sub (path, i)) then
+                                                    let val ip1 = i + 1
+                                                    in if String.size path > ip1 andalso not (isSlash (String.sub (path, ip1))) then
+                                                           goShare (ip1 + 1)
+                                                       else
+                                                           NONE
+                                                    end
+                                                else
+                                                    goServer (i + 1)
+                           in goServer 3
+                           end
+                       else
+                           NONE
+datatype volume_type = DOS_VOLUME | UNC_PATH of int (* position *) | NO_VOLUME
+fun testVolume path = if hasDOSVolume path then
+                          DOS_VOLUME
+                      else
+                          case testUNCPath path of
+                              SOME i => UNC_PATH i
+                            | NONE => NO_VOLUME
+fun stripVolume path = if hasDOSVolume path then
                            (String.substring (path, 0, 2), String.extract (path, 2, NONE))
                        else
-                           ("", path)
-fun isAbsolute path = let val (_, rest) = stripVolume path
-                      in if String.size rest >= 1 then
-                             let val c = String.sub (rest, 0)
-                             in c = #"/" orelse c = #"\\"
-                             end
-                         else
-                             false
-                      end
+                           case testUNCPath path of
+                               SOME i => (String.substring (path, 0, i), String.extract (path, i, NONE))
+                             | NONE => ("", path)
+fun isAbsolute path = case testUNCPath path of
+                          SOME _ => true
+                        | NONE => let val rest = if hasDOSVolume path then
+                                                     String.extract (path, 2, NONE)
+                                                 else
+                                                     path
+                                  in if String.size rest >= 1 then
+                                         let val c = String.sub (rest, 0)
+                                         in c = #"/" orelse c = #"\\"
+                                         end
+                                     else
+                                         false
+                                  end
 fun isRelative path = not (isAbsolute path)
 fun isRoot path = let val (_, rest) = stripVolume path
                   in rest = "/" orelse rest = "\\"
                   end
-fun getVolume path = if hasVolume path then
-                         String.substring (path, 0, 2)
-                     else
-                         ""
+fun getVolume path = #1 (stripVolume path)
 fun validVolume { isAbs = false, vol = "" } = true
-  | validVolume { isAbs, vol } = String.size vol = 2 andalso Char.isAlpha (String.sub (vol, 0)) andalso String.sub (vol, 1) = #":"
+  | validVolume { isAbs, vol } = (String.size vol = 2 andalso Char.isAlpha (String.sub (vol, 0)) andalso String.sub (vol, 1) = #":")
+                                 orelse (isAbs andalso case testUNCPath vol of SOME i => i = String.size vol | NONE => false)
 (*: val fromString : string -> { isAbs : bool, vol : string, arcs : string list } *)
-fun fromString path = let val (vol, rest) = stripVolume path
+fun fromString path = let val (isUNC, vol, rest) = case testVolume path of
+                                                       DOS_VOLUME => (false, String.substring (path, 0, 2), String.extract (path, 2, NONE))
+                                                     | UNC_PATH i => (true, String.substring (path, 0, i), String.extract (path, i, NONE))
+                                                     | NO_VOLUME => (false, "", path)
                       in case String.fields (fn c => c = #"/" orelse c = #"\\") rest of
-                             [""] => { isAbs = false, vol = vol, arcs = [] }
+                             [""] => { isAbs = isUNC, vol = vol, arcs = [] }
                            | "" :: xs => { isAbs = true, vol = vol, arcs = xs }
-                           | xs => { isAbs = false, vol = vol, arcs = xs }
+                           | xs => { isAbs = isUNC, vol = vol, arcs = xs }
                       end
 local fun isValidArc arc = CharVector.all (fn c => c <> #"/" andalso c <> #"\\") arc
 in
 fun toString { isAbs, vol, arcs } = if not (validVolume { isAbs = isAbs, vol = vol }) then
                                         raise Path (* invalid volume *)
+                                    else if not isAbs andalso String.size vol >= 3 then
+                                        raise Path (* UNC path cannot be relative *)
                                     else
                                         case (isAbs, arcs) of
                                             (false, "" :: _) => raise Path

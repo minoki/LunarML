@@ -9,6 +9,10 @@
 { isAbs = false, vol = "", arcs = ["a","b"] }
 { isAbs = true, vol = "C:", arcs = ["Users","a","b"] }
 { isAbs = false, vol = "z:", arcs = ["a","b"] }
+{ isAbs = true, vol = "\\\\server\\share", arcs = [] }
+{ isAbs = true, vol = "//server/share", arcs = ["foo","bar.txt"] }
+{ isAbs = true, vol = "\\/server\\share", arcs = [""] }
+{ isAbs = true, vol = "/\\server/share", arcs = ["foo","bar.txt"] }
 ""
 { dir = "", file = "" }
 { dir = "", file = "." }
@@ -36,6 +40,7 @@
 "..\\..\\a\\b"
 "..\\a\\b"
 "a\\b"
+"..\\a\\b"
 "/"
 "."
 "a/.."
@@ -50,7 +55,13 @@ true
 true
 true
 false
+false
+true
+true
+false
 ""
 "z:"
 "A:"
 "U:"
+"//server/share"
+"\\\\server\\share"
