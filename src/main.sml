@@ -294,11 +294,22 @@ struct
           val js = JsTransform.doProgram {nextVId = nextId} js
           val codetransTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
-          val hasImports = not (List.null (!(#imports jsctx)))
-          val imports = JsWriter.doImports (!(#imports jsctx))
-          val usedLib = StringSet.toList
-            (JsSyntax.predefinedIdsInBlock (js, StringSet.empty))
-          val js = JsWriter.doProgram js
+          val importsList = !(#imports jsctx)
+          val hasImports = not (List.null importsList)
+          val usedLibSet = JsSyntax.predefinedIdsInBlock (js, StringSet.empty)
+          val usedLib = StringSet.toList usedLibSet
+          val unavailableNames =
+            StringSet.union (usedLibSet, JsWriter.JsUnavailableNames)
+          val (unavailableNames, nameMap) =
+            JsWriter.createNameMapForImports
+              (unavailableNames, TypedSyntax.VIdMap.empty, importsList)
+          val nameMap =
+            JsWriter.createNameMapForBlock (unavailableNames, nameMap, js)
+          val labelMap =
+            JsWriter.createLabelMapForBlock
+              (JsWriter.JsUnavailableNames, TypedSyntax.VIdMap.empty, js)
+          val imports = JsWriter.doImports (nameMap, importsList)
+          val js = #doProgram (JsWriter.mkWriter (nameMap, labelMap)) js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val outs = TextIO.openOut

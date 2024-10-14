@@ -256,11 +256,29 @@ end;
 
 structure JsWriter :>
 sig
-  val doProgram: JsSyntax.Block -> string
-  val doImports: {specs: (string * JsSyntax.Id) list, moduleName: string} list
-                 -> string
+  val JsUnavailableNames: StringSet.set
+  val createNameMapForImports:
+    StringSet.set
+    * string TypedSyntax.VIdMap.map
+    * {specs: (string * JsSyntax.Id) list, moduleName: string} list
+    -> StringSet.set * string TypedSyntax.VIdMap.map
+  val createNameMapForBlock:
+    StringSet.set * string TypedSyntax.VIdMap.map * JsSyntax.Stat vector
+    -> string TypedSyntax.VIdMap.map
+  val createLabelMapForBlock:
+    StringSet.set * string TypedSyntax.VIdMap.map * JsSyntax.Stat vector
+    -> string TypedSyntax.VIdMap.map
+  (* val doProgram: JsSyntax.Block -> string *)
+  val mkWriter: string TypedSyntax.VIdMap.map * string TypedSyntax.VIdMap.map
+                -> {doProgram: JsSyntax.Block -> string}
+  val doImports:
+    string TypedSyntax.VIdMap.map
+    * {specs: (string * JsSyntax.Id) list, moduleName: string} list
+    -> string
 end =
 struct
+  structure S = JsSyntax
+
   fun smlNameToJsChar #"_" = "_"
     | smlNameToJsChar #"'" = "$PRIME"
     | smlNameToJsChar #"!" = "$EXCLAM"
@@ -337,6 +355,9 @@ struct
     (* forbidden in certain positions *)
     (* "as", "async", "from", "get", "of", "set", "target" *)
     ]
+  val JsUnavailableNames =
+    List.foldl StringSet.add' JsReservedWords ["arguments", "eval"]
+
   fun isIdentifierName name =
     case CharVectorSlice.getItem (CharVectorSlice.full name) of
       NONE => false
@@ -348,10 +369,279 @@ struct
   (* non-ASCII characters are not handled *)
   fun isIdentifier name =
     isIdentifierName name andalso not (StringSet.member (JsReservedWords, name))
+
+  fun declare
+    (vid as TypedSyntax.MkVId (smlName, _), acc as (unavailableNames, nameMap)) =
+    (case TypedSyntax.VIdMap.find (nameMap, vid) of
+       SOME _ =>
+         raise Fail ("name already declared: " ^ TypedSyntax.print_VId vid)
+     | NONE =>
+         let
+           val baseName =
+             if isIdentifierName smlName then smlName else smlNameToJs smlName
+           val baseName_ =
+             if
+               String.size baseName = 0
+               orelse
+               Char.isDigit (String.sub (baseName, String.size baseName - 1))
+             then baseName ^ "$"
+             else baseName
+           fun isAvailable x =
+             not (StringSet.member (unavailableNames, x))
+           fun go i =
+             let val name = baseName_ ^ Int.toString i
+             in if isAvailable name then name else go (i + 1)
+             end
+           val name = if isAvailable baseName then baseName else go 1
+         in
+           ( StringSet.add (unavailableNames, name)
+           , TypedSyntax.VIdMap.insert (nameMap, vid, name)
+           )
+         end)
+  fun declareId (S.PredefinedId _, acc) = acc
+    | declareId (S.UserDefinedId vid, acc) = declare (vid, acc)
+  (*:
+  val createNameMapForImports : StringSet.set * string TypedSyntax.VIdMap.map * {specs: (string * JsSyntax.Id) list, moduleName: string} list -> StringSet.set * string TypedSyntax.VIdMap.map
+   *)
+  fun createNameMapForImports (unavailableNames, nameMap, imports) =
+    let
+      fun go ({specs, moduleName = _: string}, acc) =
+        List.foldl (fn ((_: string, id), acc) => declareId (id, acc)) acc specs
+    in
+      List.foldl go (unavailableNames, nameMap) imports
+    end
+  (*:
+  val createNameMapForExp : StringSet.set -> JsSyntax.Exp * string TypedSyntax.VIdMap.map -> string TypedSyntax.VIdMap.map
+  val createNameMapForStat : StringSet.set -> JsSyntax.Stat * string TypedSyntax.VIdMap.map -> string TypedSyntax.VIdMap.map
+  val createNameMapForBlock : StringSet.set * string TypedSyntax.VIdMap.map * JsSyntax.Stat vector -> string TypedSyntax.VIdMap.map
+   *)
+  fun createNameMapForExp _ (S.ConstExp _, nameMap) = nameMap
+    | createNameMapForExp _ (S.ThisExp, nameMap) = nameMap
+    | createNameMapForExp _ (S.VarExp _, nameMap) = nameMap
+    | createNameMapForExp unavailableNames (S.ObjectExp fields, nameMap) =
+        Vector.foldl
+          (fn ((_, v), nameMap) =>
+             createNameMapForExp unavailableNames (v, nameMap)) nameMap fields
+    | createNameMapForExp unavailableNames (S.ArrayExp elements, nameMap) =
+        Vector.foldl (createNameMapForExp unavailableNames) nameMap elements
+    | createNameMapForExp unavailableNames (S.CallExp (f, args), nameMap) =
+        Vector.foldl (createNameMapForExp unavailableNames)
+          (createNameMapForExp unavailableNames (f, nameMap)) args
+    | createNameMapForExp unavailableNames (S.MethodExp (obj, _, args), nameMap) =
+        Vector.foldl (createNameMapForExp unavailableNames)
+          (createNameMapForExp unavailableNames (obj, nameMap)) args
+    | createNameMapForExp unavailableNames (S.NewExp (f, args), nameMap) =
+        Vector.foldl (createNameMapForExp unavailableNames)
+          (createNameMapForExp unavailableNames (f, nameMap)) args
+    | createNameMapForExp unavailableNames
+        (S.FunctionExp (params, body), nameMap) =
+        let
+          val (unavailableNames, nameMap) =
+            Vector.foldl declareId (unavailableNames, nameMap) params
+        in
+          createNameMapForBlock (unavailableNames, nameMap, body)
+        end
+    | createNameMapForExp unavailableNames (S.BinExp (_, x, y), nameMap) =
+        createNameMapForExp unavailableNames
+          (y, createNameMapForExp unavailableNames (x, nameMap))
+    | createNameMapForExp unavailableNames (S.UnaryExp (_, x), nameMap) =
+        createNameMapForExp unavailableNames (x, nameMap)
+    | createNameMapForExp unavailableNames (S.IndexExp (x, y), nameMap) =
+        createNameMapForExp unavailableNames
+          (y, createNameMapForExp unavailableNames (x, nameMap))
+    | createNameMapForExp unavailableNames (S.CondExp (x, y, z), nameMap) =
+        createNameMapForExp unavailableNames
+          ( z
+          , createNameMapForExp unavailableNames
+              (y, createNameMapForExp unavailableNames (x, nameMap))
+          )
+  and createNameMapForStat unavailableNames (S.LetStat decs, nameMap) =
+        Vector.foldl
+          (fn ((vid, NONE), acc) => acc
+            | ((_, SOME exp), nameMap) =>
+             createNameMapForExp unavailableNames (exp, nameMap)) nameMap decs
+    | createNameMapForStat unavailableNames (S.ConstStat decs, nameMap) =
+        Vector.foldl
+          (fn ((_, exp), nameMap) =>
+             createNameMapForExp unavailableNames (exp, nameMap)) nameMap decs
+    | createNameMapForStat unavailableNames (S.ExpStat exp, nameMap) =
+        createNameMapForExp unavailableNames (exp, nameMap)
+    | createNameMapForStat unavailableNames
+        (S.IfStat (cond, then_, else_), nameMap) =
+        let
+          val nameMap = createNameMapForExp unavailableNames (cond, nameMap)
+          val nameMap = createNameMapForBlock (unavailableNames, nameMap, then_)
+        in
+          createNameMapForBlock (unavailableNames, nameMap, else_)
+        end
+    | createNameMapForStat unavailableNames (S.ReturnStat exp, nameMap) =
+        (case exp of
+           SOME exp => createNameMapForExp unavailableNames (exp, nameMap)
+         | NONE => nameMap)
+    | createNameMapForStat unavailableNames
+        (S.TryCatchStat (try, vid, catch), nameMap) =
+        let
+          val nameMap = createNameMapForBlock (unavailableNames, nameMap, try)
+          val (unavailableNames', nameMap) =
+            declare (vid, (unavailableNames, nameMap))
+          val nameMap =
+            createNameMapForBlock (unavailableNames', nameMap, catch)
+        in
+          nameMap
+        end
+    | createNameMapForStat unavailableNames (S.ThrowStat exp, nameMap) =
+        createNameMapForExp unavailableNames (exp, nameMap)
+    | createNameMapForStat unavailableNames (S.BlockStat (_, body), nameMap) =
+        createNameMapForBlock (unavailableNames, nameMap, body)
+    | createNameMapForStat unavailableNames (S.LoopStat (_, body), nameMap) =
+        createNameMapForBlock (unavailableNames, nameMap, body)
+    | createNameMapForStat unavailableNames (S.SwitchStat (exp, cases), nameMap) =
+        let
+          val nameMap = createNameMapForExp unavailableNames (exp, nameMap)
+          fun go ((_, block), nameMap) =
+            createNameMapForBlock (unavailableNames, nameMap, block)
+          val nameMap = List.foldl go nameMap cases
+        in
+          nameMap
+        end
+    | createNameMapForStat _ (S.BreakStat _, nameMap) = nameMap
+    | createNameMapForStat _ (S.ContinueStat _, nameMap) = nameMap
+    | createNameMapForStat unavailableNames (S.DefaultExportStat exp, nameMap) =
+        createNameMapForExp unavailableNames (exp, nameMap)
+    | createNameMapForStat _ (S.NamedExportStat _, nameMap) = nameMap
+  and createNameMapForBlock (unavailableNames, nameMap, block) =
+    let
+      fun go (S.LetStat decs, acc) =
+            Vector.foldl (fn ((vid, _), acc) => declare (vid, acc)) acc decs
+        | go (S.ConstStat decs, acc) =
+            Vector.foldl (fn ((vid, _), acc) => declare (vid, acc)) acc decs
+        | go (_, acc) = acc
+      val (unavailableNames, nameMap) =
+        Vector.foldl go (unavailableNames, nameMap) block
+    in
+      Vector.foldl (createNameMapForStat unavailableNames) nameMap block
+    end
+  (*:
+  val createLabelMapForExp : JsSyntax.Exp * string TypedSyntax.VIdMap.map -> string TypedSyntax.VIdMap.map
+  val createLabelMapForStat : StringSet.set -> JsSyntax.Stat * string TypedSyntax.VIdMap.map -> string TypedSyntax.VIdMap.map
+  val createLabelMapForBlock : StringSet.set * string TypedSyntax.VIdMap.map * JsSyntax.Stat vector -> string TypedSyntax.VIdMap.map
+   *)
+  fun createLabelMapForExp (S.ConstExp _, labelMap) = labelMap
+    | createLabelMapForExp (S.ThisExp, labelMap) = labelMap
+    | createLabelMapForExp (S.VarExp _, labelMap) = labelMap
+    | createLabelMapForExp (S.ObjectExp fields, labelMap) =
+        Vector.foldl
+          (fn ((_, v), labelMap) => createLabelMapForExp (v, labelMap)) labelMap
+          fields
+    | createLabelMapForExp (S.ArrayExp elements, labelMap) =
+        Vector.foldl (createLabelMapForExp) labelMap elements
+    | createLabelMapForExp (S.CallExp (f, args), labelMap) =
+        Vector.foldl (createLabelMapForExp) (createLabelMapForExp (f, labelMap))
+          args
+    | createLabelMapForExp (S.MethodExp (obj, _, args), labelMap) =
+        Vector.foldl (createLabelMapForExp)
+          (createLabelMapForExp (obj, labelMap)) args
+    | createLabelMapForExp (S.NewExp (f, args), labelMap) =
+        Vector.foldl (createLabelMapForExp) (createLabelMapForExp (f, labelMap))
+          args
+    | createLabelMapForExp (S.FunctionExp (_, body), labelMap) =
+        createLabelMapForBlock (JsUnavailableNames, labelMap, body)
+    | createLabelMapForExp (S.BinExp (_, x, y), labelMap) =
+        createLabelMapForExp (y, createLabelMapForExp (x, labelMap))
+    | createLabelMapForExp (S.UnaryExp (_, x), labelMap) =
+        createLabelMapForExp (x, labelMap)
+    | createLabelMapForExp (S.IndexExp (x, y), labelMap) =
+        createLabelMapForExp (y, createLabelMapForExp (x, labelMap))
+    | createLabelMapForExp (S.CondExp (x, y, z), labelMap) =
+        createLabelMapForExp (z, createLabelMapForExp
+          (y, createLabelMapForExp (x, labelMap)))
+  and createLabelMapForStat _ (S.LetStat decs, labelMap) =
+        Vector.foldl
+          (fn ((vid, NONE), acc) => acc
+            | ((_, SOME exp), labelMap) => createLabelMapForExp (exp, labelMap))
+          labelMap decs
+    | createLabelMapForStat _ (S.ConstStat decs, labelMap) =
+        Vector.foldl
+          (fn ((_, exp), labelMap) => createLabelMapForExp (exp, labelMap))
+          labelMap decs
+    | createLabelMapForStat _ (S.ExpStat exp, labelMap) =
+        createLabelMapForExp (exp, labelMap)
+    | createLabelMapForStat unavailableLabels
+        (S.IfStat (cond, then_, else_), labelMap) =
+        let
+          val labelMap = createLabelMapForExp (cond, labelMap)
+          val labelMap =
+            createLabelMapForBlock (unavailableLabels, labelMap, then_)
+        in
+          createLabelMapForBlock (unavailableLabels, labelMap, else_)
+        end
+    | createLabelMapForStat _ (S.ReturnStat exp, labelMap) =
+        (case exp of
+           SOME exp => createLabelMapForExp (exp, labelMap)
+         | NONE => labelMap)
+    | createLabelMapForStat unavailableLabels
+        (S.TryCatchStat (try, _, catch), labelMap) =
+        let
+          val labelMap =
+            createLabelMapForBlock (unavailableLabels, labelMap, try)
+          val labelMap =
+            createLabelMapForBlock (unavailableLabels, labelMap, catch)
+        in
+          labelMap
+        end
+    | createLabelMapForStat _ (S.ThrowStat exp, labelMap) =
+        createLabelMapForExp (exp, labelMap)
+    | createLabelMapForStat unavailableLabels
+        (S.BlockStat (label, body), labelMap) =
+        (case label of
+           SOME label =>
+             let
+               val (unavailableLabels, labelMap) =
+                 declareId (label, (unavailableLabels, labelMap))
+             in
+               createLabelMapForBlock (unavailableLabels, labelMap, body)
+             end
+         | NONE => createLabelMapForBlock (unavailableLabels, labelMap, body))
+    | createLabelMapForStat unavailableLabels
+        (S.LoopStat (label, body), labelMap) =
+        (case label of
+           SOME label =>
+             let
+               val (unavailableLabels, labelMap) =
+                 declareId (label, (unavailableLabels, labelMap))
+             in
+               createLabelMapForBlock (unavailableLabels, labelMap, body)
+             end
+         | NONE => createLabelMapForBlock (unavailableLabels, labelMap, body))
+    | createLabelMapForStat unavailableLabels
+        (S.SwitchStat (exp, cases), labelMap) =
+        let
+          val labelMap = createLabelMapForExp (exp, labelMap)
+          fun go ((_, block), labelMap) =
+            createLabelMapForBlock (unavailableLabels, labelMap, block)
+          val labelMap = List.foldl go labelMap cases
+        in
+          labelMap
+        end
+    | createLabelMapForStat _ (S.BreakStat _, labelMap) = labelMap
+    | createLabelMapForStat _ (S.ContinueStat _, labelMap) = labelMap
+    | createLabelMapForStat _ (S.DefaultExportStat exp, labelMap) =
+        createLabelMapForExp (exp, labelMap)
+    | createLabelMapForStat _ (S.NamedExportStat _, labelMap) = labelMap
+  and createLabelMapForBlock (unavailableLabels, labelMap, block) =
+    Vector.foldl (createLabelMapForStat unavailableLabels) labelMap block
+
+  (*
   fun idToJs (JsSyntax.PredefinedId name) = name
     | idToJs (JsSyntax.UserDefinedId (TypedSyntax.MkVId (name, n))) =
         smlNameToJs name ^ "$"
         ^ Int.toString n (* the number must be non-negative *)
+  *)
+  fun idToJs (_, JsSyntax.PredefinedId name) = name
+    | idToJs (nameMap, JsSyntax.UserDefinedId vid) =
+        case TypedSyntax.VIdMap.find (nameMap, vid) of
+          SOME x => x
+        | NONE => raise Fail ("idToJs " ^ TypedSyntax.print_VId vid)
 
   fun toStringLit (s: string) =
     "\""
@@ -470,8 +760,6 @@ struct
         Fragment "(" :: exp (Fragment ")" :: rest)
     | paren false exp rest = exp rest
 
-  structure S = JsSyntax
-
   fun intToString n =
     if n >= 0 then Int.toString n
     else "-" ^ String.extract (Int.toString n, 1, NONE)
@@ -538,349 +826,372 @@ struct
         (fn rest => Fragment s :: rest)
     | doConst (S.WideString s) =
         (fn rest => Fragment (toWideStringLit s) :: rest)
-  fun doExp (_, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
-    | doExp (_, S.ThisExp) =
-        (fn rest => Fragment "this" :: rest)
-    | doExp (_, S.VarExp id) =
-        (fn rest => Fragment (idToJs id) :: rest)
-    | doExp (_, S.ObjectExp fields) =
-        (fn rest =>
-           Fragment "{"
-           ::
-           commaSepV
-             (Vector.map
-                (fn (key, value) =>
-                   fn rest =>
-                     Fragment (doKey key) :: Fragment ": "
-                     :: doExp (Precedence.AssignmentExpression, value) rest)
-                fields) (Fragment "}" :: rest))
-    | doExp (_, S.ArrayExp elements) =
-        (fn rest =>
-           Fragment "[" :: doCommaSepExp elements (Fragment "]" :: rest))
-    | doExp (prec, S.CallExp (fnExp, arguments)) =
-        paren (prec < Precedence.CallExpression) (fn rest =>
-          doExp (Precedence.CallExpression, fnExp)
-            (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
-    | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) =
-        paren (prec < Precedence.CallExpression) (fn rest =>
-          doExp (Precedence.MemberExpression, objectExp)
-            (Fragment "." :: Fragment methodName :: Fragment "("
-             :: doCommaSepExp arguments (Fragment ")" :: rest)))
-    | doExp (prec, S.NewExp (constructorExp, arguments)) =
-        paren (prec < Precedence.MemberExpression) (fn rest =>
-          Fragment "new "
-          ::
-          doExp (Precedence.MemberExpression, constructorExp)
-            (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
-    | doExp (_, S.FunctionExp (parameters, body)) =
-        (fn rest =>
-           Fragment "function" :: Fragment "("
-           ::
-           commaSepV
-             (Vector.map (fn id => fn rest => Fragment (idToJs id) :: rest)
-                parameters)
-             (Fragment ") {" :: IncreaseIndent :: LineTerminator
-              :: doBlock body (DecreaseIndent :: Indent :: Fragment "}" :: rest)))
-    | doExp (prec, S.BinExp (binOp, x, y)) =
-        (case binOpInfo binOp of
-           InfixOp (prec', symbol) =>
-             paren (prec < prec') (fn rest =>
-               doExp (prec', x)
-                 (Fragment " " :: Fragment symbol :: Fragment " "
-                  :: doExp (prec' - 1, y) rest))
-         | InfixOpR (prec', symbol) =>
-             paren (prec < prec') (fn rest =>
-               doExp (prec' - 1, x)
-                 (Fragment " " :: Fragment symbol :: Fragment " "
-                  :: doExp (prec', y) rest))
-         | ExponentiationOp =>
-             paren (prec < 5) (fn rest =>
-               doExp (3, x) (Fragment " ** " :: doExp (5, y) rest)))
-    | doExp (prec, S.UnaryExp (unOp, x)) =
-        let
-          val symbol =
-            case unOp of
-              S.VOID => "void"
-            | S.TYPEOF => "typeof"
-            | S.TONUMBER => "+"
-            | S.NEGATE => "-"
-            | S.BITNOT => "~"
-            | S.NOT => "!"
-        in
-          paren (prec < Precedence.UnaryExpression) (fn rest =>
-            Fragment symbol :: Fragment " "
-            :: doExp (Precedence.UnaryExpression, x) rest)
-        end
-    | doExp (prec, S.IndexExp (objectExp, indexExp)) =
-        let
-          val tryIdentifierName =
-            case indexExp of
-              S.ConstExp (S.WideString name) =>
-                let
-                  val name =
-                    Vector.foldr
-                      (fn (_, NONE) => NONE
-                        | (c, SOME xs) =>
-                         if c < 128 then SOME (chr c :: xs) else NONE) (SOME [])
-                      name
-                in
-                  case name of
-                    SOME name =>
-                      let
-                        val name = CharVector.fromList name
-                      in
-                        if isIdentifierName name (* ES5 or later *) then
-                          SOME name
-                        else
-                          NONE
-                      end
-                  | NONE => NONE
-                end
-            | _ => NONE
-          val indexPart =
-            case tryIdentifierName of
-              SOME name =>
-                let
-                  val isIntegerLiteral =
-                    case objectExp of
-                      S.ConstExp (S.Numeral s) =>
-                        CharVector.all
-                          (fn #"." => false
-                            | #"e" => false
-                            | #"E" => false
-                            | _ => true) s
-                    | _ => false
-                in
-                  if isIntegerLiteral then
-                    fn rest => Fragment " ." :: Fragment name :: rest
-                  else
-                    fn rest => Fragment "." :: Fragment name :: rest
-                end
-            | _ =>
-                (fn rest =>
-                   Fragment "["
-                   ::
-                   doExp (Precedence.Expression, indexExp)
-                     (Fragment "]" :: rest))
-        in
-          paren (prec < Precedence.MemberExpression)
-            (doExp (Precedence.MemberExpression, objectExp) o indexPart)
-        end
-    | doExp (prec, S.CondExp (exp1, exp2, exp3)) =
-        paren (prec < Precedence.ConditionalExpression) (fn rest =>
-          doExp (Precedence.LogicalORExpression, exp1)
-            (Fragment " ? "
-             ::
-             doExp (Precedence.AssignmentExpression, exp2)
-               (Fragment " : "
-                :: doExp (Precedence.AssignmentExpression, exp3) rest)))
-  and doCommaSepExp elements =
-    commaSepV
-      (Vector.map (fn value => doExp (Precedence.AssignmentExpression, value))
-         elements)
-  and doStat (S.LetStat variables) =
-        (fn rest =>
-           Indent :: Fragment "let "
-           ::
-           commaSepV
-             (Vector.map
-                (fn (id, NONE) =>
-                   (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
-                  | (id, SOME init) =>
-                   (fn rest =>
-                      Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = "
-                      :: doExp (Precedence.AssignmentExpression, init) rest))
-                variables) (Fragment ";" :: LineTerminator :: rest))
-    | doStat (S.ConstStat variables) =
-        (fn rest =>
-           Indent :: Fragment "const "
-           ::
-           commaSepV
-             (Vector.map
-                (fn (id, init) =>
-                   (fn rest =>
-                      Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = "
-                      :: doExp (Precedence.AssignmentExpression, init) rest))
-                variables) (Fragment ";" :: LineTerminator :: rest))
-    | doStat (S.ExpStat exp) =
-        (fn rest =>
-           let
-             val rest' = Fragment ";" :: LineTerminator :: rest
-             val fragments = doExp (Precedence.Expression, exp) rest'
-             val needParen =
-               case fragments of
-                 Fragment "{" :: _ => true
-               | Fragment "function" :: _ => true
-               | _ => false
-           in
-             Indent
-             ::
-             (if needParen then
-                paren true (doExp (Precedence.Expression, exp)) rest'
-              else
-                fragments)
-           end)
-    | doStat (S.IfStat (cond, thenBlock, elseBlock)) =
-        (fn rest =>
-           let
-             fun processElseIfs (elseIfsRev, elseBlock) =
-               if Vector.length elseBlock = 1 then
-                 case Vector.sub (elseBlock, 0) of
-                   S.IfStat (cond', thenBlock, elseBlock) =>
-                     processElseIfs
-                       ((cond', thenBlock) :: elseIfsRev, elseBlock)
-                 | _ => (elseIfsRev, elseBlock)
-               else
-                 (elseIfsRev, elseBlock)
-             val (elseIfsRev, elseBlock) = processElseIfs ([], elseBlock)
-             val elsePart =
-               if Vector.length elseBlock = 0 then
-                 DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
-                 :: rest
-               else
-                 DecreaseIndent :: Indent :: Fragment "} else {"
-                 :: IncreaseIndent :: LineTerminator
+  fun mkWriter (nameMap, labelMap) =
+    let
+      fun doExp (_, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
+        | doExp (_, S.ThisExp) =
+            (fn rest => Fragment "this" :: rest)
+        | doExp (_, S.VarExp id) =
+            (fn rest => Fragment (idToJs (nameMap, id)) :: rest)
+        | doExp (_, S.ObjectExp fields) =
+            (fn rest =>
+               Fragment "{"
+               ::
+               commaSepV
+                 (Vector.map
+                    (fn (key, value) =>
+                       fn rest =>
+                         Fragment (doKey key) :: Fragment ": "
+                         :: doExp (Precedence.AssignmentExpression, value) rest)
+                    fields) (Fragment "}" :: rest))
+        | doExp (_, S.ArrayExp elements) =
+            (fn rest =>
+               Fragment "[" :: doCommaSepExp elements (Fragment "]" :: rest))
+        | doExp (prec, S.CallExp (fnExp, arguments)) =
+            paren (prec < Precedence.CallExpression) (fn rest =>
+              doExp (Precedence.CallExpression, fnExp)
+                (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
+        | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) =
+            paren (prec < Precedence.CallExpression) (fn rest =>
+              doExp (Precedence.MemberExpression, objectExp)
+                (Fragment "." :: Fragment methodName :: Fragment "("
+                 :: doCommaSepExp arguments (Fragment ")" :: rest)))
+        | doExp (prec, S.NewExp (constructorExp, arguments)) =
+            paren (prec < Precedence.MemberExpression) (fn rest =>
+              Fragment "new "
+              ::
+              doExp (Precedence.MemberExpression, constructorExp)
+                (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
+        | doExp (_, S.FunctionExp (parameters, body)) =
+            (fn rest =>
+               Fragment "function" :: Fragment "("
+               ::
+               commaSepV
+                 (Vector.map
+                    (fn id => fn rest => Fragment (idToJs (nameMap, id)) :: rest)
+                    parameters)
+                 (Fragment ") {" :: IncreaseIndent :: LineTerminator
+                  ::
+                  doBlock body
+                    (DecreaseIndent :: Indent :: Fragment "}" :: rest)))
+        | doExp (prec, S.BinExp (binOp, x, y)) =
+            (case binOpInfo binOp of
+               InfixOp (prec', symbol) =>
+                 paren (prec < prec') (fn rest =>
+                   doExp (prec', x)
+                     (Fragment " " :: Fragment symbol :: Fragment " "
+                      :: doExp (prec' - 1, y) rest))
+             | InfixOpR (prec', symbol) =>
+                 paren (prec < prec') (fn rest =>
+                   doExp (prec' - 1, x)
+                     (Fragment " " :: Fragment symbol :: Fragment " "
+                      :: doExp (prec', y) rest))
+             | ExponentiationOp =>
+                 paren (prec < 5) (fn rest =>
+                   doExp (3, x) (Fragment " ** " :: doExp (5, y) rest)))
+        | doExp (prec, S.UnaryExp (unOp, x)) =
+            let
+              val symbol =
+                case unOp of
+                  S.VOID => "void"
+                | S.TYPEOF => "typeof"
+                | S.TONUMBER => "+"
+                | S.NEGATE => "-"
+                | S.BITNOT => "~"
+                | S.NOT => "!"
+            in
+              paren (prec < Precedence.UnaryExpression) (fn rest =>
+                Fragment symbol :: Fragment " "
+                :: doExp (Precedence.UnaryExpression, x) rest)
+            end
+        | doExp (prec, S.IndexExp (objectExp, indexExp)) =
+            let
+              val tryIdentifierName =
+                case indexExp of
+                  S.ConstExp (S.WideString name) =>
+                    let
+                      val name =
+                        Vector.foldr
+                          (fn (_, NONE) => NONE
+                            | (c, SOME xs) =>
+                             if c < 128 then SOME (chr c :: xs) else NONE)
+                          (SOME []) name
+                    in
+                      case name of
+                        SOME name =>
+                          let
+                            val name = CharVector.fromList name
+                          in
+                            if isIdentifierName name (* ES5 or later *) then
+                              SOME name
+                            else
+                              NONE
+                          end
+                      | NONE => NONE
+                    end
+                | _ => NONE
+              val indexPart =
+                case tryIdentifierName of
+                  SOME name =>
+                    let
+                      val isIntegerLiteral =
+                        case objectExp of
+                          S.ConstExp (S.Numeral s) =>
+                            CharVector.all
+                              (fn #"." => false
+                                | #"e" => false
+                                | #"E" => false
+                                | _ => true) s
+                        | _ => false
+                    in
+                      if isIntegerLiteral then
+                        fn rest => Fragment " ." :: Fragment name :: rest
+                      else
+                        fn rest => Fragment "." :: Fragment name :: rest
+                    end
+                | _ =>
+                    (fn rest =>
+                       Fragment "["
+                       ::
+                       doExp (Precedence.Expression, indexExp)
+                         (Fragment "]" :: rest))
+            in
+              paren (prec < Precedence.MemberExpression)
+                (doExp (Precedence.MemberExpression, objectExp) o indexPart)
+            end
+        | doExp (prec, S.CondExp (exp1, exp2, exp3)) =
+            paren (prec < Precedence.ConditionalExpression) (fn rest =>
+              doExp (Precedence.LogicalORExpression, exp1)
+                (Fragment " ? "
                  ::
-                 doBlock elseBlock
-                   (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
-                    :: rest)
-             val elseIfsAndElsePart =
-               List.foldl
-                 (fn ((cond, elseIfBlock), acc) =>
-                    DecreaseIndent :: Indent :: Fragment "} else if ("
-                    ::
-                    doExp (Precedence.Expression, cond)
-                      (Fragment ") {" :: IncreaseIndent :: LineTerminator
-                       :: doBlock elseIfBlock acc)) elsePart elseIfsRev
-           in
-             Indent :: Fragment "if ("
-             ::
-             doExp (Precedence.Expression, cond)
-               (Fragment ") {" :: IncreaseIndent :: LineTerminator
-                :: doBlock thenBlock elseIfsAndElsePart)
-           end)
-    | doStat (S.ReturnStat NONE) =
-        (fn rest => Indent :: Fragment "return;" :: LineTerminator :: rest)
-    | doStat (S.ReturnStat (SOME exp)) =
-        (fn rest =>
-           Indent :: Fragment "return "
-           ::
-           doExp (Precedence.Expression, exp)
-             (Fragment ";" :: LineTerminator :: rest))
-    | doStat (S.TryCatchStat (body, exnName, catch)) =
-        (fn rest =>
-           Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator
-           ::
-           doBlock body
-             (DecreaseIndent :: Indent :: Fragment "} catch ("
-              :: Fragment (idToJs (S.UserDefinedId exnName)) :: Fragment ") {"
-              :: IncreaseIndent :: LineTerminator
-              ::
-              doBlock catch
-                (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
-                 :: rest)))
-    | doStat (S.ThrowStat exp) =
-        (fn rest =>
-           Indent :: Fragment "throw "
-           ::
-           doExp (Precedence.Expression, exp)
-             (Fragment ";" :: LineTerminator :: rest))
-    | doStat (S.BlockStat (NONE, block)) =
-        (fn rest =>
-           Indent :: Fragment "{" :: IncreaseIndent :: LineTerminator
-           ::
-           doBlock block
-             (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
-    | doStat (S.BlockStat (SOME label, block)) =
-        (fn rest =>
-           Indent :: Fragment (idToJs label) :: Fragment ": {" :: IncreaseIndent
-           :: LineTerminator
-           ::
-           doBlock block
-             (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
-    | doStat (S.LoopStat (NONE, block)) =
-        (fn rest =>
-           Indent :: Fragment "for (;;) {" :: IncreaseIndent :: LineTerminator
-           ::
-           doBlock block
-             (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
-    | doStat (S.LoopStat (SOME label, block)) =
-        (fn rest =>
-           Indent :: Fragment (idToJs label) :: Fragment ": for (;;) {"
-           :: IncreaseIndent :: LineTerminator
-           ::
-           doBlock block
-             (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
-    | doStat (S.SwitchStat (exp, cases)) =
-        (fn rest =>
-           Indent :: Fragment "switch ("
-           ::
-           doExp (Precedence.Expression, exp)
-             (Fragment ") {" :: LineTerminator
-              ::
-              List.foldr
-                (fn ((c, block), rest) =>
-                   Indent :: Fragment "case "
-                   ::
-                   doConst c
-                     (Fragment ":" :: IncreaseIndent :: LineTerminator :: Indent
-                      :: Fragment "{" :: IncreaseIndent :: LineTerminator
-                      ::
-                      doBlock block
-                        (DecreaseIndent :: Indent :: Fragment "}"
-                         :: LineTerminator :: rest)))
-                (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
-                 :: rest) cases))
-    | doStat (S.BreakStat NONE) =
-        (fn rest => Indent :: Fragment "break;" :: LineTerminator :: rest)
-    | doStat (S.BreakStat (SOME label)) =
-        (fn rest =>
-           Indent :: Fragment "break " :: Fragment (idToJs label)
-           :: Fragment ";" :: LineTerminator :: rest)
-    | doStat (S.ContinueStat NONE) =
-        (fn rest => Indent :: Fragment "continue;" :: LineTerminator :: rest)
-    | doStat (S.ContinueStat (SOME label)) =
-        (fn rest =>
-           Indent :: Fragment "continue " :: Fragment (idToJs label)
-           :: Fragment ";" :: LineTerminator :: rest)
-    | doStat (S.DefaultExportStat exp) =
-        (fn rest =>
-           let
-             val rest' = Fragment ";" :: LineTerminator :: rest
-             val fragments = doExp (Precedence.AssignmentExpression, exp) rest'
-             val needParen =
-               case fragments of
-                 Fragment "function" :: _ => true
-               | Fragment "async function" :: _ => true
-               | Fragment "class" :: _ => true
-               | _ => false
-           in
-             Indent :: Fragment "export default "
-             ::
-             (if needParen then
-                paren true (doExp (Precedence.AssignmentExpression, exp)) rest'
-              else
-                fragments)
-           end)
-    | doStat (S.NamedExportStat entities) =
-        (fn rest =>
-           Indent :: Fragment "export {"
-           ::
-           commaSepV
-             (Vector.map
-                (fn (v, name) =>
-                   fn rest =>
-                     Fragment (idToJs v) :: Fragment " as " :: Fragment name
-                     :: rest) entities)
-             (Fragment "};" :: LineTerminator :: rest))
-  and doBlock stats =
-    (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
+                 doExp (Precedence.AssignmentExpression, exp2)
+                   (Fragment " : "
+                    :: doExp (Precedence.AssignmentExpression, exp3) rest)))
+      and doCommaSepExp elements =
+        commaSepV
+          (Vector.map
+             (fn value => doExp (Precedence.AssignmentExpression, value))
+             elements)
+      and doStat (S.LetStat variables) =
+            (fn rest =>
+               Indent :: Fragment "let "
+               ::
+               commaSepV
+                 (Vector.map
+                    (fn (id, NONE) =>
+                       (fn rest =>
+                          Fragment (idToJs (nameMap, S.UserDefinedId id))
+                          :: rest)
+                      | (id, SOME init) =>
+                       (fn rest =>
+                          Fragment (idToJs (nameMap, S.UserDefinedId id))
+                          :: Fragment " = "
+                          :: doExp (Precedence.AssignmentExpression, init) rest))
+                    variables) (Fragment ";" :: LineTerminator :: rest))
+        | doStat (S.ConstStat variables) =
+            (fn rest =>
+               Indent :: Fragment "const "
+               ::
+               commaSepV
+                 (Vector.map
+                    (fn (id, init) =>
+                       (fn rest =>
+                          Fragment (idToJs (nameMap, S.UserDefinedId id))
+                          :: Fragment " = "
+                          :: doExp (Precedence.AssignmentExpression, init) rest))
+                    variables) (Fragment ";" :: LineTerminator :: rest))
+        | doStat (S.ExpStat exp) =
+            (fn rest =>
+               let
+                 val rest' = Fragment ";" :: LineTerminator :: rest
+                 val fragments = doExp (Precedence.Expression, exp) rest'
+                 val needParen =
+                   case fragments of
+                     Fragment "{" :: _ => true
+                   | Fragment "function" :: _ => true
+                   | _ => false
+               in
+                 Indent
+                 ::
+                 (if needParen then
+                    paren true (doExp (Precedence.Expression, exp)) rest'
+                  else
+                    fragments)
+               end)
+        | doStat (S.IfStat (cond, thenBlock, elseBlock)) =
+            (fn rest =>
+               let
+                 fun processElseIfs (elseIfsRev, elseBlock) =
+                   if Vector.length elseBlock = 1 then
+                     case Vector.sub (elseBlock, 0) of
+                       S.IfStat (cond', thenBlock, elseBlock) =>
+                         processElseIfs
+                           ((cond', thenBlock) :: elseIfsRev, elseBlock)
+                     | _ => (elseIfsRev, elseBlock)
+                   else
+                     (elseIfsRev, elseBlock)
+                 val (elseIfsRev, elseBlock) = processElseIfs ([], elseBlock)
+                 val elsePart =
+                   if Vector.length elseBlock = 0 then
+                     DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                     :: rest
+                   else
+                     DecreaseIndent :: Indent :: Fragment "} else {"
+                     :: IncreaseIndent :: LineTerminator
+                     ::
+                     doBlock elseBlock
+                       (DecreaseIndent :: Indent :: Fragment "}"
+                        :: LineTerminator :: rest)
+                 val elseIfsAndElsePart =
+                   List.foldl
+                     (fn ((cond, elseIfBlock), acc) =>
+                        DecreaseIndent :: Indent :: Fragment "} else if ("
+                        ::
+                        doExp (Precedence.Expression, cond)
+                          (Fragment ") {" :: IncreaseIndent :: LineTerminator
+                           :: doBlock elseIfBlock acc)) elsePart elseIfsRev
+               in
+                 Indent :: Fragment "if ("
+                 ::
+                 doExp (Precedence.Expression, cond)
+                   (Fragment ") {" :: IncreaseIndent :: LineTerminator
+                    :: doBlock thenBlock elseIfsAndElsePart)
+               end)
+        | doStat (S.ReturnStat NONE) =
+            (fn rest => Indent :: Fragment "return;" :: LineTerminator :: rest)
+        | doStat (S.ReturnStat (SOME exp)) =
+            (fn rest =>
+               Indent :: Fragment "return "
+               ::
+               doExp (Precedence.Expression, exp)
+                 (Fragment ";" :: LineTerminator :: rest))
+        | doStat (S.TryCatchStat (body, exnName, catch)) =
+            (fn rest =>
+               Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator
+               ::
+               doBlock body
+                 (DecreaseIndent :: Indent :: Fragment "} catch ("
+                  :: Fragment (idToJs (nameMap, S.UserDefinedId exnName))
+                  :: Fragment ") {" :: IncreaseIndent :: LineTerminator
+                  ::
+                  doBlock catch
+                    (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                     :: rest)))
+        | doStat (S.ThrowStat exp) =
+            (fn rest =>
+               Indent :: Fragment "throw "
+               ::
+               doExp (Precedence.Expression, exp)
+                 (Fragment ";" :: LineTerminator :: rest))
+        | doStat (S.BlockStat (NONE, block)) =
+            (fn rest =>
+               Indent :: Fragment "{" :: IncreaseIndent :: LineTerminator
+               ::
+               doBlock block
+                 (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                  :: rest))
+        | doStat (S.BlockStat (SOME label, block)) =
+            (fn rest =>
+               Indent :: Fragment (idToJs (labelMap, label)) :: Fragment ": {"
+               :: IncreaseIndent :: LineTerminator
+               ::
+               doBlock block
+                 (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                  :: rest))
+        | doStat (S.LoopStat (NONE, block)) =
+            (fn rest =>
+               Indent :: Fragment "for (;;) {" :: IncreaseIndent
+               :: LineTerminator
+               ::
+               doBlock block
+                 (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                  :: rest))
+        | doStat (S.LoopStat (SOME label, block)) =
+            (fn rest =>
+               Indent :: Fragment (idToJs (labelMap, label))
+               :: Fragment ": for (;;) {" :: IncreaseIndent :: LineTerminator
+               ::
+               doBlock block
+                 (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                  :: rest))
+        | doStat (S.SwitchStat (exp, cases)) =
+            (fn rest =>
+               Indent :: Fragment "switch ("
+               ::
+               doExp (Precedence.Expression, exp)
+                 (Fragment ") {" :: LineTerminator
+                  ::
+                  List.foldr
+                    (fn ((c, block), rest) =>
+                       Indent :: Fragment "case "
+                       ::
+                       doConst c
+                         (Fragment ":" :: IncreaseIndent :: LineTerminator
+                          :: Indent :: Fragment "{" :: IncreaseIndent
+                          :: LineTerminator
+                          ::
+                          doBlock block
+                            (DecreaseIndent :: Indent :: Fragment "}"
+                             :: LineTerminator :: rest)))
+                    (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator
+                     :: rest) cases))
+        | doStat (S.BreakStat NONE) =
+            (fn rest => Indent :: Fragment "break;" :: LineTerminator :: rest)
+        | doStat (S.BreakStat (SOME label)) =
+            (fn rest =>
+               Indent :: Fragment "break "
+               :: Fragment (idToJs (labelMap, label)) :: Fragment ";"
+               :: LineTerminator :: rest)
+        | doStat (S.ContinueStat NONE) =
+            (fn rest => Indent :: Fragment "continue;" :: LineTerminator :: rest)
+        | doStat (S.ContinueStat (SOME label)) =
+            (fn rest =>
+               Indent :: Fragment "continue "
+               :: Fragment (idToJs (labelMap, label)) :: Fragment ";"
+               :: LineTerminator :: rest)
+        | doStat (S.DefaultExportStat exp) =
+            (fn rest =>
+               let
+                 val rest' = Fragment ";" :: LineTerminator :: rest
+                 val fragments =
+                   doExp (Precedence.AssignmentExpression, exp) rest'
+                 val needParen =
+                   case fragments of
+                     Fragment "function" :: _ => true
+                   | Fragment "async function" :: _ => true
+                   | Fragment "class" :: _ => true
+                   | _ => false
+               in
+                 Indent :: Fragment "export default "
+                 ::
+                 (if needParen then
+                    paren true (doExp (Precedence.AssignmentExpression, exp))
+                      rest'
+                  else
+                    fragments)
+               end)
+        | doStat (S.NamedExportStat entities) =
+            (fn rest =>
+               Indent :: Fragment "export {"
+               ::
+               commaSepV
+                 (Vector.map
+                    (fn (v, name) =>
+                       fn rest =>
+                         Fragment (idToJs (nameMap, v)) :: Fragment " as "
+                         :: Fragment name :: rest) entities)
+                 (Fragment "};" :: LineTerminator :: rest))
+      and doBlock stats =
+        (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
+      fun doProgram stats =
+        buildProgram (doBlock stats [])
+    in
+      {doProgram = doProgram}
+    end
 
-  fun doProgram stats =
-    buildProgram (doBlock stats [])
 
-  (*: val doImports : { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string *)
-  fun doImports imports =
+  (*: val doImports : string TypedSyntax.VIdMap.map * { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string *)
+  fun doImports (nameMap, imports) =
     let
       fun importOne ({specs, moduleName}, rest) =
         let
@@ -893,7 +1204,7 @@ struct
               Fragment "import " :: Fragment (toStringLit moduleName)
               :: Fragment ";" :: LineTerminator :: rest
           | ((_, defaultId) :: _, []) =>
-              Fragment "import " :: Fragment (idToJs defaultId)
+              Fragment "import " :: Fragment (idToJs (nameMap, defaultId))
               :: Fragment " from " :: Fragment (toStringLit moduleName)
               :: Fragment ";" :: LineTerminator :: rest
           | ([], _ :: _) =>
@@ -905,11 +1216,11 @@ struct
                       fn rest =>
                         (if isIdentifierName name then Fragment name
                          else Fragment (toStringLit name)) :: Fragment " as "
-                        :: Fragment (idToJs vid) :: rest) named)
+                        :: Fragment (idToJs (nameMap, vid)) :: rest) named)
                 (Fragment "} from " :: Fragment (toStringLit moduleName)
                  :: Fragment ";" :: LineTerminator :: rest)
           | ((_, defaultId) :: _, _ :: _) =>
-              Fragment "import " :: Fragment (idToJs defaultId)
+              Fragment "import " :: Fragment (idToJs (nameMap, defaultId))
               :: Fragment ", {"
               ::
               commaSep
@@ -918,7 +1229,7 @@ struct
                       fn rest =>
                         (if isIdentifierName name then Fragment name
                          else Fragment (toStringLit name)) :: Fragment " as "
-                        :: Fragment (idToJs vid) :: rest) named)
+                        :: Fragment (idToJs (nameMap, vid)) :: rest) named)
                 (Fragment "} from " :: Fragment (toStringLit moduleName)
                  :: Fragment ";" :: LineTerminator :: rest)
         end
