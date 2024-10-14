@@ -122,46 +122,70 @@ struct
       TypedSyntax.MkVId (name, n)
     end
 
-  fun goExp (_, _, _, e as J.ConstExp _) = ([], e)
-    | goExp (_, _, _, e as J.ThisExp) = ([], e)
-    | goExp (_, _, _, e as J.VarExp _) = ([], e)
-    | goExp (ctx, bound, depth, J.ObjectExp fields) =
+  fun renewVId (ctx: Context, TypedSyntax.MkVId (name, _)) =
+    let
+      val n = !(#nextVId ctx)
+      val _ = #nextVId ctx := n + 1
+    in
+      TypedSyntax.MkVId (name, n)
+    end
+
+  (*:
+  val goExp : Context * J.IdSet.set * TypedSyntax.VId TypedSyntax.VIdMap.map * int * J.Exp -> J.Stat list * J.Exp
+  val goExpVector : Context * J.IdSet.set * TypedSyntax.VId TypedSyntax.VIdMap.map * int * J.Exp vector -> J.Stat list * J.Exp vector
+  val goStat : Context * J.IdSet.set * TypedSyntax.VId TypedSyntax.VIdMap.map * int * J.Stat -> J.Stat list * J.Stat
+  val goBlock : Context * J.IdSet.set * TypedSyntax.VId TypedSyntax.VIdMap.map * int * J.Stat vector -> J.Stat list * J.Stat vector
+   *)
+  fun goExp (_, _, _, _, e as J.ConstExp _) = ([], e)
+    | goExp (_, _, _, _, e as J.ThisExp) = ([], e)
+    | goExp (_, _, renameMap, _, e as J.VarExp id) =
+        (case id of
+           J.PredefinedId _ => ([], e)
+         | J.UserDefinedId vid =>
+             case TypedSyntax.VIdMap.find (renameMap, vid) of
+               SOME newVId => ([], J.VarExp (J.UserDefinedId newVId))
+             | NONE => ([], e))
+    | goExp (ctx, bound, renameMap, depth, J.ObjectExp fields) =
         let
           val (decs, fields') =
             Vector.foldr
               (fn ((key, exp), (decs, fields)) =>
-                 let val (decs', exp') = goExp (ctx, bound, depth, exp)
-                 in (decs' @ decs, (key, exp') :: fields)
+                 let
+                   val (decs', exp') = goExp (ctx, bound, renameMap, depth, exp)
+                 in
+                   (decs' @ decs, (key, exp') :: fields)
                  end) ([], []) fields
         in
           (decs, J.ObjectExp (Vector.fromList fields'))
         end
-    | goExp (ctx, bound, depth, J.ArrayExp elems) =
-        let val (decs, elems') = goExpVector (ctx, bound, depth, elems)
-        in (decs, J.ArrayExp elems')
-        end
-    | goExp (ctx, bound, depth, J.CallExp (x, ys)) =
+    | goExp (ctx, bound, renameMap, depth, J.ArrayExp elems) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', ys') = goExpVector (ctx, bound, depth, ys)
+          val (decs, elems') = goExpVector (ctx, bound, renameMap, depth, elems)
+        in
+          (decs, J.ArrayExp elems')
+        end
+    | goExp (ctx, bound, renameMap, depth, J.CallExp (x, ys)) =
+        let
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', ys') = goExpVector (ctx, bound, renameMap, depth, ys)
         in
           (decs @ decs', J.CallExp (x', ys'))
         end
-    | goExp (ctx, bound, depth, J.MethodExp (x, name, ys)) =
+    | goExp (ctx, bound, renameMap, depth, J.MethodExp (x, name, ys)) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', ys') = goExpVector (ctx, bound, depth, ys)
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', ys') = goExpVector (ctx, bound, renameMap, depth, ys)
         in
           (decs @ decs', J.MethodExp (x', name, ys'))
         end
-    | goExp (ctx, bound, depth, J.NewExp (x, ys)) =
+    | goExp (ctx, bound, renameMap, depth, J.NewExp (x, ys)) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', ys') = goExpVector (ctx, bound, depth, ys)
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', ys') = goExpVector (ctx, bound, renameMap, depth, ys)
         in
           (decs @ decs', J.NewExp (x', ys'))
         end
-    | goExp (ctx, bound, depth, f as J.FunctionExp (params, body)) =
+    | goExp (ctx, bound, renameMap, depth, f as J.FunctionExp (params, body)) =
         if depth > 200 then
           let
             val fv = freeVarsExp (J.IdSet.empty, f) J.IdSet.empty
@@ -169,16 +193,36 @@ struct
             val bound' =
               Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound
                 params
-            val (decs, body') = goBlock (ctx, bound', 0, body)
             val name = freshVId (ctx, "f")
             val params' = Vector.foldr (op::) [] params
             val capturesAndParams = Vector.fromList (captures @ params')
+            val (renameMap', capturesAndParams2) =
+              Vector.foldr
+                (fn (id as J.PredefinedId _, (m, acc)) => (m, id :: acc)
+                  | (J.UserDefinedId vid, (m, acc)) =>
+                   let
+                     val vid' = renewVId (ctx, vid)
+                   in
+                     ( TypedSyntax.VIdMap.insert (m, vid, vid')
+                     , J.UserDefinedId vid' :: acc
+                     )
+                   end) (renameMap, []) capturesAndParams
+            val (decs, body') = goBlock (ctx, bound', renameMap', 0, body)
             val newDec = J.ConstStat (vector
-              [(name, J.FunctionExp (capturesAndParams, body'))])
+              [(name, J.FunctionExp (Vector.fromList capturesAndParams2, body'))])
+            fun renameVId vid =
+              case TypedSyntax.VIdMap.find (renameMap, vid) of
+                SOME vid' => vid'
+              | NONE => vid
+            fun renameId (id as J.PredefinedId _) = id
+              | renameId (id as J.UserDefinedId vid) =
+                  case TypedSyntax.VIdMap.find (renameMap, vid) of
+                    SOME vid' => J.UserDefinedId vid'
+                  | NONE => id
             val newExp = J.FunctionExp (params, vector
               [J.ReturnStat (SOME (J.CallExp
-                 ( J.VarExp (J.UserDefinedId name)
-                 , Vector.map J.VarExp capturesAndParams
+                 ( J.VarExp (J.UserDefinedId (renameVId name))
+                 , Vector.map (J.VarExp o renameId) capturesAndParams
                  )))])
           in
             (decs @ [newDec], newExp)
@@ -188,142 +232,160 @@ struct
             val bound' =
               Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound
                 params
-            val (decs, body') = goBlock (ctx, bound', depth + 1, body)
+            val (decs, body') = goBlock
+              (ctx, bound', renameMap, depth + 1, body)
           in
             (decs, J.FunctionExp (params, body'))
           end
-    | goExp (ctx, bound, depth, J.BinExp (p, x, y)) =
+    | goExp (ctx, bound, renameMap, depth, J.BinExp (p, x, y)) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', y') = goExp (ctx, bound, depth, y)
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', y') = goExp (ctx, bound, renameMap, depth, y)
         in
           (decs @ decs', J.BinExp (p, x', y'))
         end
-    | goExp (ctx, bound, depth, J.UnaryExp (p, x)) =
-        let val (decs, x') = goExp (ctx, bound, depth, x)
+    | goExp (ctx, bound, renameMap, depth, J.UnaryExp (p, x)) =
+        let val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
         in (decs, J.UnaryExp (p, x'))
         end
-    | goExp (ctx, bound, depth, J.IndexExp (x, y)) =
+    | goExp (ctx, bound, renameMap, depth, J.IndexExp (x, y)) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', y') = goExp (ctx, bound, depth, y)
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', y') = goExp (ctx, bound, renameMap, depth, y)
         in
           (decs @ decs', J.IndexExp (x', y'))
         end
-    | goExp (ctx, bound, depth, J.CondExp (x, y, z)) =
+    | goExp (ctx, bound, renameMap, depth, J.CondExp (x, y, z)) =
         let
-          val (decs, x') = goExp (ctx, bound, depth, x)
-          val (decs', y') = goExp (ctx, bound, depth, y)
-          val (decs'', z') = goExp (ctx, bound, depth, z)
+          val (decs, x') = goExp (ctx, bound, renameMap, depth, x)
+          val (decs', y') = goExp (ctx, bound, renameMap, depth, y)
+          val (decs'', z') = goExp (ctx, bound, renameMap, depth, z)
         in
           (decs @ decs' @ decs'', J.CondExp (x', y', z'))
         end
-  and goExpVector (ctx, bound, depth, xs) =
+  and goExpVector (ctx, bound, renameMap, depth, xs) =
     let
       val (decs, ys) =
         Vector.foldr
           (fn (exp, (decs, ys)) =>
-             let val (decs', exp') = goExp (ctx, bound, depth, exp)
+             let val (decs', exp') = goExp (ctx, bound, renameMap, depth, exp)
              in (decs' @ decs, exp' :: ys)
              end) ([], []) xs
     in
       (decs, Vector.fromList ys)
     end
-  and goStat (ctx, bound, depth, J.LetStat vars) =
+  and goStat (ctx, bound, renameMap, depth, J.LetStat vars) =
         let
           val (decs, vars) =
             Vector.foldr
               (fn ((vid, NONE), (decs, vars)) => (decs, (vid, NONE) :: vars)
                 | ((vid, SOME exp), (decs, vars)) =>
-                 let val (decs', exp) = goExp (ctx, bound, depth, exp)
-                 in (decs' @ decs, (vid, SOME exp) :: vars)
+                 let
+                   val (decs', exp) = goExp (ctx, bound, renameMap, depth, exp)
+                 in
+                   (decs' @ decs, (vid, SOME exp) :: vars)
                  end) ([], []) vars
         in
           (decs, J.LetStat (Vector.fromList vars))
         end
-    | goStat (ctx, bound, depth, J.ConstStat vars) =
+    | goStat (ctx, bound, renameMap, depth, J.ConstStat vars) =
         let
           val (decs, vars) =
             Vector.foldr
               (fn ((vid, exp), (decs, vars)) =>
-                 let val (decs', exp) = goExp (ctx, bound, depth, exp)
-                 in (decs' @ decs, (vid, exp) :: vars)
+                 let
+                   val (decs', exp) = goExp (ctx, bound, renameMap, depth, exp)
+                 in
+                   (decs' @ decs, (vid, exp) :: vars)
                  end) ([], []) vars
         in
           (decs, J.ConstStat (Vector.fromList vars))
         end
-    | goStat (ctx, bound, depth, J.ExpStat exp) =
-        let val (decs, exp) = goExp (ctx, bound, depth, exp)
+    | goStat (ctx, bound, renameMap, depth, J.ExpStat exp) =
+        let val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
         in (decs, J.ExpStat exp)
         end
-    | goStat (ctx, bound, depth, J.IfStat (exp, then', else')) =
+    | goStat (ctx, bound, renameMap, depth, J.IfStat (exp, then', else')) =
         let
-          val (decs, exp) = goExp (ctx, bound, depth, exp)
-          val (decs', then') = goBlock (ctx, bound, depth, then')
-          val (decs'', else') = goBlock (ctx, bound, depth, else')
+          val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
+          val (decs', then') = goBlock (ctx, bound, renameMap, depth, then')
+          val (decs'', else') = goBlock (ctx, bound, renameMap, depth, else')
         in
           (decs @ decs' @ decs'', J.IfStat (exp, then', else'))
         end
-    | goStat (_, _, _, s as J.ReturnStat NONE) = ([], s)
-    | goStat (ctx, bound, depth, J.ReturnStat (SOME exp)) =
-        let val (decs, exp) = goExp (ctx, bound, depth, exp)
+    | goStat (_, _, _, _, s as J.ReturnStat NONE) = ([], s)
+    | goStat (ctx, bound, renameMap, depth, J.ReturnStat (SOME exp)) =
+        let val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
         in (decs, J.ReturnStat (SOME exp))
         end
-    | goStat (ctx, bound, depth, J.TryCatchStat (try, vid, catch)) =
+    | goStat (ctx, bound, renameMap, depth, J.TryCatchStat (try, vid, catch)) =
         let
-          val (decs, try) = goBlock (ctx, bound, depth, try)
+          val (decs, try) = goBlock (ctx, bound, renameMap, depth, try)
           val (decs', catch) = goBlock
-            (ctx, J.IdSet.add (bound, J.UserDefinedId vid), depth, catch)
+            ( ctx
+            , J.IdSet.add (bound, J.UserDefinedId vid)
+            , renameMap
+            , depth
+            , catch
+            )
         in
           (decs @ decs', J.TryCatchStat (try, vid, catch))
         end
-    | goStat (ctx, bound, depth, J.ThrowStat exp) =
-        let val (decs, exp) = goExp (ctx, bound, depth, exp)
+    | goStat (ctx, bound, renameMap, depth, J.ThrowStat exp) =
+        let val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
         in (decs, J.ThrowStat exp)
         end
-    | goStat (ctx, bound, depth, J.BlockStat (optLabel, block)) =
-        let val (decs, block) = goBlock (ctx, bound, depth, block)
+    | goStat (ctx, bound, renameMap, depth, J.BlockStat (optLabel, block)) =
+        let val (decs, block) = goBlock (ctx, bound, renameMap, depth, block)
         in (decs, J.BlockStat (optLabel, block))
         end
-    | goStat (ctx, bound, depth, J.LoopStat (optLabel, block)) =
-        let val (decs, block) = goBlock (ctx, bound, depth, block)
+    | goStat (ctx, bound, renameMap, depth, J.LoopStat (optLabel, block)) =
+        let val (decs, block) = goBlock (ctx, bound, renameMap, depth, block)
         in (decs, J.LoopStat (optLabel, block))
         end
-    | goStat (ctx, bound, depth, J.SwitchStat (exp, cases)) =
+    | goStat (ctx, bound, renameMap, depth, J.SwitchStat (exp, cases)) =
         let
-          val (decs, exp) = goExp (ctx, bound, depth, exp)
+          val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
           val (decs', cases) =
             List.foldr
               (fn ((c, block), (decs, cases)) =>
-                 let val (decs', block) = goBlock (ctx, bound, depth, block)
-                 in (decs' @ decs, (c, block) :: cases)
+                 let
+                   val (decs', block) = goBlock
+                     (ctx, bound, renameMap, depth, block)
+                 in
+                   (decs' @ decs, (c, block) :: cases)
                  end) ([], []) cases
         in
           (decs @ decs', J.SwitchStat (exp, cases))
         end
-    | goStat (_, _, _, s as J.BreakStat _) = ([], s)
-    | goStat (_, _, _, s as J.ContinueStat _) = ([], s)
-    | goStat (ctx, bound, depth, J.DefaultExportStat exp) =
-        let val (decs, exp) = goExp (ctx, bound, depth, exp)
+    | goStat (_, _, _, _, s as J.BreakStat _) = ([], s)
+    | goStat (_, _, _, _, s as J.ContinueStat _) = ([], s)
+    | goStat (ctx, bound, renameMap, depth, J.DefaultExportStat exp) =
+        let val (decs, exp) = goExp (ctx, bound, renameMap, depth, exp)
         in (decs, J.DefaultExportStat exp)
         end
-    | goStat (_, _, _, s as J.NamedExportStat _) = ([], s)
-  and goBlock (ctx, bound, depth, stats) =
+    | goStat (_, _, _, _, s as J.NamedExportStat _) = ([], s)
+  and goBlock (ctx, bound, renameMap, depth, stats) =
     let
       val bound' = collectLetConstBlock stats bound
       val (decs, ys) =
         Vector.foldr
           (fn (stat, (decs, ys)) =>
-             let val (decs', stat') = goStat (ctx, bound', depth, stat)
-             in (decs' @ decs, stat' :: ys)
+             let
+               val (decs', stat') = goStat (ctx, bound', renameMap, depth, stat)
+             in
+               (decs' @ decs, stat' :: ys)
              end) ([], []) stats
     in
       (decs, Vector.fromList ys)
     end
 
   fun doProgram ctx block =
-    let val (decs, block') = goBlock (ctx, J.IdSet.empty, 0, block)
-    in Vector.fromList (decs @ Vector.foldr (op::) [] block')
+    let
+      val (decs, block') = goBlock
+        (ctx, J.IdSet.empty, TypedSyntax.VIdMap.empty, 0, block)
+    in
+      Vector.fromList (decs @ Vector.foldr (op::) [] block')
     end
 
 end;
