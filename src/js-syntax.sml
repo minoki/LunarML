@@ -1178,8 +1178,15 @@ struct
                  (Vector.map
                     (fn (v, name) =>
                        fn rest =>
-                         Fragment (idToJs (nameMap, v)) :: Fragment " as "
-                         :: Fragment name :: rest) entities)
+                         let
+                           val jsId = idToJs (nameMap, v)
+                         in
+                           if name = jsId then
+                             Fragment name :: rest
+                           else
+                             Fragment jsId :: Fragment " as " :: Fragment name
+                             :: rest
+                         end) entities)
                  (Fragment "};" :: LineTerminator :: rest))
       and doBlock stats =
         (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
@@ -1214,9 +1221,16 @@ struct
                 (List.map
                    (fn (name, vid) =>
                       fn rest =>
-                        (if isIdentifierName name then Fragment name
-                         else Fragment (toStringLit name)) :: Fragment " as "
-                        :: Fragment (idToJs (nameMap, vid)) :: rest) named)
+                        let
+                          val jsId = idToJs (nameMap, vid)
+                        in
+                          if name = jsId then
+                            Fragment name :: rest
+                          else
+                            (if isIdentifierName name then Fragment name
+                             else Fragment (toStringLit name))
+                            :: Fragment " as " :: Fragment jsId :: rest
+                        end) named)
                 (Fragment "} from " :: Fragment (toStringLit moduleName)
                  :: Fragment ";" :: LineTerminator :: rest)
           | ((_, defaultId) :: _, _ :: _) =>
