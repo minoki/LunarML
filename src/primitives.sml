@@ -10,6 +10,7 @@ datatype PrimOp = EQUAL (* = *)
                 | List_null (* List.null *)
                 | List_unsafeHead (* List.unsafeHead *)
                 | List_unsafeTail (* List.unsafeTail *)
+                | General_exnName (* General.exnName *)
                 | Ref_ref (* Ref.ref *)
                 | Ref_EQUAL (* Ref.= *)
                 | Ref_set (* Ref.:= *)
@@ -64,6 +65,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Real_TIMES (* Real.* *)
                 | Real_DIVIDE (* Real./ *)
                 | Real_TILDE (* Real.~ *)
+                | Real_abs (* Real.abs *)
                 | Real_LT (* Real.< *)
                 | Real_LE (* Real.<= *)
                 | Real_GT (* Real.> *)
@@ -90,6 +92,8 @@ datatype PrimOp = EQUAL (* = *)
                 | String_HAT (* String.^ *)
                 | String_size of int_width (* String.size{.i} *)
                 | String_str (* String.str *)
+                | String_concat (* String.concat *)
+                | String_implode (* String.implode *)
                 | String16_EQUAL (* String16.= *)
                 | String16_LT (* String16.< *)
                 | String16_LE (* String16.<= *)
@@ -104,10 +108,12 @@ datatype PrimOp = EQUAL (* = *)
                 | IntInf_notb (* IntInf.notb *)
                 | Vector_length of int_width (* Vector.length{.i} *)
                 | Vector_fromList (* Vector.fromList *)
+                | Vector_concat (* Vector.concat *)
                 | Vector_unsafeFromListRevN of int_width (* Vector.unsafeFromListRevN{.i} *)
                 | Array_EQUAL (* Array.= *)
                 | Array_length of int_width (* Array.length{.i} *)
                 | Array_fromList (* Array.fromList *)
+                | Array_array of int_width (* Array.array{.i} *)
                 | Unsafe_cast (* Unsafe.cast *)
                 | Unsafe_Vector_sub of int_width (* Unsafe.Vector.sub{.i} *)
                 | Unsafe_Array_sub of int_width (* Unsafe.Array.sub{.i} *)
@@ -185,6 +191,9 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_call (* JavaScript.call *)
                 | JavaScript_method (* JavaScript.method *)
                 | JavaScript_new (* JavaScript.new *)
+                | JavaScript_function (* JavaScript.function *)
+                | JavaScript_encodeUtf8 (* JavaScript.encodeUtf8 *)
+                | JavaScript_decodeUtf8 (* JavaScript.decodeUtf8 *)
 fun toString EQUAL = "="
   | toString call2 = "call2"
   | toString call3 = "call3"
@@ -192,6 +201,7 @@ fun toString EQUAL = "="
   | toString List_null = "List.null"
   | toString List_unsafeHead = "List.unsafeHead"
   | toString List_unsafeTail = "List.unsafeTail"
+  | toString General_exnName = "General.exnName"
   | toString Ref_ref = "Ref.ref"
   | toString Ref_EQUAL = "Ref.="
   | toString Ref_set = "Ref.:="
@@ -412,6 +422,7 @@ fun toString EQUAL = "="
   | toString Real_TIMES = "Real.*"
   | toString Real_DIVIDE = "Real./"
   | toString Real_TILDE = "Real.~"
+  | toString Real_abs = "Real.abs"
   | toString Real_LT = "Real.<"
   | toString Real_LE = "Real.<="
   | toString Real_GT = "Real.>"
@@ -458,6 +469,8 @@ fun toString EQUAL = "="
   | toString (String_size I64) = "String.size.i64"
   | toString (String_size INT_INF) = "String.size.intInf"
   | toString String_str = "String.str"
+  | toString String_concat = "String.concat"
+  | toString String_implode = "String.implode"
   | toString String16_EQUAL = "String16.="
   | toString String16_LT = "String16.<"
   | toString String16_LE = "String16.<="
@@ -480,6 +493,7 @@ fun toString EQUAL = "="
   | toString (Vector_length I64) = "Vector.length.i64"
   | toString (Vector_length INT_INF) = "Vector.length.intInf"
   | toString Vector_fromList = "Vector.fromList"
+  | toString Vector_concat = "Vector.concat"
   | toString (Vector_unsafeFromListRevN INT) = "Vector.unsafeFromListRevN"
   | toString (Vector_unsafeFromListRevN I32) = "Vector.unsafeFromListRevN.i32"
   | toString (Vector_unsafeFromListRevN I54) = "Vector.unsafeFromListRevN.i54"
@@ -492,6 +506,11 @@ fun toString EQUAL = "="
   | toString (Array_length I64) = "Array.length.i64"
   | toString (Array_length INT_INF) = "Array.length.intInf"
   | toString Array_fromList = "Array.fromList"
+  | toString (Array_array INT) = "Array.array"
+  | toString (Array_array I32) = "Array.array.i32"
+  | toString (Array_array I54) = "Array.array.i54"
+  | toString (Array_array I64) = "Array.array.i64"
+  | toString (Array_array INT_INF) = "Array.array.intInf"
   | toString Unsafe_cast = "Unsafe.cast"
   | toString (Unsafe_Vector_sub INT) = "Unsafe.Vector.sub"
   | toString (Unsafe_Vector_sub I32) = "Unsafe.Vector.sub.i32"
@@ -581,6 +600,9 @@ fun toString EQUAL = "="
   | toString JavaScript_call = "JavaScript.call"
   | toString JavaScript_method = "JavaScript.method"
   | toString JavaScript_new = "JavaScript.new"
+  | toString JavaScript_function = "JavaScript.function"
+  | toString JavaScript_encodeUtf8 = "JavaScript.encodeUtf8"
+  | toString JavaScript_decodeUtf8 = "JavaScript.decodeUtf8"
 fun fromString "=" = SOME EQUAL
   | fromString "call2" = SOME call2
   | fromString "call3" = SOME call3
@@ -588,6 +610,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "List.null" = SOME List_null
   | fromString "List.unsafeHead" = SOME List_unsafeHead
   | fromString "List.unsafeTail" = SOME List_unsafeTail
+  | fromString "General.exnName" = SOME General_exnName
   | fromString "Ref.ref" = SOME Ref_ref
   | fromString "Ref.=" = SOME Ref_EQUAL
   | fromString "Ref.:=" = SOME Ref_set
@@ -808,6 +831,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Real.*" = SOME Real_TIMES
   | fromString "Real./" = SOME Real_DIVIDE
   | fromString "Real.~" = SOME Real_TILDE
+  | fromString "Real.abs" = SOME Real_abs
   | fromString "Real.<" = SOME Real_LT
   | fromString "Real.<=" = SOME Real_LE
   | fromString "Real.>" = SOME Real_GT
@@ -854,6 +878,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "String.size.i64" = SOME (String_size I64)
   | fromString "String.size.intInf" = SOME (String_size INT_INF)
   | fromString "String.str" = SOME String_str
+  | fromString "String.concat" = SOME String_concat
+  | fromString "String.implode" = SOME String_implode
   | fromString "String16.=" = SOME String16_EQUAL
   | fromString "String16.<" = SOME String16_LT
   | fromString "String16.<=" = SOME String16_LE
@@ -876,6 +902,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Vector.length.i64" = SOME (Vector_length I64)
   | fromString "Vector.length.intInf" = SOME (Vector_length INT_INF)
   | fromString "Vector.fromList" = SOME Vector_fromList
+  | fromString "Vector.concat" = SOME Vector_concat
   | fromString "Vector.unsafeFromListRevN" = SOME (Vector_unsafeFromListRevN INT)
   | fromString "Vector.unsafeFromListRevN.i32" = SOME (Vector_unsafeFromListRevN I32)
   | fromString "Vector.unsafeFromListRevN.i54" = SOME (Vector_unsafeFromListRevN I54)
@@ -888,6 +915,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "Array.length.i64" = SOME (Array_length I64)
   | fromString "Array.length.intInf" = SOME (Array_length INT_INF)
   | fromString "Array.fromList" = SOME Array_fromList
+  | fromString "Array.array" = SOME (Array_array INT)
+  | fromString "Array.array.i32" = SOME (Array_array I32)
+  | fromString "Array.array.i54" = SOME (Array_array I54)
+  | fromString "Array.array.i64" = SOME (Array_array I64)
+  | fromString "Array.array.intInf" = SOME (Array_array INT_INF)
   | fromString "Unsafe.cast" = SOME Unsafe_cast
   | fromString "Unsafe.Vector.sub" = SOME (Unsafe_Vector_sub INT)
   | fromString "Unsafe.Vector.sub.i32" = SOME (Unsafe_Vector_sub I32)
@@ -977,6 +1009,9 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.call" = SOME JavaScript_call
   | fromString "JavaScript.method" = SOME JavaScript_method
   | fromString "JavaScript.new" = SOME JavaScript_new
+  | fromString "JavaScript.function" = SOME JavaScript_function
+  | fromString "JavaScript.encodeUtf8" = SOME JavaScript_encodeUtf8
+  | fromString "JavaScript.decodeUtf8" = SOME JavaScript_decodeUtf8
   | fromString _ = NONE
 fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Int_MINUS INT_INF) = false
@@ -990,6 +1025,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise List_null = false
   | mayRaise List_unsafeHead = false
   | mayRaise List_unsafeTail = false
+  | mayRaise General_exnName = false
   | mayRaise Ref_ref = false
   | mayRaise Ref_EQUAL = false
   | mayRaise Ref_set = false
@@ -1044,6 +1080,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Real_TIMES = false
   | mayRaise Real_DIVIDE = false
   | mayRaise Real_TILDE = false
+  | mayRaise Real_abs = false
   | mayRaise Real_LT = false
   | mayRaise Real_LE = false
   | mayRaise Real_GT = false
@@ -1070,6 +1107,8 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String_HAT = true
   | mayRaise (String_size _) = false
   | mayRaise String_str = false
+  | mayRaise String_concat = false
+  | mayRaise String_implode = false
   | mayRaise String16_EQUAL = false
   | mayRaise String16_LT = false
   | mayRaise String16_LE = false
@@ -1084,10 +1123,12 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise IntInf_notb = false
   | mayRaise (Vector_length _) = false
   | mayRaise Vector_fromList = false
+  | mayRaise Vector_concat = false
   | mayRaise (Vector_unsafeFromListRevN _) = false
   | mayRaise Array_EQUAL = false
   | mayRaise (Array_length _) = false
   | mayRaise Array_fromList = false
+  | mayRaise (Array_array _) = true
   | mayRaise Unsafe_cast = false
   | mayRaise (Unsafe_Vector_sub _) = false
   | mayRaise (Unsafe_Array_sub _) = false
@@ -1165,6 +1206,9 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise JavaScript_call = true
   | mayRaise JavaScript_method = true
   | mayRaise JavaScript_new = true
+  | mayRaise JavaScript_function = false
+  | mayRaise JavaScript_encodeUtf8 = true
+  | mayRaise JavaScript_decodeUtf8 = true
 fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Int_MINUS INT_INF) = true
   | isDiscardable (Int_TIMES INT_INF) = true
@@ -1177,6 +1221,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable List_null = true
   | isDiscardable List_unsafeHead = true
   | isDiscardable List_unsafeTail = true
+  | isDiscardable General_exnName = true
   | isDiscardable Ref_ref = true
   | isDiscardable Ref_EQUAL = true
   | isDiscardable Ref_set = false
@@ -1231,6 +1276,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Real_TIMES = true
   | isDiscardable Real_DIVIDE = true
   | isDiscardable Real_TILDE = true
+  | isDiscardable Real_abs = true
   | isDiscardable Real_LT = true
   | isDiscardable Real_LE = true
   | isDiscardable Real_GT = true
@@ -1257,6 +1303,8 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String_HAT = false
   | isDiscardable (String_size _) = true
   | isDiscardable String_str = true
+  | isDiscardable String_concat = true
+  | isDiscardable String_implode = true
   | isDiscardable String16_EQUAL = true
   | isDiscardable String16_LT = true
   | isDiscardable String16_LE = true
@@ -1271,10 +1319,12 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable IntInf_notb = true
   | isDiscardable (Vector_length _) = true
   | isDiscardable Vector_fromList = true
+  | isDiscardable Vector_concat = true
   | isDiscardable (Vector_unsafeFromListRevN _) = true
   | isDiscardable Array_EQUAL = true
   | isDiscardable (Array_length _) = true
   | isDiscardable Array_fromList = true
+  | isDiscardable (Array_array _) = false
   | isDiscardable Unsafe_cast = true
   | isDiscardable (Unsafe_Vector_sub _) = true
   | isDiscardable (Unsafe_Array_sub _) = true
@@ -1352,6 +1402,9 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_call = false
   | isDiscardable JavaScript_method = false
   | isDiscardable JavaScript_new = false
+  | isDiscardable JavaScript_function = true
+  | isDiscardable JavaScript_encodeUtf8 = true
+  | isDiscardable JavaScript_decodeUtf8 = true
 fun fixIntWord { int, word }
   = let fun fixInt INT = int
           | fixInt i = i
@@ -1409,6 +1462,7 @@ fun fixIntWord { int, word }
         | Vector_length a1 => Vector_length (fixInt a1)
         | Vector_unsafeFromListRevN a1 => Vector_unsafeFromListRevN (fixInt a1)
         | Array_length a1 => Array_length (fixInt a1)
+        | Array_array a1 => Array_array (fixInt a1)
         | Unsafe_Vector_sub a1 => Unsafe_Vector_sub (fixInt a1)
         | Unsafe_Array_sub a1 => Unsafe_Array_sub (fixInt a1)
         | Unsafe_Array_update a1 => Unsafe_Array_update (fixInt a1)
@@ -1421,6 +1475,7 @@ fun returnArity EQUAL = 1
   | returnArity List_null = 1
   | returnArity List_unsafeHead = 1
   | returnArity List_unsafeTail = 1
+  | returnArity General_exnName = 1
   | returnArity Ref_ref = 1
   | returnArity Ref_EQUAL = 1
   | returnArity Ref_set = 0
@@ -1475,6 +1530,7 @@ fun returnArity EQUAL = 1
   | returnArity Real_TIMES = 1
   | returnArity Real_DIVIDE = 1
   | returnArity Real_TILDE = 1
+  | returnArity Real_abs = 1
   | returnArity Real_LT = 1
   | returnArity Real_LE = 1
   | returnArity Real_GT = 1
@@ -1501,6 +1557,8 @@ fun returnArity EQUAL = 1
   | returnArity String_HAT = 1
   | returnArity (String_size _) = 1
   | returnArity String_str = 1
+  | returnArity String_concat = 1
+  | returnArity String_implode = 1
   | returnArity String16_EQUAL = 1
   | returnArity String16_LT = 1
   | returnArity String16_LE = 1
@@ -1515,10 +1573,12 @@ fun returnArity EQUAL = 1
   | returnArity IntInf_notb = 1
   | returnArity (Vector_length _) = 1
   | returnArity Vector_fromList = 1
+  | returnArity Vector_concat = 1
   | returnArity (Vector_unsafeFromListRevN _) = 1
   | returnArity Array_EQUAL = 1
   | returnArity (Array_length _) = 1
   | returnArity Array_fromList = 1
+  | returnArity (Array_array _) = 1
   | returnArity Unsafe_cast = 1
   | returnArity (Unsafe_Vector_sub _) = 1
   | returnArity (Unsafe_Array_sub _) = 1
@@ -1596,6 +1656,9 @@ fun returnArity EQUAL = 1
   | returnArity JavaScript_call = 1
   | returnArity JavaScript_method = 1
   | returnArity JavaScript_new = 1
+  | returnArity JavaScript_function = 1
+  | returnArity JavaScript_encodeUtf8 = 1
+  | returnArity JavaScript_decodeUtf8 = 1
 end;
 
 functor TypeOfPrimitives (type ty
@@ -1653,6 +1716,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.List_null = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [bool] }
   | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [tyA] }
   | typeOf Primitives.List_unsafeTail = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [listOf (tyA)] }
+  | typeOf Primitives.General_exnName = { vars = [], args = vector [exn], results = [string] }
   | typeOf Primitives.Ref_ref = { vars = [(tyVarA, Unconstrained)], args = vector [tyA], results = [refOf (tyA)] }
   | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), refOf (tyA)], results = [bool] }
   | typeOf Primitives.Ref_set = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), tyA], results = [] }
@@ -1873,6 +1937,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_DIVIDE = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_TILDE = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_abs = { vars = [], args = vector [real], results = [real] }
   | typeOf Primitives.Real_LT = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_LE = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_GT = { vars = [], args = vector [real, real], results = [bool] }
@@ -1919,6 +1984,8 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.String_size Primitives.I64) = { vars = [], args = vector [string], results = [int64] }
   | typeOf (Primitives.String_size Primitives.INT_INF) = { vars = [], args = vector [string], results = [intInf] }
   | typeOf Primitives.String_str = { vars = [], args = vector [char], results = [string] }
+  | typeOf Primitives.String_concat = { vars = [], args = vector [listOf (string)], results = [string] }
+  | typeOf Primitives.String_implode = { vars = [], args = vector [listOf (char)], results = [string] }
   | typeOf Primitives.String16_EQUAL = { vars = [], args = vector [string16, string16], results = [bool] }
   | typeOf Primitives.String16_LT = { vars = [], args = vector [string16, string16], results = [bool] }
   | typeOf Primitives.String16_LE = { vars = [], args = vector [string16, string16], results = [bool] }
@@ -1941,6 +2008,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Vector_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [int64] }
   | typeOf (Primitives.Vector_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [intInf] }
   | typeOf Primitives.Vector_fromList = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf Primitives.Vector_concat = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (vectorOf (tyA))], results = [vectorOf (tyA)] }
   | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int, listOf (tyA)], results = [vectorOf (tyA)] }
   | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32, listOf (tyA)], results = [vectorOf (tyA)] }
   | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, listOf (tyA)], results = [vectorOf (tyA)] }
@@ -1953,6 +2021,11 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Array_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [int64] }
   | typeOf (Primitives.Array_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [intInf] }
   | typeOf Primitives.Array_fromList = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_array Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int, tyA], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_array Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32, tyA], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_array Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, tyA], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_array Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64, tyA], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_array Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf, tyA], results = [arrayOf (tyA)] }
   | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [tyA], results = [tyB] }
   | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int], results = [tyA] }
   | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int32], results = [tyA] }
@@ -2042,4 +2115,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_function = { vars = [], args = vector [function1Of (JavaScriptValue, vectorOf (JavaScriptValue))], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_encodeUtf8 = { vars = [], args = vector [string16], results = [string] }
+  | typeOf Primitives.JavaScript_decodeUtf8 = { vars = [], args = vector [string], results = [string16] }
 end;

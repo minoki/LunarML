@@ -7,8 +7,8 @@ fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
                                            JavaScript.unsafeFromValue (JavaScript.sub (JavaScript.unsafeToValue s, JavaScript.fromInt i)) : char
-val concat : string list -> string = _Prim.String.concat
-val implode : char list -> string = _Prim.String.implode
+fun concat xs = _primCall "String.concat" (xs)
+fun implode xs = _primCall "String.implode" (xs)
 fun translate (f : char -> string) (s : string) : string
     = let val n = size s
           fun go i = if i >= n then

@@ -9,6 +9,7 @@ ann "nonexhaustiveRaise ignore"
     "allowInfixingDot true"
     "allowPrim true"
     "allowOverload true" in
+lua/general-prim.sml
 general.sml
 option.sml (* depends on unit (general.sml) *)
 lunarml.sml

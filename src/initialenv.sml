@@ -41,7 +41,6 @@ sig
   val VId_Vector_tabulate: TypedSyntax.VId
   val VId_Vector_concat: TypedSyntax.VId
   val VId_Vector_fromList: TypedSyntax.VId
-  val VId_Array_array: TypedSyntax.VId
   val VId_Array_fromList: TypedSyntax.VId
   val VId_Array_tabulate: TypedSyntax.VId
   val VId_Lua_NIL: TypedSyntax.VId
@@ -171,7 +170,7 @@ struct
   val VId_Size_tag = newVId "Size"
   val VId_Subscript_tag = newVId "Subscript"
   val VId_Fail_tag = newVId "Fail"
-  val VId_exnName = newVId "exnName"
+  val VId_exnName = newVId "_Prim.General.exnName"
 
   (* Overloaded *)
   val VId_abs = newVId "abs"
@@ -200,7 +199,6 @@ struct
   val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
 
   (* Array *)
-  val VId_Array_array = newVId "_Prim.Array.array"
   val VId_Array_fromList = newVId "_Prim.Array.fromList"
   val VId_Array_tabulate = newVId "_Prim.Array.tabulate"
 
@@ -404,7 +402,7 @@ struct
                    , Syntax.MkVId name
                    , (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)
                    )) Syntax.VIdMap.empty
-              [ ( "exnName"
+              [ ( "_Prim.General.exnName"
                 , VId_exnName
                 , TypeScheme ([], primTy_exn --> primTy_string)
                 )
@@ -463,13 +461,6 @@ struct
                 , VId_Vector_concat
                 , TypeScheme
                     ([(tyVarA, NONE)], listOf (vectorOf tyA) --> vectorOf tyA)
-                )
-              , ( "_Prim.Array.array"
-                , VId_Array_array
-                , TypeScheme
-                    ( [(tyVarA, NONE)]
-                    , mkPairType (primTy_int, tyA) --> arrayOf tyA
-                    )
                 )
               , ( "_Prim.Array.fromList"
                 , VId_Array_fromList

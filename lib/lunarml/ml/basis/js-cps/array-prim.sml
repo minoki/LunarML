@@ -9,7 +9,7 @@ fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                                  raise Subscript
                              else
                                  Unsafe.Array.update (arr, i, value)
-val array = _Prim.Array.array
+fun array (n, init) = _primCall "Array.array" (n, init)
 fun fromList xs = _primCall "Array.fromList" (xs)
 end;
 (* equality is defined in equal.sml *)

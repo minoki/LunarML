@@ -960,11 +960,107 @@ struct
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
             }
       | C.Unreachable => e
-    val Vector_fromList =
+    val General_exnName =
       let
         val k = C.CVar.fromInt ~1
-        val xs = TypedSyntax.MkVId ("xs", ~1000)
-        val result = TypedSyntax.MkVId ("v", ~1001)
+        val e = TypedSyntax.MkVId ("e", ~1000)
+        val result = TypedSyntax.MkVId ("a", ~1001)
+      in
+        C.Abs
+          { contParam = k
+          , params = [e]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.General_exnName
+                         , tyargs = []
+                         , args = [C.Var e]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val Real_abs =
+      let
+        val k = C.CVar.fromInt ~2
+        val x = TypedSyntax.MkVId ("x", ~1002)
+        val result = TypedSyntax.MkVId ("a", ~1003)
+      in
+        C.Abs
+          { contParam = k
+          , params = [x]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Real_abs
+                         , tyargs = []
+                         , args = [C.Var x]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val String_concat =
+      let
+        val k = C.CVar.fromInt ~3
+        val xs = TypedSyntax.MkVId ("xs", ~1004)
+        val result = TypedSyntax.MkVId ("a", ~1005)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.String_concat
+                         , tyargs = []
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val String_implode =
+      let
+        val k = C.CVar.fromInt ~4
+        val xs = TypedSyntax.MkVId ("xs", ~1006)
+        val result = TypedSyntax.MkVId ("a", ~1007)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.String_implode
+                         , tyargs = []
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val Vector_fromList =
+      let
+        val k = C.CVar.fromInt ~5
+        val xs = TypedSyntax.MkVId ("xs", ~1008)
+        val result = TypedSyntax.MkVId ("v", ~1009)
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -985,11 +1081,36 @@ struct
           , attr = {alwaysInline = true}
           }
       end
+    val Vector_concat =
+      let
+        val k = C.CVar.fromInt ~6
+        val xs = TypedSyntax.MkVId ("xs", ~1010)
+        val result = TypedSyntax.MkVId ("v", ~1011)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Vector_concat
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
     val Array_fromList =
       let
-        val k = C.CVar.fromInt ~2
-        val xs = TypedSyntax.MkVId ("xs", ~1002)
-        val result = TypedSyntax.MkVId ("a", ~1003)
+        val k = C.CVar.fromInt ~7
+        val xs = TypedSyntax.MkVId ("xs", ~1012)
+        val result = TypedSyntax.MkVId ("a", ~1013)
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1010,10 +1131,100 @@ struct
           , attr = {alwaysInline = true}
           }
       end
+    val JavaScript_function =
+      let
+        val k = C.CVar.fromInt ~8
+        val xs = TypedSyntax.MkVId ("xs", ~1014)
+        val result = TypedSyntax.MkVId ("a", ~1015)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall
+                             Primitives.JavaScript_function
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val JavaScript_encodeUtf8 =
+      let
+        val k = C.CVar.fromInt ~9
+        val xs = TypedSyntax.MkVId ("xs", ~1016)
+        val result = TypedSyntax.MkVId ("a", ~1017)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall
+                             Primitives.JavaScript_encodeUtf8
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val JavaScript_decodeUtf8 =
+      let
+        val k = C.CVar.fromInt ~10
+        val xs = TypedSyntax.MkVId ("xs", ~1018)
+        val result = TypedSyntax.MkVId ("a", ~1019)
+        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+      in
+        C.Abs
+          { contParam = k
+          , params = [xs]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall
+                             Primitives.JavaScript_decodeUtf8
+                         , tyargs = [ty]
+                         , args = [C.Var xs]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
     val initialEnv: value_info TypedSyntax.VIdMap.map =
       List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
-        [ (InitialEnv.VId_Vector_fromList, {exp = SOME Vector_fromList})
+        [ (InitialEnv.VId_exnName, {exp = SOME General_exnName})
+        , (InitialEnv.VId_Real_abs, {exp = SOME Real_abs})
+        , (InitialEnv.VId_String_concat, {exp = SOME String_concat})
+        , (InitialEnv.VId_String_implode, {exp = SOME String_implode})
+        , (InitialEnv.VId_Vector_fromList, {exp = SOME Vector_fromList})
+        , (InitialEnv.VId_Vector_concat, {exp = SOME Vector_concat})
         , (InitialEnv.VId_Array_fromList, {exp = SOME Array_fromList})
+        , (InitialEnv.VId_JavaScript_function, {exp = SOME JavaScript_function})
+        , ( InitialEnv.VId_JavaScript_encodeUtf8
+          , {exp = SOME JavaScript_encodeUtf8}
+          )
+        , ( InitialEnv.VId_JavaScript_decodeUtf8
+          , {exp = SOME JavaScript_decodeUtf8}
+          )
         ]
     fun goCExp (ctx: CpsSimplify.Context, exp) =
       simplifyCExp

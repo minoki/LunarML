@@ -114,6 +114,13 @@ do
       discardable = true,
     },
     {
+      name = "General.exnName",
+      srcname = "General_exnName",
+      type = { vars = {}, args = {exn}, results = {string} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Ref.ref",
       srcname = "Ref_ref",
       type = { vars = {TV.a}, args = {TV.a}, results = {ref(TV.a)} },
@@ -492,6 +499,13 @@ do
       discardable = true,
     },
     {
+      name = "Real.abs",
+      srcname = "Real_abs",
+      type = HomoUnary(real),
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Real.<",
       srcname = "Real_LT",
       type = Compare(real),
@@ -674,6 +688,20 @@ do
       discardable = true,
     },
     {
+      name = "String.concat",
+      srcname = "String_concat",
+      type = { vars = {}, args = {list(string)}, results = {string} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String.implode",
+      srcname = "String_implode",
+      type = { vars = {}, args = {list(char)}, results = {string} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "String16.=",
       srcname = "String16_EQUAL",
       type = Compare(string16),
@@ -772,6 +800,13 @@ do
       discardable = true,
     },
     {
+      name = "Vector.concat",
+      srcname = "Vector_concat",
+      type = { vars = {TV.a}, args = {list(vector(TV.a))}, results = {vector(TV.a)} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Vector.unsafeFromListRevN{.i}",
       srcname = "Vector_unsafeFromListRevN",
       type = { vars = {TV.a}, args = {intA, list(TV.a)}, results = {vector(TV.a)} },
@@ -798,6 +833,13 @@ do
       type = { vars = {TV.a}, args = {list(TV.a)}, results = {array(TV.a)} },
       mayraise = false,
       discardable = true,
+    },
+    {
+      name = "Array.array{.i}",
+      srcname = "Array_array",
+      type = { vars = {TV.a}, args = {intA, TV.a}, results = {array(TV.a)} },
+      mayraise = true,
+      discardable = false,
     },
     {
       name = "Unsafe.cast",
@@ -1345,6 +1387,27 @@ do
       type = { vars = {}, args = {JSValue, vector(JSValue)}, results = {JSValue} },
       mayraise = true,
       discardable = false,
+    },
+    {
+      name = "JavaScript.function",
+      srcname = "JavaScript_function",
+      type = { vars = {}, args = {function1(JSValue, vector(JSValue))}, results = {JSValue} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "JavaScript.encodeUtf8",
+      srcname = "JavaScript_encodeUtf8",
+      type = { vars = {}, args = {string16}, results = {string} },
+      mayraise = true,
+      discardable = true,
+    },
+    {
+      name = "JavaScript.decodeUtf8",
+      srcname = "JavaScript_decodeUtf8",
+      type = { vars = {}, args = {string}, results = {string16} },
+      mayraise = true,
+      discardable = true,
     },
   }
 end

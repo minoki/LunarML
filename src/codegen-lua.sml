@@ -59,7 +59,6 @@ struct
         , (VId_Vector_tabulate, "_VectorOrArray_tabulate")
         , (VId_Vector_concat, "_Vector_concat")
         , (VId_Vector_fromList, "_VectorOrArray_fromList")
-        , (VId_Array_array, "_Array_array")
         , (VId_Array_fromList, "_VectorOrArray_fromList")
         , (VId_Array_tabulate, "_VectorOrArray_tabulate")
         (* Delimited continuations *)
@@ -124,7 +123,6 @@ struct
         , (VId_Vector_tabulate, "_VectorOrArray_tabulate")
         , (VId_Vector_concat, "_Vector_concat")
         , (VId_Vector_fromList, "_VectorOrArray_fromList")
-        , (VId_Array_array, "_Array_array")
         , (VId_Array_fromList, "_VectorOrArray_fromList")
         , (VId_Array_tabulate, "_VectorOrArray_tabulate")
         (* Lua interface *)
@@ -545,6 +543,13 @@ struct
                | Primitives.List_unsafeTail =>
                    doUnaryExp
                      ( fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "2"))
+                     , PURE
+                     )
+               | Primitives.General_exnName =>
+                   doUnaryExp
+                     ( fn x =>
+                         L.CallExp
+                           (L.VarExp (L.PredefinedId "_exnName"), vector [x])
                      , PURE
                      )
                | Primitives.Ref_ref =>
@@ -1391,6 +1396,13 @@ struct
                                )
                      , PURE
                      )
+               | Primitives.Real_abs =>
+                   doUnaryExp
+                     ( fn x =>
+                         L.CallExp
+                           (L.VarExp (L.PredefinedId "math_abs"), vector [x])
+                     , PURE
+                     )
                | Primitives.Real_LT => doBinaryOp (L.LT, PURE)
                | Primitives.Real_GT => doBinaryOp (L.GT, PURE)
                | Primitives.Real_LE => doBinaryOp (L.LE, PURE)
@@ -1453,6 +1465,15 @@ struct
                            )
                      , PURE
                      )
+               | Primitives.Vector_concat =>
+                   doUnaryExp
+                     ( fn a =>
+                         L.CallExp
+                           ( L.VarExp (L.PredefinedId "_Vector_concat")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
                | Primitives.Vector_unsafeFromListRevN _ =>
                    doBinaryExp
                      ( fn (n, xs) =>
@@ -1477,6 +1498,15 @@ struct
                            , vector [xs]
                            )
                      , PURE
+                     )
+               | Primitives.Array_array _ =>
+                   doBinaryExp
+                     ( fn (n, init) =>
+                         L.CallExp
+                           ( L.VarExp (L.PredefinedId "_Array_array")
+                           , vector [n, init]
+                           )
+                     , IMPURE
                      )
                | Primitives.Unsafe_Vector_sub _ =>
                    doBinaryExp

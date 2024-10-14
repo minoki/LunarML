@@ -93,7 +93,6 @@ struct
         , (VId_Vector_tabulate, "_VectorOrArray_tabulate")
         , (VId_Vector_concat, "_Vector_concat")
         , (VId_Vector_fromList, "_VectorOrArray_fromList")
-        , (VId_Array_array, "_Array_array")
         , (VId_Array_fromList, "_VectorOrArray_fromList")
         , (VId_Array_tabulate, "_VectorOrArray_tabulate")
         (* JS interface *)
@@ -125,22 +124,11 @@ struct
         , (VId_Size_tag, "_Size_tag")
         , (VId_Subscript_tag, "_Subscript_tag")
         , (VId_Fail_tag, "_Fail_tag")
-        , (VId_exnName, "_exnName")
         (* string *)
-        , (VId_String_concat, "_String_concat")
         , (VId_String_concatWith, "_String_concatWith")
-        , (VId_String_implode, "_String_implode")
-        (* real *)
-        , (VId_Real_abs, "_Real_abs")
-        (* Vector and Array *)
-        , (VId_Vector_concat, "_Vector_concat")
-        , (VId_Array_array, "_Array_array")
         (* JS interface *)
         , (VId_JavaScript_undefined, "undefined")
         , (VId_JavaScript_null, "null")
-        , (VId_JavaScript_function, "_function")
-        , (VId_JavaScript_encodeUtf8, "_encodeUtf8")
-        , (VId_JavaScript_decodeUtf8, "_decodeUtf8")
         (* extra *)
         , (VId_DelimCont_pushPrompt, "_pushPrompt")
         , (VId_DelimCont_withSubCont, "_withSubCont")
@@ -633,6 +621,13 @@ struct
                        ( fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1"))
                        , PURE
                        )
+                 | Primitives.General_exnName =>
+                     doUnaryExp
+                       ( fn a =>
+                           J.CallExp
+                             (J.VarExp (J.PredefinedId "_exnName"), vector [a])
+                       , PURE
+                       )
                  | Primitives.Ref_ref =>
                      doUnaryExp
                        ( fn x =>
@@ -1004,6 +999,13 @@ struct
                  | Primitives.Real_DIVIDE => doBinaryOp (J.DIV, PURE)
                  | Primitives.Real_TILDE =>
                      doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), PURE)
+                 | Primitives.Real_abs =>
+                     doUnaryExp
+                       ( fn a =>
+                           J.CallExp
+                             (J.VarExp (J.PredefinedId "Math_abs"), vector [a])
+                       , PURE
+                       )
                  | Primitives.Real_LT => doBinaryOp (J.LT, PURE)
                  | Primitives.Real_GT => doBinaryOp (J.GT, PURE)
                  | Primitives.Real_LE => doBinaryOp (J.LE, PURE)
@@ -1078,6 +1080,24 @@ struct
                              )
                        , PURE
                        )
+                 | Primitives.String_concat =>
+                     doUnaryExp
+                       ( fn a =>
+                           J.CallExp
+                             ( J.VarExp (J.PredefinedId "_String_concat")
+                             , vector [a]
+                             )
+                       , PURE
+                       )
+                 | Primitives.String_implode =>
+                     doUnaryExp
+                       ( fn a =>
+                           J.CallExp
+                             ( J.VarExp (J.PredefinedId "_String_implode")
+                             , vector [a]
+                             )
+                       , PURE
+                       )
                  | Primitives.String16_EQUAL => doBinaryOp (J.EQUAL, PURE)
                  | Primitives.String16_LT => doBinaryOp (J.LT, PURE)
                  | Primitives.String16_GT => doBinaryOp (J.GT, PURE)
@@ -1135,6 +1155,15 @@ struct
                              )
                        , PURE
                        )
+                 | Primitives.Vector_concat =>
+                     doUnaryExp
+                       ( fn a =>
+                           J.CallExp
+                             ( J.VarExp (J.PredefinedId "_Vector_concat")
+                             , vector [a]
+                             )
+                       , IMPURE
+                       )
                  | Primitives.Vector_unsafeFromListRevN Primitives.I54 =>
                      doBinaryExp
                        ( fn (n, xs) =>
@@ -1162,6 +1191,15 @@ struct
                              , vector [xs]
                              )
                        , PURE
+                       )
+                 | Primitives.Array_array Primitives.I54 =>
+                     doBinaryExp
+                       ( fn (n, init) =>
+                           J.CallExp
+                             ( J.VarExp (J.PredefinedId "_Array_array")
+                             , vector [n, init]
+                             )
+                       , IMPURE
                        )
                  | Primitives.Unsafe_cast => doUnaryExp (fn a => a, PURE)
                  | Primitives.Unsafe_Vector_sub Primitives.I54 =>
@@ -1247,6 +1285,31 @@ struct
                              ( J.VarExp (J.PredefinedId "Reflect")
                              , "construct"
                              , vector [ctor, args]
+                             ))
+                       | _ => raise CodeGenError "unexpected number of results")
+                 | Primitives.JavaScript_function =>
+                     doUnary (fn f =>
+                       case results of
+                         [result] =>
+                           pure (result, J.CallExp
+                             (J.VarExp (J.PredefinedId "_function"), vector [f]))
+                       | _ => raise CodeGenError "unexpected number of results")
+                 | Primitives.JavaScript_encodeUtf8 =>
+                     doUnary (fn f =>
+                       case results of
+                         [result] =>
+                           pure (result, J.CallExp
+                             ( J.VarExp (J.PredefinedId "_encodeUtf8")
+                             , vector [f]
+                             ))
+                       | _ => raise CodeGenError "unexpected number of results")
+                 | Primitives.JavaScript_decodeUtf8 =>
+                     doUnary (fn f =>
+                       case results of
+                         [result] =>
+                           pure (result, J.CallExp
+                             ( J.VarExp (J.PredefinedId "_decodeUtf8")
+                             , vector [f]
                              ))
                        | _ => raise CodeGenError "unexpected number of results")
                  | Primitives.DelimCont_newPromptTag =>

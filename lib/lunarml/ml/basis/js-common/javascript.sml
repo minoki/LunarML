@@ -123,15 +123,13 @@ structure JavaScript : sig
                             val WeakSet : value
                         end
           end = struct
+open JavaScript (* function, encodeUtf8, decodeUtf8 *)
 type value = _Prim.JavaScript.value
 val undefined = _Prim.JavaScript.undefined
 val null = _Prim.JavaScript.null
 fun call f args = _primCall "JavaScript.call" (f, args)
 fun new ctor args = _primCall "JavaScript.new" (ctor, args)
 fun method (obj, name) args = _primCall "JavaScript.method" (obj, name, args)
-val function = _Prim.JavaScript.function
-val encodeUtf8 = _Prim.JavaScript.encodeUtf8
-val decodeUtf8 = _Prim.JavaScript.decodeUtf8
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue

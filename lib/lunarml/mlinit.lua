@@ -327,8 +327,7 @@ end
 
 -- Vector/Array
 --BEGIN _Array_array: _raise _Size
-local function _Array_array(t)
-  local n, init = t[1], t[2]
+local function _Array_array(n, init)
   if n < 0 then -- or maxLen < n
     _raise(_Size, "Array.array")
   end

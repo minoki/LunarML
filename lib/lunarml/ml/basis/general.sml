@@ -19,6 +19,7 @@ structure General : sig
               val ignore : 'a -> unit
               val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
           end = struct
+open General (* exnName *)
 type unit = {}
 type exn = exn
 exception Bind = Bind
@@ -31,7 +32,6 @@ exception Overflow = Overflow
 exception Size = Size
 exception Span
 exception Subscript = Subscript
-val exnName = exnName
 (*
 val exnMessage : exn -> string
 *)

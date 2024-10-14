@@ -9,6 +9,7 @@ ann "nonexhaustiveRaise ignore"
     "allowInfixingDot true"
     "allowPrim true"
     "allowOverload true" in
+$(TARGET_LANG)/general-prim.sml
 general.sml
 option.sml (* depends on unit (general.sml) *)
 js-common/int-prim.sml
@@ -20,6 +21,7 @@ bool.sml
 widechar-prim-16.sml
 widestring-prim-16.sml (* depends on WideChar.char *)
 lunarml.sml
+$(TARGET_LANG)/javascript-util.sml
 js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
@@ -27,6 +29,7 @@ math-sig.sml
 string-cvt-sig.sml
 ieee-real-0.sml
 js-common/word-prim.sml
+$(TARGET_LANG)/real-abs.sml
 js-common/real-prim.sml
 char-prim.sml
 string-cvt-0.sml
