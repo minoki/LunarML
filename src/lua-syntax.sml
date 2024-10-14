@@ -459,7 +459,8 @@ struct
       , acc as (unavailableNames, nameMap)
       ) =
       (case TypedSyntax.VIdMap.find (nameMap, vid) of
-         SOME _ => acc
+         SOME _ =>
+           raise Fail ("name already declared: " ^ TypedSyntax.print_VId vid)
        | NONE =>
            let
              val baseName =
