@@ -298,8 +298,13 @@ struct
           val hasImports = not (List.null importsList)
           val usedLibSet = JsSyntax.predefinedIdsInBlock (js, StringSet.empty)
           val usedLib = StringSet.toList usedLibSet
+          val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val unavailableNames =
             StringSet.union (usedLibSet, JsWriter.JsUnavailableNames)
+          val unavailableNames =
+            List.foldl
+              (fn ({provides, ...}, acc) =>
+                 List.foldl StringSet.add' acc provides) unavailableNames mlinit
           val (unavailableNames, nameMap) =
             JsWriter.createNameMapForImports
               (unavailableNames, TypedSyntax.VIdMap.empty, importsList)
@@ -311,7 +316,6 @@ struct
           val imports = JsWriter.doImports (nameMap, importsList)
           val js = #doProgram (JsWriter.mkWriter (nameMap, labelMap)) js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val outs = TextIO.openOut
             (Option.getOpt (#output opts, base ^ ".mjs")) (* may raise Io *)
           val () = TextIO.output (outs, imports)
