@@ -58,6 +58,7 @@ sources = \
   src/cps/decompose-recursive.sml \
   src/cps/unpack-record-parameter.sml \
   src/cps/eta.sml \
+  src/backend.sml \
   src/nested.sml \
   src/lua-syntax.sml \
   src/lua-transform.sml \

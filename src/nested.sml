@@ -52,7 +52,7 @@ sig
   | Unreachable
   val containsApp: Stat -> bool
   val fromCExp: CSyntax.CExp -> Stat
-  val toNested: Stat -> Stat
+  val toNested: Backend.backend * Stat -> Stat
 end =
 struct
   type Var = CSyntax.Var
@@ -344,11 +344,19 @@ struct
       in
         {goValue = goValue, goExp = goExp, goDecs = goDecs, goStat = goStat}
       end
-    fun canInline (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
-      | canInline _ = true
+    fun canInlineLua (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
+      | canInlineLua _ = true
+    fun canInlineJs (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
+      | canInlineJs (ExnTag _) = false
+      | canInlineJs _ = true
     val DEPTH_LIMIT = 10
-    fun toNestedImpl usage =
+    fun toNestedImpl (backend, usage) =
       let
+        val canInline =
+          case backend of
+            Backend.BACKEND_LUA _ => canInlineLua
+          | Backend.BACKEND_LUAJIT => canInlineLua
+          | Backend.BACKEND_JS _ => canInlineJs
         fun goExp (e as Value _) = e
           | goExp (PrimOp {primOp, tyargs, args}) =
               PrimOp
@@ -571,9 +579,9 @@ struct
         goStat
       end
   in
-    fun toNested program =
+    fun toNested (backend, program) =
       let val usage = Analysis.analyze program
-      in toNestedImpl usage program
+      in toNestedImpl (backend, usage) program
       end
   end (* local *)
 end; (* structure NSyntax *)

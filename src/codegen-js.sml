@@ -5,31 +5,30 @@
 structure CodeGenJs :>
 sig
   exception CodeGenError of string
-  datatype code_style = DIRECT_STYLE | CPS
   type Context =
     { nextJsId: int ref
-    , style: code_style
+    , style: Backend.code_style
     , contEscapeMap: CpsAnalyze.cont_map
     , imports: ({specs: (string * JsSyntax.Id) list, moduleName: string} list) ref
     }
-  val doProgramDirect: Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+  val doProgramDirect: Context -> CSyntax.CVar -> NSyntax.Stat -> JsSyntax.Block
   val doProgramDirectDefaultExport: Context
                                     -> CSyntax.CVar
-                                    -> CSyntax.CExp
+                                    -> NSyntax.Stat
                                     -> JsSyntax.Block
   val doProgramDirectNamedExport: Context
                                   -> CSyntax.CVar
-                                  -> CSyntax.CExp
+                                  -> NSyntax.Stat
                                   -> string vector
                                   -> JsSyntax.Block
-  val doProgramCPS: Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+  val doProgramCPS: Context -> CSyntax.CVar -> NSyntax.Stat -> JsSyntax.Block
   val doProgramCPSDefaultExport: Context
                                  -> CSyntax.CVar
-                                 -> CSyntax.CExp
+                                 -> NSyntax.Stat
                                  -> JsSyntax.Block
   val doProgramCPSNamedExport: Context
                                -> CSyntax.CVar
-                               -> CSyntax.CExp
+                               -> NSyntax.Stat
                                -> string vector
                                -> JsSyntax.Block
 end =
@@ -55,6 +54,7 @@ struct
    *)
   structure F = FSyntax
   structure C = CSyntax
+  structure N = NSyntax
   structure J = JsSyntax
 
   fun ConstStat (vid, exp) =
@@ -137,10 +137,9 @@ struct
         ]
     end
 
-  datatype code_style = DIRECT_STYLE | CPS
   type Context =
     { nextJsId: int ref
-    , style: code_style
+    , style: Backend.code_style
     , contEscapeMap: CpsAnalyze.cont_map
     , imports: ({specs: (string * J.Id) list, moduleName: string} list) ref
     }
@@ -150,8 +149,8 @@ struct
       let
         val builtins =
           case #style ctx of
-            DIRECT_STYLE => builtinsDirect
-          | CPS => builtinsCPS
+            Backend.DIRECT_STYLE => builtinsDirect
+          | Backend.CPS => builtinsCPS
       in
         case TypedSyntax.VIdMap.find (builtins, vid) of
           NONE =>
@@ -309,1080 +308,865 @@ struct
            [v] => [J.ReturnStat (SOME v)] (* direct style *)
          | _ => raise CodeGenError "invalid return arity")
     | NONE => raise CodeGenError "undefined continuation"
-  (*: val doDecs : Context * Env * C.Dec list * C.CExp * J.Stat list -> J.Stat list *)
-  fun doDecs (ctx, env, decs, finalExp, revStats) =
-    (case decs of
-       [] => List.revAppend (revStats, doCExp ctx env finalExp)
-     | dec :: decs =>
-         let
-           fun pure (NONE, _) =
-                 doDecs (ctx, env, decs, finalExp, revStats)
-             | pure (SOME result, exp) =
-                 doDecs
-                   ( ctx
-                   , env
-                   , decs
-                   , finalExp
-                   , ConstStat (result, exp) :: revStats
-                   )
-           fun discardable (NONE, _) =
-                 doDecs (ctx, env, decs, finalExp, revStats)
-             | discardable (SOME result, exp) =
-                 doDecs
-                   ( ctx
-                   , env
-                   , decs
-                   , finalExp
-                   , ConstStat (result, exp) :: revStats
-                   )
-           fun impure (NONE, exp) =
-                 doDecs (ctx, env, decs, finalExp, J.ExpStat exp :: revStats)
-             | impure (SOME result, exp) =
-                 doDecs
-                   ( ctx
-                   , env
-                   , decs
-                   , finalExp
-                   , ConstStat (result, exp) :: revStats
-                   )
-         in
-           case dec of
-             C.ValDec
-               { exp = C.PrimOp {primOp = F.RealConstOp x, tyargs = _, args = _}
-               , results = [result]
-               } =>
-               let
-                 val exp =
-                   let
-                     val y =
-                       Numeric.toDecimal
-                         { nominal_format = Numeric.binary64
-                         , target_format = Numeric.binary64
-                         } x
-                   (* JavaScript does not support hexadecimal floating-point literals *)
-                   in
-                     case y of
-                       SOME z =>
-                         if Numeric.Notation.isNegative z then
-                           J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral
-                             (Numeric.Notation.toString "-"
-                                (Numeric.Notation.abs z))))
-                         else
-                           J.ConstExp (J.Numeral
-                             (Numeric.Notation.toString "-" z))
-                     | NONE =>
-                         raise CodeGenError
-                           "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
-                   end
-               in
-                 pure (result, exp)
-               end
-           | C.ValDec
-               { exp = C.PrimOp {primOp = F.ListOp, tyargs = _, args = []}
-               , results = [result]
-               } => pure (result, J.ConstExp J.Null)
-           | C.ValDec
-               { exp = C.PrimOp {primOp = F.ListOp, tyargs = _, args = xs}
-               , results = [result]
-               } =>
-               pure
-                 ( result
-                 , J.CallExp (J.VarExp (J.PredefinedId "_list"), vector
-                     [J.ArrayExp (Vector.map (doValue (ctx, env)) (vector xs))])
-                 )
-           | C.ValDec
-               { exp = C.PrimOp {primOp = F.VectorOp, tyargs = _, args = xs}
-               , results = [result]
-               } =>
-               pure (result, J.ArrayExp
-                 (Vector.map (doValue (ctx, env)) (vector xs)))
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     { primOp = F.DataTagAsString16Op info
-                     , tyargs = _
-                     , args = [exp]
-                     }
-               , results = [result]
-               } =>
-               (case #representation info of
-                  Syntax.REP_BOXED =>
-                    pure (result, J.IndexExp
-                      ( doValue (ctx, env) exp
-                      , J.ConstExp (J.asciiStringAsWide "tag")
-                      ))
-                | Syntax.REP_ENUM => pure (result, doValue (ctx, env) exp)
-                | _ =>
-                    raise CodeGenError
-                      "unexpected datatype representation for DataTagAsString16Op")
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     {primOp = F.DataPayloadOp info, tyargs = _, args = [exp]}
-               , results = [result]
-               } =>
-               (case #representation info of
-                  Syntax.REP_BOXED =>
-                    pure (result, J.IndexExp
-                      ( doValue (ctx, env) exp
-                      , J.ConstExp (J.asciiStringAsWide "payload")
-                      ))
-                | Syntax.REP_ALIAS => pure (result, doValue (ctx, env) exp)
-                | _ =>
-                    raise CodeGenError
-                      "unexpected datatype representation for DataPayloadOp")
-           | C.ValDec
-               { exp =
-                   C.PrimOp {primOp = F.ExnPayloadOp, tyargs = _, args = [exp]}
-               , results = [result]
-               } =>
-               pure (result, J.IndexExp
-                 ( doValue (ctx, env) exp
-                 , J.ConstExp (J.asciiStringAsWide "payload")
-                 ))
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     {primOp = F.ConstructValOp info, tyargs = _, args = []}
-               , results = [result]
-               } =>
-               let
-                 val tag = #tag info
-               in
-                 case #representation info of
-                   Syntax.REP_BOXED =>
-                     pure (result, J.ObjectExp (vector
-                       [( J.StringKey "tag"
-                        , J.ConstExp (J.asciiStringAsWide tag)
-                        )]))
-                 | Syntax.REP_ENUM =>
-                     pure (result, J.ConstExp (J.asciiStringAsWide tag))
-                 | Syntax.REP_UNIT => pure (result, J.ConstExp J.Null)
+  (*:
+  val doExp : Context * Env * N.Exp -> J.Exp
+  val doDecs : Context * Env * N.Dec list * N.Stat * J.Stat list -> J.Stat list
+  val doCExp : Context -> Env -> N.Stat -> J.Stat list
+   *)
+  fun doExp (ctx, env, N.Value v) =
+        doValue (ctx, env) v
+    | doExp (ctx, env, N.PrimOp {primOp, tyargs = _, args}) =
+        (case (primOp, args) of
+           (F.RealConstOp x, _) =>
+             let
+               val y =
+                 Numeric.toDecimal
+                   { nominal_format = Numeric.binary64
+                   , target_format = Numeric.binary64
+                   } x
+             (* JavaScript does not support hexadecimal floating-point literals *)
+             in
+               case y of
+                 SOME z =>
+                   if Numeric.Notation.isNegative z then
+                     J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral
+                       (Numeric.Notation.toString "-" (Numeric.Notation.abs z))))
+                   else
+                     J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
+               | NONE =>
+                   raise CodeGenError
+                     "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
+             end
+         | (F.ListOp, []) => J.ConstExp J.Null
+         | (F.ListOp, xs) =>
+             J.CallExp (J.VarExp (J.PredefinedId "_list"), vector
+               [J.ArrayExp
+                  (Vector.map (fn x => doExp (ctx, env, x)) (vector xs))])
+         | (F.VectorOp, xs) =>
+             J.ArrayExp (Vector.map (fn x => doExp (ctx, env, x)) (vector xs))
+         | (F.DataTagAsString16Op info, [exp]) =>
+             (case #representation info of
+                Syntax.REP_BOXED =>
+                  J.IndexExp
+                    ( doExp (ctx, env, exp)
+                    , J.ConstExp (J.asciiStringAsWide "tag")
+                    )
+              | Syntax.REP_ENUM => doExp (ctx, env, exp)
+              | _ =>
+                  raise CodeGenError
+                    "unexpected datatype representation for DataTagAsString16Op")
+         | (F.DataPayloadOp info, [exp]) =>
+             (case #representation info of
+                Syntax.REP_BOXED =>
+                  J.IndexExp
+                    ( doExp (ctx, env, exp)
+                    , J.ConstExp (J.asciiStringAsWide "payload")
+                    )
+              | Syntax.REP_ALIAS => doExp (ctx, env, exp)
+              | _ =>
+                  raise CodeGenError
+                    "unexpected datatype representation for DataPayloadOp")
+         | (F.ExnPayloadOp, [exp]) =>
+             J.IndexExp
+               ( doExp (ctx, env, exp)
+               , J.ConstExp (J.asciiStringAsWide "payload")
+               )
+         | (F.ConstructValOp info, []) =>
+             let
+               val tag = #tag info
+             in
+               case #representation info of
+                 Syntax.REP_BOXED =>
+                   J.ObjectExp (vector
+                     [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))])
+               | Syntax.REP_ENUM => J.ConstExp (J.asciiStringAsWide tag)
+               | Syntax.REP_UNIT => J.ConstExp J.Null
+               | _ =>
+                   raise CodeGenError
+                     "unexpected datatype representation for ConstructValOp"
+             end
+         | (F.ConstructValWithPayloadOp info, [payload]) =>
+             let
+               val tag = #tag info
+               val payload = doExp (ctx, env, payload)
+             in
+               case #representation info of
+                 Syntax.REP_BOXED =>
+                   J.ObjectExp (vector
+                     [ (J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))
+                     , (J.StringKey "payload", payload)
+                     ])
+               | Syntax.REP_ALIAS => payload
+               | _ =>
+                   raise CodeGenError
+                     "unexpected datatype representation for ConstructValWithPayloadOp"
+             end
+         | (F.ConstructExnOp, [tag]) =>
+             let val tag = doExp (ctx, env, tag)
+             in J.NewExp (tag, vector [])
+             end
+         | (F.ConstructExnWithPayloadOp, [tag, payload]) =>
+             let
+               val tag = doExp (ctx, env, tag)
+               val payload = doExp (ctx, env, payload)
+             in
+               J.NewExp (tag, vector [payload])
+             end
+         | ( F.RaiseOp _ (* span as { start as { file, line, column }, ... } *)
+           , _
+           ) => raise CodeGenError "unexpected RaiseOp"
+         | (F.PrimCall prim, args) =>
+             let
+               (*
+               fun action ([], stmt) =
+                     doDecs (ctx, env, decs, finalExp, stmt :: revStats)
+                 | action (_ :: _, stmt) =
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": unexpected number of results for an action")
+                        *)
+               fun doNullary f =
+                 case args of
+                   [] => f ()
                  | _ =>
                      raise CodeGenError
-                       "unexpected datatype representation for ConstructValOp"
-               end
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     { primOp = F.ConstructValWithPayloadOp info
-                     , tyargs = _
-                     , args = [payload]
-                     }
-               , results = [result]
-               } =>
-               let
-                 val tag = #tag info
-                 val payload = doValue (ctx, env) payload
-               in
-                 case #representation info of
-                   Syntax.REP_BOXED =>
-                     pure (result, J.ObjectExp (vector
-                       [ ( J.StringKey "tag"
-                         , J.ConstExp (J.asciiStringAsWide tag)
-                         )
-                       , (J.StringKey "payload", payload)
-                       ]))
-                 | Syntax.REP_ALIAS => pure (result, payload)
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doNullaryExp (f, _ (* purity *)) = doNullary f
+               fun doUnary f =
+                 case args of
+                   [a] => f (doExp (ctx, env, a))
                  | _ =>
                      raise CodeGenError
-                       "unexpected datatype representation for ConstructValWithPayloadOp"
-               end
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     {primOp = F.ConstructExnOp, tyargs = _, args = [tag]}
-               , results = [result]
-               } =>
-               let val tag = doValue (ctx, env) tag
-               in pure (result, J.NewExp (tag, vector []))
-               end
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     { primOp = F.ConstructExnWithPayloadOp
-                     , tyargs = _
-                     , args = [tag, payload]
-                     }
-               , results = [result]
-               } =>
-               let
-                 val tag = doValue (ctx, env) tag
-                 val payload = doValue (ctx, env) payload
-               in
-                 pure (result, J.NewExp (tag, vector [payload]))
-               end
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     { primOp =
-                         F.RaiseOp
-                           (_ (* span as { start as { file, line, column }, ... } *))
-                     , tyargs = _
-                     , args = [exp]
-                     }
-               , results = _
-               } =>
-               List.rev
-                 (J.ThrowStat (doValue (ctx, env) exp) :: revStats) (* TODO: location information *)
-           | C.ValDec
-               { exp = C.PrimOp {primOp = F.PrimCall prim, tyargs = _, args}
-               , results
-               } =>
-               let
-                 fun action ([], stmt) =
-                       doDecs (ctx, env, decs, finalExp, stmt :: revStats)
-                   | action (_ :: _, stmt) =
-                       raise CodeGenError
-                         ("primop " ^ Primitives.toString prim
-                          ^ ": unexpected number of results for an action")
-                 fun doNullary f =
-                   case args of
-                     [] => f ()
-                   | _ =>
-                       raise CodeGenError
-                         ("primop " ^ Primitives.toString prim
-                          ^ ": invalid number of arguments")
-                 fun doNullaryExp (f, purity) =
-                   doNullary (fn () =>
-                     case results of
-                       [result] =>
-                         (case purity of
-                            PURE => pure (result, f ())
-                          | DISCARDABLE => discardable (result, f ())
-                          | IMPURE => impure (result, f ()))
-                     | _ => raise CodeGenError "unexpected number of results")
-                 fun doUnary f =
-                   case args of
-                     [a] => f (doValue (ctx, env) a)
-                   | _ =>
-                       raise CodeGenError
-                         ("primop " ^ Primitives.toString prim
-                          ^ ": invalid number of arguments")
-                 fun doUnaryExp (f, purity) =
-                   doUnary (fn a =>
-                     case results of
-                       [result] =>
-                         (case purity of
-                            PURE => pure (result, f a)
-                          | DISCARDABLE => discardable (result, f a)
-                          | IMPURE => impure (result, f a))
-                     | _ => raise CodeGenError "unexpected number of results")
-                 fun doBinary f =
-                   case args of
-                     [a, b] => f (doValue (ctx, env) a, doValue (ctx, env) b)
-                   | _ =>
-                       raise CodeGenError
-                         ("primop " ^ Primitives.toString prim
-                          ^ ": invalid number of arguments")
-                 fun doBinaryExp (f, purity) =
-                   doBinary (fn (a, b) =>
-                     case results of
-                       [result] =>
-                         (case purity of
-                            PURE => pure (result, f (a, b))
-                          | DISCARDABLE => discardable (result, f (a, b))
-                          | IMPURE => impure (result, f (a, b)))
-                     | _ => raise CodeGenError "unexpected number of results")
-                 fun doBinaryOp (binop, pure) =
-                   doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
-                 fun doTernary f =
-                   case args of
-                     [a, b, c] =>
-                       f ( doValue (ctx, env) a
-                         , doValue (ctx, env) b
-                         , doValue (ctx, env) c
-                         )
-                   | _ =>
-                       raise CodeGenError
-                         ("primop " ^ Primitives.toString prim
-                          ^ ": invalid number of arguments")
-               in
-                 case prim of
-                   Primitives.call2 =>
-                     doTernary (fn (f, a0, a1) =>
-                       case results of
-                         [result] =>
-                           impure (result, J.CallExp (f, vector [a0, a1]))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.List_cons =>
-                     doBinaryExp
-                       (fn (x, xs) => J.ArrayExp (vector [x, xs]), PURE)
-                 | Primitives.List_null =>
-                     doUnaryExp
-                       (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), PURE)
-                 | Primitives.List_unsafeHead =>
-                     doUnaryExp
-                       ( fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "0"))
-                       , PURE
-                       )
-                 | Primitives.List_unsafeTail =>
-                     doUnaryExp
-                       ( fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1"))
-                       , PURE
-                       )
-                 | Primitives.General_exnName =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "_exnName"), vector [a])
-                       , PURE
-                       )
-                 | Primitives.Ref_ref =>
-                     doUnaryExp
-                       ( fn x =>
-                           (* REPRESENTATION_OF_REF *)
-                           J.ArrayExp (vector [x])
-                       , DISCARDABLE
-                       )
-                 | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Ref_set =>
-                     doBinary (fn (a, b) =>
-                       action (results, J.AssignStat
-                         (J.IndexExp (a, J.ConstExp (J.Numeral "0")), b))) (* REPRESENTATION_OF_REF *)
-                 | Primitives.Ref_read =>
-                     doUnaryExp
-                       ( fn a => J.IndexExp (a, J.ConstExp (J.Numeral "0"))
-                       , DISCARDABLE
-                       ) (* REPRESENTATION_OF_REF *)
-                 | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Bool_not =>
-                     doUnaryExp (fn a => J.UnaryExp (J.NOT, a), PURE)
-                 | Primitives.Int_EQUAL _ =>
-                     doBinaryOp (J.EQUAL, PURE) (* Int32, Int54, IntInf *)
-                 | Primitives.Int_PLUS Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_add")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_PLUS Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_add")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_MINUS Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_sub")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_MINUS Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_sub")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_TIMES Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_mul")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_TIMES Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_mul")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_div Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_div")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_div Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_div")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_div_unchecked Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.ToInt32Exp
-                             (J.MethodExp
-                                ( J.VarExp (J.PredefinedId "Math")
-                                , "floor"
-                                , vector [J.BinExp (J.DIV, a, b)]
-                                ))
-                       , PURE
-                       )
-                 | Primitives.Int_div_unchecked Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.BinExp
-                             ( J.PLUS
-                             , J.ConstExp (J.Numeral "0")
-                             , J.MethodExp
-                                 ( J.VarExp (J.PredefinedId "Math")
-                                 , "floor"
-                                 , vector [J.BinExp (J.DIV, a, b)]
-                                 )
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_mod Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_mod")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_mod Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_mod")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_mod_unchecked Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_mod")
-                             , vector [a, b]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_mod_unchecked Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_mod")
-                             , vector [a, b]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_quot Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_quot")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_quot Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_quot")
-                             , vector [a, b]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_quot_unchecked Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToInt32Exp (J.BinExp (J.DIV, a, b))
-                       , PURE
-                       )
-                 | Primitives.Int_quot_unchecked Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.BinExp
-                             ( J.PLUS
-                             , J.ConstExp (J.Numeral "0")
-                             , J.MethodExp
-                                 ( J.VarExp (J.PredefinedId "Math")
-                                 , "trunc"
-                                 , vector [J.BinExp (J.DIV, a, b)]
-                                 )
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_rem_unchecked Primitives.I32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToInt32Exp (J.BinExp (J.MOD, a, b))
-                       , PURE
-                       )
-                 | Primitives.Int_rem_unchecked Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.BinExp
-                             ( J.PLUS
-                             , J.ConstExp (J.Numeral "0")
-                             , J.BinExp (J.MOD, a, b)
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_TILDE Primitives.I32 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_negate")
-                             , vector [a]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_TILDE Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_negate")
-                             , vector [a]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_TILDE_unchecked Primitives.I32 =>
-                     doUnaryExp
-                       (fn a => J.ToInt32Exp (J.UnaryExp (J.NEGATE, a)), PURE)
-                 | Primitives.Int_TILDE_unchecked Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.BinExp (J.MINUS, J.ConstExp (J.Numeral "0"), a)
-                       , PURE
-                       )
-                 | Primitives.Int_abs Primitives.I32 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int32_abs")
-                             , vector [a]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_abs Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Int54_abs")
-                             , vector [a]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Int_LT _ =>
-                     doBinaryOp (J.LT, PURE) (* Int32, Int54, IntInf *)
-                 | Primitives.Int_GT _ =>
-                     doBinaryOp (J.GT, PURE) (* Int32, Int54, IntInf *)
-                 | Primitives.Int_LE _ =>
-                     doBinaryOp (J.LE, PURE) (* Int32, Int54, IntInf *)
-                 | Primitives.Int_GE _ =>
-                     doBinaryOp (J.GE, PURE) (* Int32, Int54, IntInf *)
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I32, Primitives.I32) =>
-                     doUnaryExp (fn x => x, PURE) (* no-op *)
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I32, Primitives.I54) =>
-                     doUnaryExp (fn x => x, PURE) (* no-op *)
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I32, Primitives.INT_INF) =>
-                     doUnaryExp
-                       ( fn x =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "BigInt"), vector [x])
-                       , PURE
-                       )
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I54, Primitives.INT_INF) =>
-                     doUnaryExp
-                       ( fn x =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "BigInt"), vector [x])
-                       , PURE
-                       )
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I54, Primitives.I32) =>
-                     doUnaryExp (fn x => x, PURE) (* no-op *)
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.I54, Primitives.I54) =>
-                     doUnaryExp (fn x => x, PURE) (* no-op *)
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.INT_INF, Primitives.I32) =>
-                     doUnaryExp
-                       ( fn x =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "Number"), vector [x])
-                       , PURE
-                       )
-                 | Primitives.Int_toInt_unchecked
-                     (Primitives.INT_INF, Primitives.I54) =>
-                     doUnaryExp
-                       ( fn x =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "Number"), vector [x])
-                       , PURE
-                       )
-                 | Primitives.Word_EQUAL _ => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Word_PLUS Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.PLUS, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_MINUS Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.MINUS, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_TIMES Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.ToUint32Exp (J.CallExp
-                             ( J.VarExp (J.PredefinedId "Math_imul")
-                             , vector [a, b]
-                             ))
-                       , PURE
-                       )
-                 | Primitives.Word_TILDE Primitives.W32 =>
-                     doUnaryExp
-                       (fn a => J.ToUint32Exp (J.UnaryExp (J.NEGATE, a)), PURE)
-                 | Primitives.Word_div_unchecked Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.DIV, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_mod_unchecked Primitives.W32 =>
-                     doBinaryExp (fn (a, b) => J.BinExp (J.MOD, a, b), PURE)
-                 | Primitives.Word_LT _ => doBinaryOp (J.LT, PURE)
-                 | Primitives.Word_GT _ => doBinaryOp (J.GT, PURE)
-                 | Primitives.Word_LE _ => doBinaryOp (J.LE, PURE)
-                 | Primitives.Word_GE _ => doBinaryOp (J.GE, PURE)
-                 | Primitives.Word_notb Primitives.W32 =>
-                     doUnaryExp
-                       (fn a => J.ToUint32Exp (J.UnaryExp (J.BITNOT, a)), PURE)
-                 | Primitives.Word_andb Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITAND, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_orb Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITOR, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_xorb Primitives.W32 =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITXOR, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_LSHIFT_unchecked
-                     (Primitives.W32, Primitives.W32) =>
-                     doBinaryExp
-                       ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.LSHIFT, a, b))
-                       , PURE
-                       )
-                 | Primitives.Word_RSHIFT_unchecked
-                     (Primitives.W32, Primitives.W32) =>
-                     doBinaryOp (J.URSHIFT, PURE)
-                 | Primitives.Real_PLUS => doBinaryOp (J.PLUS, PURE)
-                 | Primitives.Real_MINUS => doBinaryOp (J.MINUS, PURE)
-                 | Primitives.Real_TIMES => doBinaryOp (J.TIMES, PURE)
-                 | Primitives.Real_DIVIDE => doBinaryOp (J.DIV, PURE)
-                 | Primitives.Real_TILDE =>
-                     doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), PURE)
-                 | Primitives.Real_abs =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             (J.VarExp (J.PredefinedId "Math_abs"), vector [a])
-                       , PURE
-                       )
-                 | Primitives.Real_LT => doBinaryOp (J.LT, PURE)
-                 | Primitives.Real_GT => doBinaryOp (J.GT, PURE)
-                 | Primitives.Real_LE => doBinaryOp (J.LE, PURE)
-                 | Primitives.Real_GE => doBinaryOp (J.GE, PURE)
-                 | Primitives.Char_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Char_LT => doBinaryOp (J.LT, PURE)
-                 | Primitives.Char_GT => doBinaryOp (J.GT, PURE)
-                 | Primitives.Char_LE => doBinaryOp (J.LE, PURE)
-                 | Primitives.Char_GE => doBinaryOp (J.GE, PURE)
-                 | Primitives.Char_ord Primitives.I32 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char_ord Primitives.I54 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char_chr_unchecked Primitives.I32 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char_chr_unchecked Primitives.I54 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char16_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Char16_LT => doBinaryOp (J.LT, PURE)
-                 | Primitives.Char16_GT => doBinaryOp (J.GT, PURE)
-                 | Primitives.Char16_LE => doBinaryOp (J.LE, PURE)
-                 | Primitives.Char16_GE => doBinaryOp (J.GE, PURE)
-                 | Primitives.Char16_ord Primitives.I32 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char16_ord Primitives.I54 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char16_chr_unchecked Primitives.I54 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.Char16_chr_unchecked Primitives.I32 =>
-                     doUnaryExp (fn a => a, PURE) (* no-op *)
-                 | Primitives.String_EQUAL =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_String_EQUAL")
-                             , vector [a, b]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String_LT =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_String_LT")
-                             , vector [a, b]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String_HAT =>
-                     doBinaryExp
-                       ( fn (a, b) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_String_append")
-                             , vector [a, b]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String_size Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.IndexExp
-                             (a, J.ConstExp (J.asciiStringAsWide "length"))
-                       , PURE
-                       )
-                 | Primitives.String_str =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.MethodExp
-                             ( J.VarExp (J.PredefinedId "Uint8Array")
-                             , "of"
-                             , vector [a]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String_concat =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_String_concat")
-                             , vector [a]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String_implode =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_String_implode")
-                             , vector [a]
-                             )
-                       , PURE
-                       )
-                 | Primitives.String16_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.String16_LT => doBinaryOp (J.LT, PURE)
-                 | Primitives.String16_GT => doBinaryOp (J.GT, PURE)
-                 | Primitives.String16_LE => doBinaryOp (J.LE, PURE)
-                 | Primitives.String16_GE => doBinaryOp (J.GE, PURE)
-                 | Primitives.String16_HAT => doBinaryOp (J.PLUS, PURE)
-                 | Primitives.String16_size Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.IndexExp
-                             (a, J.ConstExp (J.asciiStringAsWide "length"))
-                       , PURE
-                       )
-                 | Primitives.String16_str =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.MethodExp
-                             ( J.VarExp (J.PredefinedId "String")
-                             , "fromCharCode"
-                             , vector [a]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Int_PLUS Primitives.INT_INF =>
-                     doBinaryOp (J.PLUS, PURE)
-                 | Primitives.Int_MINUS Primitives.INT_INF =>
-                     doBinaryOp (J.MINUS, PURE)
-                 | Primitives.Int_TIMES Primitives.INT_INF =>
-                     doBinaryOp (J.TIMES, PURE)
-                 | Primitives.Int_TILDE Primitives.INT_INF =>
-                     doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), PURE)
-                 | Primitives.IntInf_andb => doBinaryOp (J.BITAND, PURE)
-                 | Primitives.IntInf_orb => doBinaryOp (J.BITOR, PURE)
-                 | Primitives.IntInf_xorb => doBinaryOp (J.BITXOR, PURE)
-                 | Primitives.IntInf_notb =>
-                     doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), PURE)
-                 | Primitives.Int_quot_unchecked Primitives.INT_INF =>
-                     doBinaryOp (J.DIV, PURE)
-                 | Primitives.Int_rem_unchecked Primitives.INT_INF =>
-                     doBinaryOp (J.MOD, PURE)
-                 | Primitives.Vector_length Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.IndexExp
-                             (a, J.ConstExp (J.asciiStringAsWide "length"))
-                       , PURE
-                       )
-                 | Primitives.Vector_fromList =>
-                     doUnaryExp
-                       ( fn xs =>
-                           J.CallExp
-                             ( J.VarExp
-                                 (J.PredefinedId "_VectorOrArray_fromList")
-                             , vector [xs]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Vector_concat =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Vector_concat")
-                             , vector [a]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Vector_unsafeFromListRevN Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (n, xs) =>
-                           J.CallExp
-                             ( J.VarExp
-                                 (J.PredefinedId "_Vector_unsafeFromListRevN")
-                             , vector [n, xs]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.Array_length Primitives.I54 =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.IndexExp
-                             (a, J.ConstExp (J.asciiStringAsWide "length"))
-                       , PURE
-                       )
-                 | Primitives.Array_fromList =>
-                     doUnaryExp
-                       ( fn xs =>
-                           J.CallExp
-                             ( J.VarExp
-                                 (J.PredefinedId "_VectorOrArray_fromList")
-                             , vector [xs]
-                             )
-                       , PURE
-                       )
-                 | Primitives.Array_array Primitives.I54 =>
-                     doBinaryExp
-                       ( fn (n, init) =>
-                           J.CallExp
-                             ( J.VarExp (J.PredefinedId "_Array_array")
-                             , vector [n, init]
-                             )
-                       , IMPURE
-                       )
-                 | Primitives.Unsafe_cast => doUnaryExp (fn a => a, PURE)
-                 | Primitives.Unsafe_Vector_sub Primitives.I54 =>
-                     doBinaryExp (fn (vec, i) => J.IndexExp (vec, i), PURE)
-                 | Primitives.Unsafe_Array_sub Primitives.I54 =>
-                     doBinaryExp
-                       (fn (arr, i) => J.IndexExp (arr, i), DISCARDABLE)
-                 | Primitives.Unsafe_Array_update Primitives.I54 =>
-                     doTernary (fn (arr, i, v) =>
-                       action (results, J.AssignStat (J.IndexExp (arr, i), v)))
-                 | Primitives.Exception_instanceof =>
-                     doBinaryExp
-                       (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), PURE)
-                 | Primitives.JavaScript_sub =>
-                     doBinaryExp (fn (a, b) => J.IndexExp (a, b), IMPURE)
-                 | Primitives.JavaScript_set =>
-                     doTernary (fn (a, b, c) =>
-                       action (results, J.AssignStat (J.IndexExp (a, b), c)))
-                 | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, PURE)
-                 | Primitives.JavaScript_NOTEQUAL =>
-                     doBinaryOp (J.NOTEQUAL, PURE)
-                 | Primitives.JavaScript_LT => doBinaryOp (J.LT, IMPURE)
-                 | Primitives.JavaScript_GT => doBinaryOp (J.GT, IMPURE)
-                 | Primitives.JavaScript_LE => doBinaryOp (J.LE, IMPURE)
-                 | Primitives.JavaScript_GE => doBinaryOp (J.GE, IMPURE)
-                 | Primitives.JavaScript_PLUS => doBinaryOp (J.PLUS, IMPURE)
-                 | Primitives.JavaScript_MINUS => doBinaryOp (J.MINUS, IMPURE)
-                 | Primitives.JavaScript_TIMES => doBinaryOp (J.TIMES, IMPURE)
-                 | Primitives.JavaScript_DIVIDE => doBinaryOp (J.DIV, IMPURE)
-                 | Primitives.JavaScript_MOD => doBinaryOp (J.MOD, IMPURE)
-                 | Primitives.JavaScript_negate =>
-                     doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), IMPURE)
-                 | Primitives.JavaScript_andb => doBinaryOp (J.BITAND, IMPURE)
-                 | Primitives.JavaScript_orb => doBinaryOp (J.BITOR, IMPURE)
-                 | Primitives.JavaScript_xorb => doBinaryOp (J.BITXOR, IMPURE)
-                 | Primitives.JavaScript_notb =>
-                     doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), IMPURE)
-                 | Primitives.JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, IMPURE)
-                 | Primitives.JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, IMPURE)
-                 | Primitives.JavaScript_URSHIFT =>
-                     doBinaryOp (J.URSHIFT, IMPURE)
-                 | Primitives.JavaScript_EXP => doBinaryOp (J.EXP, PURE)
-                 | Primitives.JavaScript_isFalsy =>
-                     doUnaryExp (fn a => J.UnaryExp (J.NOT, a), DISCARDABLE)
-                 | Primitives.JavaScript_typeof =>
-                     doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), PURE)
-                 | Primitives.JavaScript_global =>
-                     doUnaryExp
-                       ( fn a =>
-                           J.IndexExp
-                             (J.VarExp (J.PredefinedId "globalThis"), a)
-                       , DISCARDABLE
-                       )
-                 | Primitives.JavaScript_setGlobal =>
-                     doBinary (fn (name, value) =>
-                       action (results, J.AssignStat
-                         ( J.IndexExp
-                             (J.VarExp (J.PredefinedId "globalThis"), name)
-                         , value
-                         )))
-                 | Primitives.JavaScript_call =>
-                     doBinary (fn (f, args) =>
-                       case results of
-                         [result] =>
-                           impure (result, J.MethodExp
-                             (f, "apply", vector [J.UndefinedExp, args]))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.JavaScript_method =>
-                     doTernary (fn (obj, method, args) =>
-                       case results of
-                         [result] =>
-                           impure (result, J.MethodExp
-                             ( J.IndexExp (obj, method)
-                             , "apply"
-                             , vector [obj, args]
-                             ))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.JavaScript_new =>
-                     doBinary (fn (ctor, args) =>
-                       case results of
-                         [result] =>
-                           impure (result, J.MethodExp
-                             ( J.VarExp (J.PredefinedId "Reflect")
-                             , "construct"
-                             , vector [ctor, args]
-                             ))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.JavaScript_function =>
-                     doUnary (fn f =>
-                       case results of
-                         [result] =>
-                           pure (result, J.CallExp
-                             (J.VarExp (J.PredefinedId "_function"), vector [f]))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.JavaScript_encodeUtf8 =>
-                     doUnary (fn f =>
-                       case results of
-                         [result] =>
-                           pure (result, J.CallExp
-                             ( J.VarExp (J.PredefinedId "_encodeUtf8")
-                             , vector [f]
-                             ))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.JavaScript_decodeUtf8 =>
-                     doUnary (fn f =>
-                       case results of
-                         [result] =>
-                           pure (result, J.CallExp
-                             ( J.VarExp (J.PredefinedId "_decodeUtf8")
-                             , vector [f]
-                             ))
-                       | _ => raise CodeGenError "unexpected number of results")
-                 | Primitives.DelimCont_newPromptTag =>
-                     doNullaryExp
-                       ( fn () =>
-                           J.NewExp
-                             (J.VarExp (J.PredefinedId "_PromptTag"), vector [])
-                       , DISCARDABLE
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doUnaryExp (f, _ (* purity *)) = doUnary f
+               fun doBinary f =
+                 case args of
+                   [a, b] => f (doExp (ctx, env, a), doExp (ctx, env, b))
+                 | _ =>
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doBinaryExp (f, _ (* purity *)) = doBinary f
+               fun doBinaryOp (binop, pure) =
+                 doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
+               fun doTernary f =
+                 case args of
+                   [a, b, c] =>
+                     f ( doExp (ctx, env, a)
+                       , doExp (ctx, env, b)
+                       , doExp (ctx, env, c)
                        )
                  | _ =>
                      raise CodeGenError
                        ("primop " ^ Primitives.toString prim
-                        ^ " is not supported on JavaScript backend")
-               end
-           | C.ValDec
-               { exp =
-                   C.PrimOp {primOp = F.JsCallOp, tyargs = _, args = f :: args}
-               , results = [result]
-               } =>
-               impure (result, J.CallExp
-                 ( doValue (ctx, env) f
-                 , Vector.map (doValue (ctx, env)) (vector args)
-                 ))
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     { primOp = F.JsMethodOp
-                     , tyargs = _
-                     , args = obj :: name :: args
-                     }
-               , results = [result]
-               } =>
-               impure (result, J.CallExp
-                 ( J.IndexExp (doValue (ctx, env) obj, doValue (ctx, env) name)
-                 , Vector.map (doValue (ctx, env)) (vector args)
-                 ))
-           | C.ValDec
-               { exp =
-                   C.PrimOp
-                     {primOp = F.JsNewOp, tyargs = _, args = ctor :: args}
-               , results = [result]
-               } =>
-               impure (result, J.NewExp
-                 ( doValue (ctx, env) ctor
-                 , Vector.map (doValue (ctx, env)) (vector args)
-                 ))
-           | C.ValDec
-               {exp = C.PrimOp {primOp, tyargs = _, args = _}, results = _} =>
-               raise CodeGenError
-                 ("primop " ^ Printer.build (FPrinter.doPrimOp primOp)
-                  ^ " is not supported on JavaScript backend")
-           | C.ValDec {exp = C.Record fields, results = [result]} =>
-               let
-                 val fields =
-                   Syntax.LabelMap.foldri
-                     (fn (label, v, acc) => (label, doValue (ctx, env) v) :: acc)
-                     [] fields
-                 fun isTuple (_, []) = true
-                   | isTuple (i, (Syntax.NumericLabel n, _) :: xs) =
-                       i = n andalso isTuple (i + 1, xs)
-                   | isTuple _ = false
-                 val exp =
-                   if isTuple (1, fields) then
-                     J.ArrayExp (vector (List.map #2 fields))
-                   else
-                     J.ObjectExp (vector
-                       (List.map
-                          (fn (label, exp) => (LabelToObjectKey label, exp))
-                          fields))
-               in
-                 pure (result, exp)
-               end
-           | C.ValDec {exp = C.ExnTag {name, payloadTy}, results = [result]} =>
+                        ^ ": invalid number of arguments")
+             in
+               case prim of
+                 Primitives.call2 =>
+                   doTernary (fn (f, a0, a1) => J.CallExp (f, vector [a0, a1]))
+               | Primitives.List_cons =>
+                   doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), PURE)
+               | Primitives.List_null =>
+                   doUnaryExp
+                     (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), PURE)
+               | Primitives.List_unsafeHead =>
+                   doUnaryExp
+                     ( fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "0"))
+                     , PURE
+                     )
+               | Primitives.List_unsafeTail =>
+                   doUnaryExp
+                     ( fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1"))
+                     , PURE
+                     )
+               | Primitives.General_exnName =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "_exnName"), vector [a])
+                     , PURE
+                     )
+               | Primitives.Ref_ref =>
+                   doUnaryExp
+                     ( fn x =>
+                         (* REPRESENTATION_OF_REF *)
+                         J.ArrayExp (vector [x])
+                     , DISCARDABLE
+                     )
+               | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Ref_set => raise CodeGenError "unexpected Ref.set"
+               | Primitives.Ref_read =>
+                   doUnaryExp
+                     ( fn a => J.IndexExp (a, J.ConstExp (J.Numeral "0"))
+                     , DISCARDABLE
+                     ) (* REPRESENTATION_OF_REF *)
+               | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Bool_not =>
+                   doUnaryExp (fn a => J.UnaryExp (J.NOT, a), PURE)
+               | Primitives.Int_EQUAL _ =>
+                   doBinaryOp (J.EQUAL, PURE) (* Int32, Int54, IntInf *)
+               | Primitives.Int_PLUS Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_add")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_PLUS Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_add")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_MINUS Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_sub")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_MINUS Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_sub")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_TIMES Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_mul")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_TIMES Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_mul")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_div Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_div")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_div Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_div")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_div_unchecked Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.ToInt32Exp
+                           (J.MethodExp
+                              ( J.VarExp (J.PredefinedId "Math")
+                              , "floor"
+                              , vector [J.BinExp (J.DIV, a, b)]
+                              ))
+                     , PURE
+                     )
+               | Primitives.Int_div_unchecked Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.BinExp
+                           ( J.PLUS
+                           , J.ConstExp (J.Numeral "0")
+                           , J.MethodExp
+                               ( J.VarExp (J.PredefinedId "Math")
+                               , "floor"
+                               , vector [J.BinExp (J.DIV, a, b)]
+                               )
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_mod Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_mod")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_mod Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_mod")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_mod_unchecked Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_mod")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_mod_unchecked Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_mod")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_quot Primitives.I32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_quot")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_quot Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_quot")
+                           , vector [a, b]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_quot_unchecked Primitives.I32 =>
+                   doBinaryExp
+                     (fn (a, b) => J.ToInt32Exp (J.BinExp (J.DIV, a, b)), PURE)
+               | Primitives.Int_quot_unchecked Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.BinExp
+                           ( J.PLUS
+                           , J.ConstExp (J.Numeral "0")
+                           , J.MethodExp
+                               ( J.VarExp (J.PredefinedId "Math")
+                               , "trunc"
+                               , vector [J.BinExp (J.DIV, a, b)]
+                               )
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_rem_unchecked Primitives.I32 =>
+                   doBinaryExp
+                     (fn (a, b) => J.ToInt32Exp (J.BinExp (J.MOD, a, b)), PURE)
+               | Primitives.Int_rem_unchecked Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.BinExp
+                           ( J.PLUS
+                           , J.ConstExp (J.Numeral "0")
+                           , J.BinExp (J.MOD, a, b)
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_TILDE Primitives.I32 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int32_negate")
+                           , vector [a]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_TILDE Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Int54_negate")
+                           , vector [a]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Int_TILDE_unchecked Primitives.I32 =>
+                   doUnaryExp
+                     (fn a => J.ToInt32Exp (J.UnaryExp (J.NEGATE, a)), PURE)
+               | Primitives.Int_TILDE_unchecked Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a => J.BinExp (J.MINUS, J.ConstExp (J.Numeral "0"), a)
+                     , PURE
+                     )
+               | Primitives.Int_abs Primitives.I32 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "_Int32_abs"), vector [a])
+                     , IMPURE
+                     )
+               | Primitives.Int_abs Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "_Int54_abs"), vector [a])
+                     , IMPURE
+                     )
+               | Primitives.Int_LT _ =>
+                   doBinaryOp (J.LT, PURE) (* Int32, Int54, IntInf *)
+               | Primitives.Int_GT _ =>
+                   doBinaryOp (J.GT, PURE) (* Int32, Int54, IntInf *)
+               | Primitives.Int_LE _ =>
+                   doBinaryOp (J.LE, PURE) (* Int32, Int54, IntInf *)
+               | Primitives.Int_GE _ =>
+                   doBinaryOp (J.GE, PURE) (* Int32, Int54, IntInf *)
+               | Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I32) =>
+                   doUnaryExp (fn x => x, PURE) (* no-op *)
+               | Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I54) =>
+                   doUnaryExp (fn x => x, PURE) (* no-op *)
+               | Primitives.Int_toInt_unchecked
+                   (Primitives.I32, Primitives.INT_INF) =>
+                   doUnaryExp
+                     ( fn x =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "BigInt"), vector [x])
+                     , PURE
+                     )
+               | Primitives.Int_toInt_unchecked
+                   (Primitives.I54, Primitives.INT_INF) =>
+                   doUnaryExp
+                     ( fn x =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "BigInt"), vector [x])
+                     , PURE
+                     )
+               | Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I32) =>
+                   doUnaryExp (fn x => x, PURE) (* no-op *)
+               | Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I54) =>
+                   doUnaryExp (fn x => x, PURE) (* no-op *)
+               | Primitives.Int_toInt_unchecked
+                   (Primitives.INT_INF, Primitives.I32) =>
+                   doUnaryExp
+                     ( fn x =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "Number"), vector [x])
+                     , PURE
+                     )
+               | Primitives.Int_toInt_unchecked
+                   (Primitives.INT_INF, Primitives.I54) =>
+                   doUnaryExp
+                     ( fn x =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "Number"), vector [x])
+                     , PURE
+                     )
+               | Primitives.Word_EQUAL _ => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Word_PLUS Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.PLUS, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_MINUS Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.MINUS, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_TIMES Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.ToUint32Exp (J.CallExp
+                           ( J.VarExp (J.PredefinedId "Math_imul")
+                           , vector [a, b]
+                           ))
+                     , PURE
+                     )
+               | Primitives.Word_TILDE Primitives.W32 =>
+                   doUnaryExp
+                     (fn a => J.ToUint32Exp (J.UnaryExp (J.NEGATE, a)), PURE)
+               | Primitives.Word_div_unchecked Primitives.W32 =>
+                   doBinaryExp
+                     (fn (a, b) => J.ToUint32Exp (J.BinExp (J.DIV, a, b)), PURE)
+               | Primitives.Word_mod_unchecked Primitives.W32 =>
+                   doBinaryExp (fn (a, b) => J.BinExp (J.MOD, a, b), PURE)
+               | Primitives.Word_LT _ => doBinaryOp (J.LT, PURE)
+               | Primitives.Word_GT _ => doBinaryOp (J.GT, PURE)
+               | Primitives.Word_LE _ => doBinaryOp (J.LE, PURE)
+               | Primitives.Word_GE _ => doBinaryOp (J.GE, PURE)
+               | Primitives.Word_notb Primitives.W32 =>
+                   doUnaryExp
+                     (fn a => J.ToUint32Exp (J.UnaryExp (J.BITNOT, a)), PURE)
+               | Primitives.Word_andb Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITAND, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_orb Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITOR, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_xorb Primitives.W32 =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.BITXOR, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_LSHIFT_unchecked
+                   (Primitives.W32, Primitives.W32) =>
+                   doBinaryExp
+                     ( fn (a, b) => J.ToUint32Exp (J.BinExp (J.LSHIFT, a, b))
+                     , PURE
+                     )
+               | Primitives.Word_RSHIFT_unchecked
+                   (Primitives.W32, Primitives.W32) =>
+                   doBinaryOp (J.URSHIFT, PURE)
+               | Primitives.Real_PLUS => doBinaryOp (J.PLUS, PURE)
+               | Primitives.Real_MINUS => doBinaryOp (J.MINUS, PURE)
+               | Primitives.Real_TIMES => doBinaryOp (J.TIMES, PURE)
+               | Primitives.Real_DIVIDE => doBinaryOp (J.DIV, PURE)
+               | Primitives.Real_TILDE =>
+                   doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), PURE)
+               | Primitives.Real_abs =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "Math_abs"), vector [a])
+                     , PURE
+                     )
+               | Primitives.Real_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.Real_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.Real_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.Real_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.Char_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Char_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.Char_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.Char_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.Char_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.Char_ord Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char_ord Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char_chr_unchecked Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char16_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Char16_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.Char16_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.Char16_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.Char16_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.Char16_ord Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char16_ord Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char16_chr_unchecked Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char16_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.String_EQUAL =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_EQUAL")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String_LT =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_LT")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String_HAT =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_append")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String_size Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.String_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.MethodExp
+                           ( J.VarExp (J.PredefinedId "Uint8Array")
+                           , "of"
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String_concat =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_concat")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String_implode =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_implode")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String16_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.String16_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.String16_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.String16_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.String16_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.String16_HAT => doBinaryOp (J.PLUS, PURE)
+               | Primitives.String16_size Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.String16_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.MethodExp
+                           ( J.VarExp (J.PredefinedId "String")
+                           , "fromCharCode"
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.Int_PLUS Primitives.INT_INF =>
+                   doBinaryOp (J.PLUS, PURE)
+               | Primitives.Int_MINUS Primitives.INT_INF =>
+                   doBinaryOp (J.MINUS, PURE)
+               | Primitives.Int_TIMES Primitives.INT_INF =>
+                   doBinaryOp (J.TIMES, PURE)
+               | Primitives.Int_TILDE Primitives.INT_INF =>
+                   doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), PURE)
+               | Primitives.IntInf_andb => doBinaryOp (J.BITAND, PURE)
+               | Primitives.IntInf_orb => doBinaryOp (J.BITOR, PURE)
+               | Primitives.IntInf_xorb => doBinaryOp (J.BITXOR, PURE)
+               | Primitives.IntInf_notb =>
+                   doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), PURE)
+               | Primitives.Int_quot_unchecked Primitives.INT_INF =>
+                   doBinaryOp (J.DIV, PURE)
+               | Primitives.Int_rem_unchecked Primitives.INT_INF =>
+                   doBinaryOp (J.MOD, PURE)
+               | Primitives.Vector_length Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.Vector_fromList =>
+                   doUnaryExp
+                     ( fn xs =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_VectorOrArray_fromList")
+                           , vector [xs]
+                           )
+                     , PURE
+                     )
+               | Primitives.Vector_concat =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Vector_concat")
+                           , vector [a]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Vector_unsafeFromListRevN Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (n, xs) =>
+                         J.CallExp
+                           ( J.VarExp
+                               (J.PredefinedId "_Vector_unsafeFromListRevN")
+                           , vector [n, xs]
+                           )
+                     , PURE
+                     )
+               | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Array_length Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.Array_fromList =>
+                   doUnaryExp
+                     ( fn xs =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_VectorOrArray_fromList")
+                           , vector [xs]
+                           )
+                     , PURE
+                     )
+               | Primitives.Array_array Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (n, init) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_Array_array")
+                           , vector [n, init]
+                           )
+                     , IMPURE
+                     )
+               | Primitives.Unsafe_cast => doUnaryExp (fn a => a, PURE)
+               | Primitives.Unsafe_Vector_sub Primitives.I54 =>
+                   doBinaryExp (fn (vec, i) => J.IndexExp (vec, i), PURE)
+               | Primitives.Unsafe_Array_sub Primitives.I54 =>
+                   doBinaryExp (fn (arr, i) => J.IndexExp (arr, i), DISCARDABLE)
+               | Primitives.Unsafe_Array_update Primitives.I54 =>
+                   raise CodeGenError "unexpected Unsafe.Array.update"
+               | Primitives.Exception_instanceof =>
+                   doBinaryExp
+                     (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), PURE)
+               | Primitives.JavaScript_sub =>
+                   doBinaryExp (fn (a, b) => J.IndexExp (a, b), IMPURE)
+               | Primitives.JavaScript_set =>
+                   raise CodeGenError "unexpected JavaScript.set"
+               | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, PURE)
+               | Primitives.JavaScript_LT => doBinaryOp (J.LT, IMPURE)
+               | Primitives.JavaScript_GT => doBinaryOp (J.GT, IMPURE)
+               | Primitives.JavaScript_LE => doBinaryOp (J.LE, IMPURE)
+               | Primitives.JavaScript_GE => doBinaryOp (J.GE, IMPURE)
+               | Primitives.JavaScript_PLUS => doBinaryOp (J.PLUS, IMPURE)
+               | Primitives.JavaScript_MINUS => doBinaryOp (J.MINUS, IMPURE)
+               | Primitives.JavaScript_TIMES => doBinaryOp (J.TIMES, IMPURE)
+               | Primitives.JavaScript_DIVIDE => doBinaryOp (J.DIV, IMPURE)
+               | Primitives.JavaScript_MOD => doBinaryOp (J.MOD, IMPURE)
+               | Primitives.JavaScript_negate =>
+                   doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), IMPURE)
+               | Primitives.JavaScript_andb => doBinaryOp (J.BITAND, IMPURE)
+               | Primitives.JavaScript_orb => doBinaryOp (J.BITOR, IMPURE)
+               | Primitives.JavaScript_xorb => doBinaryOp (J.BITXOR, IMPURE)
+               | Primitives.JavaScript_notb =>
+                   doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), IMPURE)
+               | Primitives.JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, IMPURE)
+               | Primitives.JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, IMPURE)
+               | Primitives.JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, IMPURE)
+               | Primitives.JavaScript_EXP => doBinaryOp (J.EXP, PURE)
+               | Primitives.JavaScript_isFalsy =>
+                   doUnaryExp (fn a => J.UnaryExp (J.NOT, a), DISCARDABLE)
+               | Primitives.JavaScript_typeof =>
+                   doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), PURE)
+               | Primitives.JavaScript_global =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a)
+                     , DISCARDABLE
+                     )
+               | Primitives.JavaScript_setGlobal =>
+                   raise CodeGenError "unexpected JavaScript.setGlobal"
+               | Primitives.JavaScript_call =>
+                   doBinary (fn (f, args) =>
+                     J.MethodExp (f, "apply", vector [J.UndefinedExp, args]))
+               | Primitives.JavaScript_method =>
+                   doTernary (fn (obj, method, args) =>
+                     J.MethodExp
+                       (J.IndexExp (obj, method), "apply", vector [obj, args]))
+               | Primitives.JavaScript_new =>
+                   doBinary (fn (ctor, args) =>
+                     J.MethodExp
+                       ( J.VarExp (J.PredefinedId "Reflect")
+                       , "construct"
+                       , vector [ctor, args]
+                       ))
+               | Primitives.JavaScript_function =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_function"), vector [f]))
+               | Primitives.JavaScript_encodeUtf8 =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_encodeUtf8"), vector [f]))
+               | Primitives.JavaScript_decodeUtf8 =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_decodeUtf8"), vector [f]))
+               | Primitives.DelimCont_newPromptTag =>
+                   doNullaryExp
+                     ( fn () =>
+                         J.NewExp
+                           (J.VarExp (J.PredefinedId "_PromptTag"), vector [])
+                     , DISCARDABLE
+                     )
+               | _ =>
+                   raise CodeGenError
+                     ("primop " ^ Primitives.toString prim
+                      ^ " is not supported on JavaScript backend")
+             end
+         | (F.JsCallOp, f :: args) =>
+             J.CallExp
+               ( doExp (ctx, env, f)
+               , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+               )
+         | (F.JsMethodOp, obj :: name :: args) =>
+             J.CallExp
+               ( J.IndexExp (doExp (ctx, env, obj), doExp (ctx, env, name))
+               , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+               )
+         | (F.JsNewOp, ctor :: args) =>
+             J.NewExp
+               ( doExp (ctx, env, ctor)
+               , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+               )
+         | _ =>
+             raise CodeGenError
+               ("primop " ^ Printer.build (FPrinter.doPrimOp primOp)
+                ^ " is not supported on JavaScript backend"))
+    | doExp (ctx, env, N.Record fields) =
+        let
+          val fields =
+            Syntax.LabelMap.foldri
+              (fn (label, x, acc) => (label, doExp (ctx, env, x)) :: acc) []
+              fields
+          fun isTuple (_, []) = true
+            | isTuple (i, (Syntax.NumericLabel n, _) :: xs) =
+                i = n andalso isTuple (i + 1, xs)
+            | isTuple _ = false
+        in
+          if isTuple (1, fields) then
+            J.ArrayExp (vector (List.map #2 fields))
+          else
+            J.ObjectExp (vector
+              (List.map (fn (label, exp) => (LabelToObjectKey label, exp))
+                 fields))
+        end
+    | doExp (ctx, env, N.ExnTag {name, payloadTy}) =
+        raise CodeGenError "unexpected ExnTag"
+    (*
                (case result of
                   SOME result =>
                     let
@@ -1430,85 +1214,269 @@ struct
                         )
                     end
                 | NONE => doDecs (ctx, env, decs, finalExp, revStats))
-           | C.ValDec
-               { exp = C.Projection {label, record, fieldTypes = _}
-               , results = [result]
+                *)
+    | doExp (ctx, env, N.Projection {label, record, fieldTypes = _}) =
+        let
+          val label =
+            case label of
+              Syntax.NumericLabel n =>
+                J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
+            | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
+        in
+          J.IndexExp (doExp (ctx, env, record), label)
+        end
+    | doExp (ctx, env, N.Abs {contParam, params, body, attr = _}) =
+        (case #style ctx of
+           Backend.DIRECT_STYLE =>
+             if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
+               let
+                 val env' =
+                   { continuations =
+                       C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE)
+                   , subst = #subst env
+                   }
+               in
+                 J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector
+                   [J.FunctionExp
+                      ( Vector.map (VIdToJs ctx) (vector params)
+                      , vector (doCExp ctx env' body)
+                      )])
+               end
+             else
+               let
+                 val env' =
+                   { continuations =
+                       C.CVarMap.singleton (contParam, RETURN_SIMPLE)
+                   , subst = #subst env
+                   }
+               in
+                 J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector
+                   (doCExp ctx env' body))
+               end
+         | Backend.CPS =>
+             let
+               val env' =
+                 { continuations =
+                     C.CVarMap.singleton (contParam, TAILCALL contParam)
+                 , subst = #subst env
+                 }
+             in
+               J.FunctionExp
+                 ( vector (CVarToJs contParam :: List.map (VIdToJs ctx) params)
+                 , vector (doCExp ctx env' body)
+                 )
+             end)
+    | doExp (ctx, env, N.LogicalAnd (x, y)) =
+        J.BinExp (J.AND, doExp (ctx, env, x), doExp (ctx, env, y))
+    | doExp (ctx, env, N.LogicalOr (x, y)) =
+        J.BinExp (J.OR, doExp (ctx, env, x), doExp (ctx, env, y))
+  and doDecs (ctx, env, decs, finalExp, revStats) =
+    (case decs of
+       [] => List.revAppend (revStats, doCExp ctx env finalExp)
+     | dec :: decs =>
+         let
+           fun pure (NONE, _) =
+                 doDecs (ctx, env, decs, finalExp, revStats)
+             | pure (SOME result, exp) =
+                 doDecs
+                   ( ctx
+                   , env
+                   , decs
+                   , finalExp
+                   , ConstStat (result, exp) :: revStats
+                   )
+           fun discardable (NONE, _) =
+                 doDecs (ctx, env, decs, finalExp, revStats)
+             | discardable (SOME result, exp) =
+                 doDecs
+                   ( ctx
+                   , env
+                   , decs
+                   , finalExp
+                   , ConstStat (result, exp) :: revStats
+                   )
+           fun impure (NONE, exp) =
+                 doDecs (ctx, env, decs, finalExp, J.ExpStat exp :: revStats)
+             | impure (SOME result, exp) =
+                 doDecs
+                   ( ctx
+                   , env
+                   , decs
+                   , finalExp
+                   , ConstStat (result, exp) :: revStats
+                   )
+         in
+           case dec of
+             N.ValDec
+               { exp =
+                   N.PrimOp
+                     { primOp =
+                         F.RaiseOp
+                           (_ (* span as { start as { file, line, column }, ... } *))
+                     , tyargs = _
+                     , args = [exp]
+                     }
+               , results = _
+               } =>
+               List.rev
+                 (J.ThrowStat (doExp (ctx, env, exp)) :: revStats) (* TODO: location information *)
+           | N.ValDec
+               { exp = N.PrimOp {primOp as F.PrimCall prim, tyargs, args}
+               , results
                } =>
                let
-                 val label =
-                   case label of
-                     Syntax.NumericLabel n =>
-                       J.ConstExp (J.Numeral
-                         (Int.toString (n - 1))) (* non-negative *)
-                   | Syntax.IdentifierLabel s =>
-                       J.ConstExp (J.asciiStringAsWide s)
+                 fun action ([], stmt) =
+                       doDecs (ctx, env, decs, finalExp, stmt :: revStats)
+                   | action (_ :: _, stmt) =
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": unexpected number of results for an action")
+                 fun doNullary f =
+                   case args of
+                     [] => f ()
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
+                 fun doNullaryExp (f, purity) =
+                   doNullary (fn () =>
+                     case results of
+                       [result] =>
+                         (case purity of
+                            PURE => pure (result, f ())
+                          | DISCARDABLE => discardable (result, f ())
+                          | IMPURE => impure (result, f ()))
+                     | _ => raise CodeGenError "unexpected number of results")
+                 fun doUnary f =
+                   case args of
+                     [a] => f (doExp (ctx, env, a))
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
+                 fun doUnaryExp (f, purity) =
+                   doUnary (fn a =>
+                     case results of
+                       [result] =>
+                         (case purity of
+                            PURE => pure (result, f a)
+                          | DISCARDABLE => discardable (result, f a)
+                          | IMPURE => impure (result, f a))
+                     | _ => raise CodeGenError "unexpected number of results")
+                 fun doBinary f =
+                   case args of
+                     [a, b] => f (doExp (ctx, env, a), doExp (ctx, env, b))
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
+                 fun doBinaryExp (f, purity) =
+                   doBinary (fn (a, b) =>
+                     case results of
+                       [result] =>
+                         (case purity of
+                            PURE => pure (result, f (a, b))
+                          | DISCARDABLE => discardable (result, f (a, b))
+                          | IMPURE => impure (result, f (a, b)))
+                     | _ => raise CodeGenError "unexpected number of results")
+                 fun doBinaryOp (binop, pure) =
+                   doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
+                 fun doTernary f =
+                   case args of
+                     [a, b, c] =>
+                       f ( doExp (ctx, env, a)
+                         , doExp (ctx, env, b)
+                         , doExp (ctx, env, c)
+                         )
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
                in
-                 pure (result, J.IndexExp (doValue (ctx, env) record, label))
+                 case prim of
+                   Primitives.Ref_set =>
+                     doBinary (fn (a, b) =>
+                       action (results, J.AssignStat
+                         (J.IndexExp (a, J.ConstExp (J.Numeral "0")), b))) (* REPRESENTATION_OF_REF *)
+                 | Primitives.Unsafe_Array_update Primitives.I54 =>
+                     doTernary (fn (arr, i, v) =>
+                       action (results, J.AssignStat (J.IndexExp (arr, i), v)))
+                 | Primitives.JavaScript_set =>
+                     doTernary (fn (a, b, c) =>
+                       action (results, J.AssignStat (J.IndexExp (a, b), c)))
+                 | Primitives.JavaScript_setGlobal =>
+                     doBinary (fn (name, value) =>
+                       action (results, J.AssignStat
+                         ( J.IndexExp
+                             (J.VarExp (J.PredefinedId "globalThis"), name)
+                         , value
+                         )))
+                 | _ =>
+                     (case results of
+                        [result] =>
+                          impure (result, doExp
+                            ( ctx
+                            , env
+                            , N.PrimOp
+                                {primOp = primOp, tyargs = tyargs, args = args}
+                            ))
+                      | _ => raise CodeGenError "unexpected number of results")
                end
-           | C.ValDec
-               { exp = C.Abs {contParam, params, body, attr = _}
-               , results = [result]
-               } =>
-               (case #style ctx of
-                  DIRECT_STYLE =>
-                    if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
-                      let
-                        val env' =
-                          { continuations =
-                              C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE)
-                          , subst = #subst env
-                          }
-                      in
-                        pure
-                          ( result
-                          , J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector
-                              [J.FunctionExp
-                                 ( Vector.map (VIdToJs ctx) (vector params)
-                                 , vector (doCExp ctx env' body)
-                                 )])
-                          )
-                      end
-                    else
-                      let
-                        val env' =
-                          { continuations =
-                              C.CVarMap.singleton (contParam, RETURN_SIMPLE)
-                          , subst = #subst env
-                          }
-                      in
-                        pure
-                          ( result
-                          , J.FunctionExp
-                              ( Vector.map (VIdToJs ctx) (vector params)
-                              , vector (doCExp ctx env' body)
-                              )
-                          )
-                      end
-                | CPS =>
+           | N.ValDec {exp = N.ExnTag {name, payloadTy}, results = [result]} =>
+               (case result of
+                  SOME result =>
                     let
-                      val env' =
-                        { continuations =
-                            C.CVarMap.singleton (contParam, TAILCALL contParam)
-                        , subst = #subst env
-                        }
-                    in
-                      pure
-                        ( result
-                        , J.FunctionExp
-                            ( vector
-                                (CVarToJs contParam
-                                 :: List.map (VIdToJs ctx) params)
-                            , vector (doCExp ctx env' body)
+                      val stmts =
+                        [ let
+                            val value =
+                              case payloadTy of
+                                NONE => J.FunctionExp (vector [], vector [])
+                              | SOME _ =>
+                                  J.FunctionExp
+                                    ( vector [J.PredefinedId "payload"]
+                                    , vector
+                                        [J.AssignStat
+                                           ( J.IndexExp
+                                               ( J.ThisExp
+                                               , J.ConstExp
+                                                   (J.asciiStringAsWide
+                                                      "payload")
+                                               )
+                                           , J.VarExp (J.PredefinedId "payload")
+                                           )]
+                                    )
+                          in
+                            ConstStat (result, value)
+                          end
+                        , J.AssignStat
+                            ( J.IndexExp
+                                ( J.IndexExp
+                                    ( J.VarExp (J.UserDefinedId result)
+                                    , J.ConstExp
+                                        (J.asciiStringAsWide "prototype")
+                                    )
+                                , J.ConstExp (J.asciiStringAsWide "name")
+                                )
+                            , J.ConstExp (J.asciiStringAsWide name)
                             )
+                        ]
+                    in
+                      doDecs
+                        ( ctx
+                        , env
+                        , decs
+                        , finalExp
+                        , List.revAppend (stmts, revStats)
                         )
-                    end)
-           | C.ValDec {exp = _, results = []} =>
-               raise CodeGenError "unexpected number of results"
-           | C.ValDec {exp = _, results = _ :: _ :: _} =>
-               raise CodeGenError "unexpected number of results"
-           | C.RecDec defs =>
+                    end
+                | NONE => doDecs (ctx, env, decs, finalExp, revStats))
+           | N.ValDec {exp, results} =>
+               (case results of
+                  [result] => impure (result, doExp (ctx, env, exp))
+                | _ => raise CodeGenError "unexpected number of results")
+           | N.RecDec defs =>
                (case #style ctx of
-                  DIRECT_STYLE =>
+                  Backend.DIRECT_STYLE =>
                     let
                       val (decs', assignments) =
                         List.foldr
@@ -1571,7 +1539,7 @@ struct
                         , List.revAppend (decs' @ assignments, revStats)
                         )
                     end
-                | CPS =>
+                | Backend.CPS =>
                     let
                       val (decs', assignments) =
                         List.foldr
@@ -1607,12 +1575,12 @@ struct
                         , List.revAppend (decs' @ assignments, revStats)
                         )
                     end)
-           | C.ContDec {name, params, body, attr = _} =>
+           | N.ContDec {name, params, body} =>
                let
                  val escape =
                    case #style ctx of
-                     DIRECT_STYLE => false
-                   | CPS =>
+                     Backend.DIRECT_STYLE => false
+                   | Backend.CPS =>
                        CpsAnalyze.escapesTransitively (#contEscapeMap ctx, name)
                in
                  if escape then
@@ -1639,13 +1607,14 @@ struct
                    end
                  else
                    case (decs, finalExp, params) of
-                     ([], C.App {applied, cont, args, attr = _}, [SOME result]) =>
+                     ([], N.App {applied, cont, args, attr = _}, [SOME result]) =>
                        if cont = name then
                          List.revAppend
                            ( revStats
                            , ConstStat (result, J.CallExp
-                               ( doValue (ctx, env) applied
-                               , Vector.map (doValue (ctx, env)) (vector args)
+                               ( doExp (ctx, env, applied)
+                               , Vector.map (fn x => doExp (ctx, env, x))
+                                   (vector args)
                                )) :: doCExp ctx env body
                            )
                        else
@@ -1690,12 +1659,12 @@ struct
                            )
                        end
                end
-           | C.RecContDec defs =>
+           | N.RecContDec defs =>
                let
                  val escape =
                    case #style ctx of
-                     DIRECT_STYLE => false
-                   | CPS =>
+                     Backend.DIRECT_STYLE => false
+                   | Backend.CPS =>
                        List.exists
                          (fn (name, _, _) =>
                             CpsAnalyze.escapesTransitively
@@ -1741,11 +1710,11 @@ struct
                    let
                      datatype init =
                        INIT_WITH_VALUES of
-                         int * (C.Var option list) * C.Value list
+                         int * (C.Var option list) * N.Exp list
                      | NO_INIT
                      val init =
                        case (decs, finalExp) of
-                         ([], C.AppCont {applied, args}) =>
+                         ([], N.AppCont {applied, args}) =>
                            let
                              fun find (_, []) = NO_INIT
                                | find (i, (name, params, _) :: xs) =
@@ -1760,7 +1729,7 @@ struct
                      val loopLabel = J.UserDefinedId (genSym ctx)
                      datatype needs_which =
                        NEED_WHICH of J.Id
-                     | NO_WHICH of C.CVar * (C.Var option) list * C.CExp
+                     | NO_WHICH of C.CVar * (C.Var option) list * N.Stat
                      val maxargs =
                        List.foldl
                          (fn ((_, params, _), n) =>
@@ -1816,11 +1785,12 @@ struct
                              val args' =
                                case optWhich of
                                  NO_WHICH _ =>
-                                   List.map (doValue (ctx, env)) args
+                                   List.map (fn x => doExp (ctx, env, x)) args
                                | NEED_WHICH _ =>
                                    J.ConstExp
                                      (J.Numeral (Int.toString initialWhich))
-                                   :: List.map (doValue (ctx, env)) args
+                                   ::
+                                   List.map (fn x => doExp (ctx, env, x)) args
                            in
                              if List.null args' then
                                []
@@ -1927,7 +1897,7 @@ struct
                        )
                    end
                end
-           | C.ESImportDec {pure = _, specs, moduleName} =>
+           | N.ESImportDec {pure = _, specs, moduleName} =>
                let
                  val imports = !(#imports ctx)
                  fun go ([], env, acc) =
@@ -1983,16 +1953,16 @@ struct
                  doDecs (ctx, env', decs, finalExp, revStats)
                end
          end)
-  and doCExp (ctx: Context) (env: Env) (C.Let {decs, cont}) : J.Stat list =
+  and doCExp (ctx: Context) (env: Env) (N.Let {decs, cont}) : J.Stat list =
         doDecs (ctx, env, decs, cont, [])
-    | doCExp ctx env (C.App {applied, cont, args, attr = _}) =
+    | doCExp ctx env (N.App {applied, cont, args, attr = _}) =
         (case C.CVarMap.find (#continuations env, cont) of
            SOME (TAILCALL k) =>
              [J.ReturnStat (SOME (J.ArrayExp (vector
                 [ J.ConstExp J.False
-                , doValue (ctx, env) applied
+                , doExp (ctx, env, applied)
                 , J.ArrayExp (vector
-                    (doCVar k :: List.map (doValue (ctx, env)) args))
+                    (doCVar k :: List.map (fn x => doExp (ctx, env, x)) args))
                 ])))] (* continuation passing style *)
          | SOME (BREAK_TO {label, which, params = [p]}) =>
              let
@@ -2005,13 +1975,13 @@ struct
                  case p of
                    SOME p =>
                      J.AssignStat (J.VarExp p, J.CallExp
-                       ( doValue (ctx, env) applied
-                       , Vector.map (doValue (ctx, env)) (vector args)
+                       ( doExp (ctx, env, applied)
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                        ))
                  | NONE =>
                      J.ExpStat (J.CallExp
-                       ( doValue (ctx, env) applied
-                       , Vector.map (doValue (ctx, env)) (vector args)
+                       ( doExp (ctx, env, applied)
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                        ))
              in
                call :: setWhich @ [J.BreakStat (SOME label)] (* direct style *)
@@ -2027,13 +1997,13 @@ struct
                  case p of
                    SOME p =>
                      J.AssignStat (J.VarExp p, J.CallExp
-                       ( doValue (ctx, env) applied
-                       , Vector.map (doValue (ctx, env)) (vector args)
+                       ( doExp (ctx, env, applied)
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                        ))
                  | NONE =>
                      J.ExpStat (J.CallExp
-                       ( doValue (ctx, env) applied
-                       , Vector.map (doValue (ctx, env)) (vector args)
+                       ( doExp (ctx, env, applied)
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                        ))
              in
                call
@@ -2042,24 +2012,26 @@ struct
          | SOME RETURN_TRAMPOLINE =>
              [J.ReturnStat (SOME (J.ArrayExp (vector
                 [ J.ConstExp J.False
-                , doValue (ctx, env) applied
-                , J.ArrayExp (Vector.map (doValue (ctx, env)) (vector args))
+                , doExp (ctx, env, applied)
+                , J.ArrayExp
+                    (Vector.map (fn x => doExp (ctx, env, x)) (vector args))
                 ])))] (* direct style, tail call *)
          | SOME RETURN_SIMPLE =>
              raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation")
-    | doCExp ctx env (C.AppCont {applied, args}) =
-        applyCont (ctx, env, applied, List.map (doValue (ctx, env)) args)
-    | doCExp ctx env (C.If {cond, thenCont, elseCont}) =
+    | doCExp ctx env (N.AppCont {applied, args}) =
+        applyCont
+          (ctx, env, applied, List.map (fn x => doExp (ctx, env, x)) args)
+    | doCExp ctx env (N.If {cond, thenCont, elseCont}) =
         [J.IfStat
-           ( doValue (ctx, env) cond
+           ( doExp (ctx, env, cond)
            , vector (doCExp ctx env thenCont)
            , vector (doCExp ctx env elseCont)
            )]
     | doCExp ctx env
-        (C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
+        (N.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
         (case #style ctx of
-           DIRECT_STYLE =>
+           Backend.DIRECT_STYLE =>
              let
                val env' =
                  { continuations = C.CVarMap.singleton
@@ -2072,7 +2044,7 @@ struct
                [J.TryCatchStat (vector (doCExp ctx env' body), e, vector
                   (doCExp ctx env h))]
              end
-         | CPS =>
+         | Backend.CPS =>
              let
                val escape =
                  CpsAnalyze.escapesTransitively
@@ -2140,7 +2112,7 @@ struct
                      )
                  end
              end)
-    | doCExp _ _ C.Unreachable = []
+    | doCExp _ _ N.Unreachable = []
 
   fun doProgramDirect ctx cont cexp =
     let

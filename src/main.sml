@@ -7,7 +7,9 @@ sig
   val main: string * string list -> unit
 end =
 struct
-  structure S = CommandLineSettings;
+  structure S = CommandLineSettings
+  datatype lua_runtime = datatype Backend.lua_runtime
+  datatype backend = datatype Backend.backend
 
   datatype OutputMode = ExecutableMode | LibraryMode
 
@@ -48,11 +50,6 @@ struct
         \"
       )
   datatype dump_mode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-  datatype lua_runtime = LUA_PLAIN | LUA_CONTINUATIONS
-  datatype backend =
-    BACKEND_LUA of lua_runtime
-  | BACKEND_LUAJIT
-  | BACKEND_JS of CodeGenJs.code_style
   datatype subcommand = SUBCOMMAND_COMPILE
   type options =
     { subcommand: subcommand option
@@ -125,7 +122,7 @@ struct
           if !(#simplificationOccurred ctx') then optimizeCps ctx cexp (n - 1)
           else cexp
         end
-  fun emit (opts as {backend = BACKEND_LUA runtime, ...}: options)
+  fun emit (opts as {backend as BACKEND_LUA runtime, ...}: options)
         (_ (* targetInfo *)) fileName cont nextId cexp _ =
         let
           val timer = Timer.startCPUTimer ()
@@ -143,7 +140,7 @@ struct
             , targetLuaVersion = CodeGenLua.LUA5_3
             , hasDelimitedContinuations = runtime = LUA_CONTINUATIONS
             }
-          val nested = NSyntax.toNested (NSyntax.fromCExp cexp)
+          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
           val lua =
             case runtime of
               LUA_PLAIN => CodeGenLua.doProgram luactx cont nested
@@ -194,8 +191,8 @@ struct
         in
           ()
         end
-    | emit (opts as {backend = BACKEND_LUAJIT, ...}) _ fileName cont nextId cexp
-        _ =
+    | emit (opts as {backend as BACKEND_LUAJIT, ...}) _ fileName cont nextId
+        cexp _ =
         let
           val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
@@ -207,7 +204,7 @@ struct
             , targetLuaVersion = CodeGenLua.LUAJIT
             , hasDelimitedContinuations = false
             }
-          val nested = NSyntax.toNested (NSyntax.fromCExp cexp)
+          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
           val lua = CodeGenLua.doProgram luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
@@ -256,7 +253,7 @@ struct
         in
           ()
         end
-    | emit (opts as {backend = BACKEND_JS style, ...}) _ fileName cont nextId
+    | emit (opts as {backend as BACKEND_JS style, ...}) _ fileName cont nextId
         cexp export =
         let
           val timer = Timer.startCPUTimer ()
@@ -264,9 +261,9 @@ struct
           val base = OS.Path.base fileName
           val mlinit_js =
             case style of
-              CodeGenJs.DIRECT_STYLE =>
+              Backend.DIRECT_STYLE =>
                 OS.Path.joinDirFile {dir = #libDir opts, file = "mlinit.js"}
-            | CodeGenJs.CPS =>
+            | Backend.CPS =>
                 OS.Path.joinDirFile {dir = #libDir opts, file = "mlinit-cps.js"}
           val mlinit = InitFile.readFile (InitFile.JS, mlinit_js)
           val jsctx =
@@ -275,20 +272,21 @@ struct
             , style = style
             , imports = ref []
             }
+          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
           val js =
             case (style, export) of
-              (CodeGenJs.DIRECT_STYLE, ToFSyntax.NO_EXPORT) =>
-                CodeGenJs.doProgramDirect jsctx cont cexp
-            | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_VALUE) =>
-                CodeGenJs.doProgramDirectDefaultExport jsctx cont cexp
-            | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_NAMED names) =>
-                CodeGenJs.doProgramDirectNamedExport jsctx cont cexp names
-            | (CodeGenJs.CPS, ToFSyntax.NO_EXPORT) =>
-                CodeGenJs.doProgramCPS jsctx cont cexp
-            | (CodeGenJs.CPS, ToFSyntax.EXPORT_VALUE) =>
-                CodeGenJs.doProgramCPSDefaultExport jsctx cont cexp
-            | (CodeGenJs.CPS, ToFSyntax.EXPORT_NAMED names) =>
-                CodeGenJs.doProgramCPSNamedExport jsctx cont cexp names
+              (Backend.DIRECT_STYLE, ToFSyntax.NO_EXPORT) =>
+                CodeGenJs.doProgramDirect jsctx cont nested
+            | (Backend.DIRECT_STYLE, ToFSyntax.EXPORT_VALUE) =>
+                CodeGenJs.doProgramDirectDefaultExport jsctx cont nested
+            | (Backend.DIRECT_STYLE, ToFSyntax.EXPORT_NAMED names) =>
+                CodeGenJs.doProgramDirectNamedExport jsctx cont nested names
+            | (Backend.CPS, ToFSyntax.NO_EXPORT) =>
+                CodeGenJs.doProgramCPS jsctx cont nested
+            | (Backend.CPS, ToFSyntax.EXPORT_VALUE) =>
+                CodeGenJs.doProgramCPSDefaultExport jsctx cont nested
+            | (Backend.CPS, ToFSyntax.EXPORT_NAMED names) =>
+                CodeGenJs.doProgramCPSNamedExport jsctx cont nested names
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram {nextVId = nextId} js
@@ -355,13 +353,13 @@ struct
           , case #backend opts of
               BACKEND_LUA _ => "lua"
             | BACKEND_LUAJIT => "luajit"
-            | BACKEND_JS CodeGenJs.DIRECT_STYLE => "js"
-            | BACKEND_JS CodeGenJs.CPS => "js-cps"
+            | BACKEND_JS Backend.DIRECT_STYLE => "js"
+            | BACKEND_JS Backend.CPS => "js-cps"
           )
         , ( "DELIMITED_CONTINUATIONS"
           , case #backend opts of
               BACKEND_LUA LUA_CONTINUATIONS => "oneshot"
-            | BACKEND_JS CodeGenJs.CPS => "multishot"
+            | BACKEND_JS Backend.CPS => "multishot"
             | _ => "none"
           )
         ]
@@ -506,8 +504,8 @@ struct
         case #backend opts of
           BACKEND_LUA _ => true
         | BACKEND_LUAJIT => true
-        | BACKEND_JS CodeGenJs.DIRECT_STYLE => false
-        | BACKEND_JS CodeGenJs.CPS => true
+        | BACKEND_JS Backend.DIRECT_STYLE => false
+        | BACKEND_JS Backend.CPS => true
       val cexp =
         CpsTransform.transformT
           ( { targetInfo = targetInfo
@@ -712,9 +710,9 @@ struct
     | SOME (OPT_TARGET_LUAJIT, args) =>
         parseArgs (S.set.backend BACKEND_LUAJIT opts) args
     | SOME (OPT_TARGET_NODEJS, args) =>
-        parseArgs (S.set.backend (BACKEND_JS CodeGenJs.DIRECT_STYLE) opts) args
+        parseArgs (S.set.backend (BACKEND_JS Backend.DIRECT_STYLE) opts) args
     | SOME (OPT_TARGET_NODEJS_CPS, args) =>
-        parseArgs (S.set.backend (BACKEND_JS CodeGenJs.CPS) opts) args
+        parseArgs (S.set.backend (BACKEND_JS Backend.CPS) opts) args
     | SOME (OPT_HELP, _) => (showHelp (); OS.Process.exit OS.Process.success)
     | SOME (OPT_VERSION, _) =>
         (showVersion (); OS.Process.exit OS.Process.success)
