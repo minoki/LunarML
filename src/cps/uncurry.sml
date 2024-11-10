@@ -146,6 +146,7 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
+      | C.Raise _ => exp
       | C.Unreachable => exp
     val goCExp = simplifyCExp
   end (* local *)

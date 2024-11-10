@@ -1737,31 +1737,6 @@ struct
          in
            case dec of
              N.ValDec
-               { exp =
-                   N.PrimOp
-                     { primOp = F.RaiseOp {start as {file, line, column}, ...}
-                     , tyargs = _
-                     , args = [exp]
-                     }
-               , results = _
-               } =>
-               let
-                 val exp = doExp (ctx, env, exp)
-                 val locationInfo =
-                   if start = SourcePos.nullPos then
-                     L.ConstExp L.Nil
-                   else
-                     L.ConstExp (L.LiteralString
-                       (OS.Path.file file ^ ":" ^ Int.toString line ^ ":"
-                        ^ Int.toString column))
-               in
-                 List.rev
-                   (L.CallStat
-                      ( L.VarExp (L.PredefinedId "_raise")
-                      , vector [exp, locationInfo]
-                      ) :: revStats) (* discard continuation *)
-               end
-           | N.ValDec
                { exp = N.PrimOp {primOp as F.PrimCall prim, tyargs, args}
                , results
                } =>
@@ -2707,6 +2682,7 @@ struct
             | containsNestedBlock (N.AppCont _) = false
             | containsNestedBlock (N.If _) = true
             | containsNestedBlock (N.Handle _) = true
+            | containsNestedBlock (N.Raise _) = false
             | containsNestedBlock N.Unreachable = false
           and containsNestedBlockDec (N.ValDec _) = false
             | containsNestedBlockDec (N.RecDec _) = true
@@ -2795,6 +2771,20 @@ struct
                   ))
               )
           ]
+        end
+    | doCExp (ctx, env, _, N.Raise ({start as {file, line, column}, ...}, exp)) =
+        let
+          val exp = doExp (ctx, env, exp)
+          val locationInfo =
+            if start = SourcePos.nullPos then
+              L.ConstExp L.Nil
+            else
+              L.ConstExp (L.LiteralString
+                (OS.Path.file file ^ ":" ^ Int.toString line ^ ":"
+                 ^ Int.toString column))
+        in
+          [L.CallStat
+             (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo])]
         end
     | doCExp (_, _, _, N.Unreachable) = []
 

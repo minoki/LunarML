@@ -49,6 +49,7 @@ sig
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
+  | Raise of SourcePos.span * Exp
   | Unreachable
   val containsApp: Stat -> bool
   val fromCExp: CSyntax.CExp -> Stat
@@ -99,6 +100,7 @@ struct
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
+  | Raise of SourcePos.span * Exp
   | Unreachable
 
   fun containsAppDec (ValDec _) = false
@@ -115,6 +117,7 @@ struct
         containsApp thenCont orelse containsApp elseCont
     | containsApp (Handle {body, handler = (_, h), ...}) =
         containsApp body orelse containsApp h
+    | containsApp (Raise _) = false
     | containsApp Unreachable = false
 
   local
@@ -179,6 +182,8 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
+      | goCExp (C.Raise (span, x)) =
+          Raise (span, Value x)
       | goCExp C.Unreachable = Unreachable
   in val fromCExp = goCExp
   end (* local *)
@@ -230,6 +235,7 @@ struct
               (goExp cond; goStat thenCont; goStat elseCont)
           | goStat (Handle {body, handler = (_, h), ...}) =
               (goStat body; goStat h)
+          | goStat (Raise (_, x)) = goExp x
           | goStat Unreachable = ()
       in
         goStat
@@ -340,14 +346,14 @@ struct
                    If {cond = cond, thenCont = thenCont, elseCont = elseCont})
                 (goExp cond)
           | goStat (Handle _) = NONE
+          | goStat (Raise (span, x)) =
+              Option.map (fn x => Raise (span, x)) (goExp x)
           | goStat Unreachable = NONE
       in
         {goValue = goValue, goExp = goExp, goDecs = goDecs, goStat = goStat}
       end
-    fun canInlineLua (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
-      | canInlineLua _ = true
-    fun canInlineJs (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
-      | canInlineJs (ExnTag _) = false
+    fun canInlineLua _ = true
+    fun canInlineJs (ExnTag _) = false
       | canInlineJs _ = true
     val DEPTH_LIMIT = 10
     fun toNestedImpl (backend, usage) =
@@ -574,6 +580,8 @@ struct
                 , successfulExitIn = successfulExitIn
                 , successfulExitOut = successfulExitOut
                 }
+          | goStat (Raise (span, x)) =
+              Raise (span, goExp x)
           | goStat Unreachable = Unreachable
       in
         goStat

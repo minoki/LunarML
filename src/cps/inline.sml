@@ -959,6 +959,7 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
             }
+      | C.Raise (span, x) => C.Raise (span, CpsSimplify.substValue subst x)
       | C.Unreachable => e
     val General_exnName =
       let

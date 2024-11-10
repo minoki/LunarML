@@ -74,6 +74,7 @@ sig
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
+  | Raise of SourcePos.span * Value
   | Unreachable
   val isDiscardable: SimpleExp -> bool
   val containsApp: CExp -> bool
@@ -170,6 +171,7 @@ struct
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
+  | Raise of SourcePos.span * Value
   | Unreachable
   local structure F = FSyntax
   in
@@ -258,6 +260,7 @@ struct
           containsApp thenCont orelse containsApp elseCont
       | containsApp (Handle {body, handler = (_, h), ...}) =
           containsApp body orelse containsApp h
+      | containsApp (Raise _) = false
       | containsApp Unreachable = false
 
     fun freeVarsInValue bound (v, acc) =
@@ -361,6 +364,8 @@ struct
           ) =
           freeVarsInExp (bound, body, freeVarsInExp
             (TypedSyntax.VIdSet.add (bound, e), h, acc))
+      | freeVarsInExp (bound, Raise (_, x), acc) =
+          freeVarsInValue bound (x, acc)
       | freeVarsInExp (_, Unreachable, acc) = acc
 
     fun recurseCExp f =
@@ -416,6 +421,7 @@ struct
                    , successfulExitIn = successfulExitIn
                    , successfulExitOut = successfulExitOut
                    }
+             | Raise _ => e
              | Unreachable => e)
       in
         goExp
@@ -570,6 +576,9 @@ struct
                         })))
       | F.PrimExp (F.PrimCall Primitives.Unsafe_cast, _, [arg]) =>
           transformX (ctx, env) arg (revDecs, k)
+      | F.PrimExp (F.RaiseOp span, _, [arg]) =>
+          transform (ctx, env) arg {revDecs = revDecs, resultHint = NONE}
+            (fn (revDecs, arg) => prependRevDecs (revDecs, C.Raise (span, arg)))
       | F.PrimExp (F.PrimCall Primitives.unreachable, _, _) => C.Unreachable
       | F.PrimExp (primOp, tyargs, args) =>
           foldlCont
@@ -1041,6 +1050,7 @@ struct
             , successfulExitIn = _
             , successfulExitOut = _
             } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
+        | C.Raise _ => threshold
         | C.Unreachable => threshold
     fun substValue (subst: C.Value TypedSyntax.VIdMap.map) (x as C.Var v) =
           (case TypedSyntax.VIdMap.find (subst, v) of
@@ -1138,6 +1148,8 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = substCVar csubst successfulExitOut
             }
+      | substCExp (subst, _, C.Raise (span, x)) =
+          C.Raise (span, substValue subst x)
       | substCExp (_, _, e as C.Unreachable) = e
     val substCExp = fn (subst, csubst, e) =>
       if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
@@ -1362,6 +1374,8 @@ struct
               , successfulExitOut = substCVar csubst successfulExitOut
               }
           end
+      | alphaConvert (_, subst, _, C.Raise (span, x)) =
+          C.Raise (span, substValue subst x)
       | alphaConvert (_, _, _, e as C.Unreachable) = e
     type value_info = {exp: C.SimpleExp option, isDiscardableFunction: bool}
     fun isDiscardableDec (dec, env: value_info TypedSyntax.VIdMap.map) =
@@ -1416,6 +1430,7 @@ struct
               }
           ) =
           isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
+      | isDiscardableExp (_, C.Raise _) = false
       | isDiscardableExp (_, C.Unreachable) = false
     fun prependDecs ([], cont) = cont
       | prependDecs (decs, C.Let {decs = decs', cont}) =
@@ -1530,6 +1545,7 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
+      | finalizeCExp (_, e as C.Raise _) = e
       | finalizeCExp (_, e as C.Unreachable) = e
   end
 end;
@@ -1682,6 +1698,7 @@ struct
               free;
             go (table, level, body, C.CVarSet.union (acc, free))
           end
+      | go (_, _, C.Raise _, acc) = acc
       | go (_, _, C.Unreachable, acc) = acc
     fun contEscape (cont, cexp) =
       let

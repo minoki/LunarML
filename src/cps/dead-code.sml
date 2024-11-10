@@ -88,6 +88,7 @@ local
             , acc
             ) =
             goExp (g, body, goExp (g, h, acc))
+        | goExp (_, C.Raise (_, x), acc) = addValue (x, acc)
         | goExp (_, C.Unreachable, acc) = acc
       (*: val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
       fun makeGraph program =
@@ -333,6 +334,7 @@ local
               ; add (env, e)
               ; goCExp (env, renv, cenv, crenv, h)
               )
+          | C.Raise (_, x) => useValue env x
           | C.Unreachable => ()
       end (* local *)
       fun analyze exp =
@@ -755,6 +757,7 @@ in
               , successfulExitOut =
                   CpsSimplify.substCVar csubst successfulExitOut
               }
+        | C.Raise (span, x) => C.Raise (span, CpsSimplify.substValue subst x)
         | C.Unreachable => e
       fun goCExp (ctx: CpsSimplify.Context, exp) =
         let

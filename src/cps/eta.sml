@@ -108,6 +108,7 @@ struct
           , successfulExitIn = successfulExitIn
           , successfulExitOut = goCont (env, successfulExitOut)
           }
+    | C.Raise _ => exp
     | C.Unreachable => exp
   and goFunction exp = goCExp (C.CVarMap.empty, exp)
   fun go (_: CpsSimplify.Context, exp) = goFunction exp

@@ -288,6 +288,7 @@ local
               ; add (env, e)
               ; goCExp (env, renv, cenv, crenv, h)
               )
+          | C.Raise (_, x) => useValue env x
           | C.Unreachable => ()
       end (* local *)
       fun analyze exp =
@@ -991,6 +992,7 @@ in
               , successfulExitIn = successfulExitIn
               , successfulExitOut = successfulExitOut
               }
+        | C.Raise _ => e
         | C.Unreachable => e
       fun goCExp (ctx: CpsSimplify.Context, exp) =
         let

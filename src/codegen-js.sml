@@ -1308,19 +1308,6 @@ struct
          in
            case dec of
              N.ValDec
-               { exp =
-                   N.PrimOp
-                     { primOp =
-                         F.RaiseOp
-                           (_ (* span as { start as { file, line, column }, ... } *))
-                     , tyargs = _
-                     , args = [exp]
-                     }
-               , results = _
-               } =>
-               List.rev
-                 (J.ThrowStat (doExp (ctx, env, exp)) :: revStats) (* TODO: location information *)
-           | N.ValDec
                { exp = N.PrimOp {primOp as F.PrimCall prim, tyargs, args}
                , results
                } =>
@@ -2112,6 +2099,9 @@ struct
                      )
                  end
              end)
+    | doCExp ctx env
+        (N.Raise (_ (* span as {start as {file, line, column}} *), exp)) =
+        [J.ThrowStat (doExp (ctx, env, exp))] (* TODO: location information *)
     | doCExp _ _ N.Unreachable = []
 
   fun doProgramDirect ctx cont cexp =

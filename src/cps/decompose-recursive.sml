@@ -137,6 +137,7 @@ struct
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
+      | C.Raise _ => exp
       | C.Unreachable => exp
   end (* local *)
 end; (* structure CpsDecomposeRecursive *)
