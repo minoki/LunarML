@@ -1,8 +1,21 @@
 on: [push, pull_request]
-name: ci
+name: Build / Test / Release
 jobs:
+  prepare-release:
+    name: Prepare a release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make a release
+        run: |
+          gh release create "${{ github.ref_name }}" --draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+
   build-and-test:
-    name: build-and-test
+    name: Build and test
+    needs: [prepare-release]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -49,3 +62,39 @@ jobs:
           path: |
             lunarml-*.tar.gz
             lunarml-*.zip
+      - name: Attach tarballs to the release
+        run: |
+          gh release upload "${{ github.ref_name }}" lunarml-*.tar.gz lunarml-*.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+
+  build-docs:
+    name: Build docs
+    needs: [prepare-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rye
+        uses: eifinger/setup-rye@v4
+        with:
+          enable-cache: true
+          working-directory: 'docs/'
+      - name: Sync dependencies
+        run: rye sync
+        working-directory: ./docs
+      - name: Build HTML
+        run: make -C docs SPHINXBUILD="rye run sphinx-build" html
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-docs
+          path: docs/_build/html/
+      - name: Attach docs to the release
+        run: |
+          mv docs/_build/html "lunarml-docs-${{ github.ref_name }}"
+          zip -r "lunarml-docs-${{ github.ref_name }}.zip" "lunarml-docs-${{ github.ref_name }}"
+          gh release upload "${{ github.ref_name }}" "lunarml-docs-${{ github.ref_name }}.zip"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
