@@ -1,3 +1,9 @@
+## Version 0.2.1 (2024-11-12)
+
+* `OS.Path` now supports UNC paths on Windows
+* Code generators now emit nested expressions
+* `Time`: Change time epoch to avoid an issue on Windows
+
 ## Version 0.2.0 (2024-08-06)
 
 * More work on IO: `PrimIO`/`ImperativeIO`/`TextIO.StreamIO`/`BinIO.StreamIO`

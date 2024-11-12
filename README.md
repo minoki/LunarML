@@ -61,8 +61,8 @@ $ lunarml compile example/hello.sml
 Alternatively, you can use Docker to build and run LunarML.
 
 ```sh-session
-$ docker build --platform linux/amd64 -f package/docker/Dockerfile -t lunarml:0.2.0 .
-$ docker run --rm -v "$(pwd)":/work -w /work --platform linux/amd64 lunarml:0.2.0 lunarml compile example/hello.sml
+$ docker build --platform linux/amd64 -f package/docker/Dockerfile -t lunarml:0.2.1 .
+$ docker run --rm -v "$(pwd)":/work -w /work --platform linux/amd64 lunarml:0.2.1 lunarml compile example/hello.sml
 $ lua example/hello.lua
 Hello world!
 ```

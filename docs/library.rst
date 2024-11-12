@@ -1369,6 +1369,8 @@ structure OS.Path
    end
    structure OS.Path : OS_PATH
 
+On Windows, UNC paths are supported.
+
 structure CommandLine
 ^^^^^^^^^^^^^^^^^^^^^
 
