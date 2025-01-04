@@ -1704,6 +1704,7 @@ Lua features are accessible via the ``Lua`` structure in ``$(SML_LIB)/basis/lua.
      val NIL : value  (* Lua nil *)
      val isNil : value -> bool  (* x == nil *)
      val isFalsy : value -> bool  (* not x *)
+     val isTruthy : value -> bool  (* not (not x) *)
      val fromBool : bool -> value
      val fromInt : int -> value
      val fromInt54 : Int54.int -> value

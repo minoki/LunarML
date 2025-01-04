@@ -21,6 +21,7 @@ structure Lua : sig
               val NIL : value  (* Lua nil *)
               val isNil : value -> bool  (* x == nil *)
               val isFalsy : value -> bool  (* not x *)
+              val isTruthy : value -> bool  (* not (not x) *)
               val fromBool : bool -> value
               val fromInt : int -> value
               val fromWord : word -> value
@@ -268,6 +269,7 @@ fun set (t, k, v) = _primCall "Lua.set" (t, k, v)
 fun setField (t, name, v) = _primCall "Lua.set" (t, fromString name, v)
 fun isNil x = _primCall "Lua.isNil" (x)
 fun isFalsy x = _primCall "Lua.isFalsy" (x)
+fun isTruthy x = not (isFalsy x)
 fun x + y = _primCall "Lua.+" (x, y)
 fun x - y = _primCall "Lua.-" (x, y)
 fun x * y = _primCall "Lua.*" (x, y)
