@@ -1999,6 +1999,7 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val >>> : value * value -> value
      val ** : value * value -> value
      val isFalsy : value -> bool
+     val isTruthy : value -> bool
      val typeof : value -> WideString.string
      val newObject : unit -> value
      val encodeUtf8 : WideString.string -> string

@@ -40,6 +40,7 @@ structure JavaScript : sig
               val >>> : value * value -> value
               val ** : value * value -> value
               val isFalsy : value -> bool
+              val isTruthy : value -> bool
               val typeof : value -> WideString.string
               val newObject : unit -> value
               val encodeUtf8 : WideString.string -> string
@@ -144,6 +145,7 @@ fun setField (obj, key, value) = _primCall "JavaScript.set" (obj, fromWideString
 fun global name = _primCall "JavaScript.global" (name)
 fun setGlobal (name, value) = _primCall "JavaScript.setGlobal" (name, value)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)
+fun isTruthy x = not (isFalsy x)
 fun x + y = _primCall "JavaScript.+" (x, y)
 fun x - y = _primCall "JavaScript.-" (x, y)
 fun x * y = _primCall "JavaScript.*" (x, y)
