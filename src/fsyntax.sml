@@ -46,12 +46,12 @@ sig
   | JsNewOp (* value argument: constructor, arguments *)
   | LuaCallOp (* value argument: function, arguments *)
   | LuaCall1Op (* value argument: function, arguments *)
-  | LuaCall2Op (* value argument: function, arguments *)
-  | LuaCall3Op (* value argument: function, arguments *)
+  | LuaCallNOp of
+      int (* returnArity (int), value argument: function, arguments *)
   | LuaMethodOp of string (* value argument: object, arguments *)
   | LuaMethod1Op of string (* value argument: object, arguments *)
-  | LuaMethod2Op of string (* value argument: object, arguments *)
-  | LuaMethod3Op of string (* value argument: object, arguments *)
+  | LuaMethodNOp of
+      string * int (* returnArity (int), value argument: object, arguments *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -205,12 +205,12 @@ struct
   | JsNewOp (* value argument: constructor, arguments *)
   | LuaCallOp (* value argument: function, arguments *)
   | LuaCall1Op (* value argument: function, arguments *)
-  | LuaCall2Op (* value argument: function, arguments *)
-  | LuaCall3Op (* value argument: function, arguments *)
+  | LuaCallNOp of
+      int (* returnArity (int), value argument: function, arguments *)
   | LuaMethodOp of string (* value argument: object, arguments *)
   | LuaMethod1Op of string (* value argument: object, arguments *)
-  | LuaMethod2Op of string (* value argument: object, arguments *)
-  | LuaMethod3Op of string (* value argument: object, arguments *)
+  | LuaMethodNOp of
+      string * int (* returnArity (int), value argument: object, arguments *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -1069,12 +1069,10 @@ struct
       | print_PrimOp JsNewOp = "JsNewOp"
       | print_PrimOp LuaCallOp = "LuaCallOp"
       | print_PrimOp LuaCall1Op = "LuaCall1Op"
-      | print_PrimOp LuaCall2Op = "LuaCall2Op"
-      | print_PrimOp LuaCall3Op = "LuaCall3Op"
+      | print_PrimOp (LuaCallNOp _) = "LuaCallNOp"
       | print_PrimOp (LuaMethodOp _) = "LuaMethodOp"
       | print_PrimOp (LuaMethod1Op _) = "LuaMethod1Op"
-      | print_PrimOp (LuaMethod2Op _) = "LuaMethod2Op"
-      | print_PrimOp (LuaMethod3Op _) = "LuaMethod3Op"
+      | print_PrimOp (LuaMethodNOp _) = "LuaMethodNOp"
     fun print_Pat (WildcardPat _) = "WildcardPat"
       | print_Pat
           (SConPat

@@ -1,3 +1,9 @@
+## Version X.X.X
+
+* JavaScript: Add `JavaScript.isTruthy`
+* Lua: Add `Lua.isTruthy`
+* Lua: Add `Lua.call4`/.../`Lua.call9`/`Lua.method4`/.../`Lua.method9`
+
 ## Version 0.2.1 (2024-11-12)
 
 * `OS.Path` now supports UNC paths on Windows

@@ -1585,6 +1585,18 @@ struct
                    raise CodeGenError "unexpected Lua.call2"
                | Primitives.Lua_call3 =>
                    raise CodeGenError "unexpected Lua.call3"
+               | Primitives.Lua_call4 =>
+                   raise CodeGenError "unexpected Lua.call4"
+               | Primitives.Lua_call5 =>
+                   raise CodeGenError "unexpected Lua.call5"
+               | Primitives.Lua_call6 =>
+                   raise CodeGenError "unexpected Lua.call6"
+               | Primitives.Lua_call7 =>
+                   raise CodeGenError "unexpected Lua.call7"
+               | Primitives.Lua_call8 =>
+                   raise CodeGenError "unexpected Lua.call8"
+               | Primitives.Lua_call9 =>
+                   raise CodeGenError "unexpected Lua.call9"
                | Primitives.Lua_method =>
                    doTernary (fn (obj, name, args) =>
                      L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
@@ -1596,6 +1608,18 @@ struct
                    raise CodeGenError "unexpected Lua.method2"
                | Primitives.Lua_method3 =>
                    raise CodeGenError "unexpected Lua.method3"
+               | Primitives.Lua_method4 =>
+                   raise CodeGenError "unexpected Lua.method4"
+               | Primitives.Lua_method5 =>
+                   raise CodeGenError "unexpected Lua.method5"
+               | Primitives.Lua_method6 =>
+                   raise CodeGenError "unexpected Lua.method6"
+               | Primitives.Lua_method7 =>
+                   raise CodeGenError "unexpected Lua.method7"
+               | Primitives.Lua_method8 =>
+                   raise CodeGenError "unexpected Lua.method8"
+               | Primitives.Lua_method9 =>
+                   raise CodeGenError "unexpected Lua.method9"
                | Primitives.Lua_global =>
                    doUnaryExp
                      ( fn x =>
@@ -1629,8 +1653,8 @@ struct
                ( doExp (ctx, env, f)
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                )
-         | (F.LuaCall2Op, _) => raise CodeGenError "unexpected Lua.call2"
-         | (F.LuaCall3Op, _) => raise CodeGenError "unexpected Lua.call3"
+         | (F.LuaCallNOp n, _) =>
+             raise CodeGenError ("unexpected Lua.call" ^ Int.toString n)
          | (F.LuaMethodOp name, obj :: args) =>
              L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
                [L.MethodExp
@@ -1644,8 +1668,8 @@ struct
                , name
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                )
-         | (F.LuaMethod2Op _, _) => raise CodeGenError "unexpected Lua.method2"
-         | (F.LuaMethod3Op _, _) => raise CodeGenError "unexpected Lua.method3"
+         | (F.LuaMethodNOp (_, n), _) =>
+             raise CodeGenError ("unexpected Lua.method" ^ Int.toString n)
          | (F.JsCallOp, _) =>
              raise CodeGenError "JsCallOp is not supported on Lua backend"
          | (F.JsMethodOp, _) =>
@@ -1811,6 +1835,66 @@ struct
                        raise CodeGenError
                          ("primop " ^ Primitives.toString prim
                           ^ ": invalid number of arguments")
+                 fun doCall n =
+                   doBinary (fn (f, args) =>
+                     let
+                       val arg = vector [TableUnpackN args]
+                       val stat =
+                         if List.length results = n then
+                           if List.exists Option.isSome results then
+                             let
+                               fun makeResultVar (SOME r) = (r, L.CONST)
+                                 | makeResultVar NONE = (genSym ctx, L.CONST)
+                             in
+                               L.LocalStat
+                                 ( List.map makeResultVar results
+                                 , [L.CallExp (f, arg)]
+                                 )
+                             end
+                           else
+                             L.CallStat (f, arg)
+                         else
+                           raise CodeGenError "unexpected number of results"
+                     in
+                       doDecs
+                         ( ctx
+                         , env
+                         , defaultCont
+                         , decs
+                         , finalExp
+                         , stat :: revStats
+                         )
+                     end)
+                 fun doMethod n =
+                   doTernary (fn (obj, name, args) =>
+                     let
+                       val arg = [TableUnpackN args]
+                       val stat =
+                         if List.length results = n then
+                           if List.exists Option.isSome results then
+                             let
+                               fun makeResultVar (SOME r) = (r, L.CONST)
+                                 | makeResultVar NONE = (genSym ctx, L.CONST)
+                             in
+                               L.LocalStat
+                                 ( List.map makeResultVar results
+                                 , [MethodExp (obj, name, arg)]
+                                 )
+                             end
+                           else
+                             MethodStat (obj, name, arg)
+                         else
+                           raise CodeGenError "unexpected number of results"
+                     in
+                       doDecs
+                         ( ctx
+                         , env
+                         , defaultCont
+                         , decs
+                         , finalExp
+                         , stat :: revStats
+                         )
+                     end)
                in
                  case prim of
                    Primitives.Ref_set =>
@@ -1861,83 +1945,15 @@ struct
                          | _ =>
                              raise CodeGenError "unexpected number of results"
                        end)
-                 | Primitives.Lua_call2 =>
-                     doBinary (fn (f, args) =>
-                       let
-                         val arg = vector [TableUnpackN args]
-                         val stmts =
-                           case results of
-                             [NONE, NONE] => [L.CallStat (f, arg)]
-                           | [r0, r1] =>
-                               let
-                                 val r0 =
-                                   case r0 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r1 =
-                                   case r1 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                               in
-                                 [L.LocalStat
-                                    ( [(r0, L.CONST), (r1, L.CONST)]
-                                    , [L.CallExp (f, arg)]
-                                    )]
-                               end
-                           | _ =>
-                               raise CodeGenError "unexpected number of results"
-                       in
-                         doDecs
-                           ( ctx
-                           , env
-                           , defaultCont
-                           , decs
-                           , finalExp
-                           , List.revAppend (stmts, revStats)
-                           )
-                       end)
-                 | Primitives.Lua_call3 =>
-                     doBinary (fn (f, args) =>
-                       let
-                         val arg = vector [TableUnpackN args]
-                         val stmts =
-                           case results of
-                             [NONE, NONE, NONE] => [L.CallStat (f, arg)]
-                           | [r0, r1, r2] =>
-                               let
-                                 val r0 =
-                                   case r0 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r1 =
-                                   case r1 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r2 =
-                                   case r2 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                               in
-                                 [L.LocalStat
-                                    ( [ (r0, L.CONST)
-                                      , (r1, L.CONST)
-                                      , (r2, L.CONST)
-                                      ]
-                                    , [L.CallExp (f, arg)]
-                                    )]
-                               end
-                           | _ =>
-                               raise CodeGenError "unexpected number of results"
-                       in
-                         doDecs
-                           ( ctx
-                           , env
-                           , defaultCont
-                           , decs
-                           , finalExp
-                           , List.revAppend (stmts, revStats)
-                           )
-                       end)
+                 | Primitives.Lua_call1 => doCall 1
+                 | Primitives.Lua_call2 => doCall 2
+                 | Primitives.Lua_call3 => doCall 3
+                 | Primitives.Lua_call4 => doCall 4
+                 | Primitives.Lua_call5 => doCall 5
+                 | Primitives.Lua_call6 => doCall 6
+                 | Primitives.Lua_call7 => doCall 7
+                 | Primitives.Lua_call8 => doCall 8
+                 | Primitives.Lua_call9 => doCall 9
                  | Primitives.Lua_method =>
                      doTernary (fn (obj, name, args) =>
                        let
@@ -1965,104 +1981,15 @@ struct
                            , stat :: revStats
                            )
                        end)
-                 | Primitives.Lua_method1 =>
-                     doTernary (fn (obj, name, args) =>
-                       let
-                         val arg = [TableUnpackN args]
-                         val stat =
-                           case results of
-                             [SOME result] =>
-                               L.ConstStat (result, MethodExp (obj, name, arg))
-                           | [NONE] => MethodStat (obj, name, arg)
-                           | _ =>
-                               raise CodeGenError "unexpected number of results"
-                       in
-                         doDecs
-                           ( ctx
-                           , env
-                           , defaultCont
-                           , decs
-                           , finalExp
-                           , stat :: revStats
-                           )
-                       end)
-                 | Primitives.Lua_method2 =>
-                     doTernary (fn (obj, name, args) =>
-                       let
-                         val arg = [TableUnpackN args]
-                         val stat =
-                           case results of
-                             [NONE, NONE] => MethodStat (obj, name, arg)
-                           | [r0, r1] =>
-                               let
-                                 val r0 =
-                                   case r0 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r1 =
-                                   case r1 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                               in
-                                 L.LocalStat
-                                   ( [(r0, L.CONST), (r1, L.CONST)]
-                                   , [MethodExp (obj, name, arg)]
-                                   )
-                               end
-                           | _ =>
-                               raise CodeGenError "unexpected number of results"
-                       in
-                         doDecs
-                           ( ctx
-                           , env
-                           , defaultCont
-                           , decs
-                           , finalExp
-                           , stat :: revStats
-                           )
-                       end)
-                 | Primitives.Lua_method3 =>
-                     doTernary (fn (obj, name, args) =>
-                       let
-                         val arg = [TableUnpackN args]
-                         val stat =
-                           case results of
-                             [NONE, NONE, NONE] => MethodStat (obj, name, arg)
-                           | [r0, r1, r2] =>
-                               let
-                                 val r0 =
-                                   case r0 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r1 =
-                                   case r1 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                                 val r2 =
-                                   case r2 of
-                                     SOME r => r
-                                   | NONE => genSym ctx
-                               in
-                                 L.LocalStat
-                                   ( [ (r0, L.CONST)
-                                     , (r1, L.CONST)
-                                     , (r2, L.CONST)
-                                     ]
-                                   , [MethodExp (obj, name, arg)]
-                                   )
-                               end
-                           | _ =>
-                               raise CodeGenError "unexpected number of results"
-                       in
-                         doDecs
-                           ( ctx
-                           , env
-                           , defaultCont
-                           , decs
-                           , finalExp
-                           , stat :: revStats
-                           )
-                       end)
+                 | Primitives.Lua_method1 => doMethod 1
+                 | Primitives.Lua_method2 => doMethod 2
+                 | Primitives.Lua_method3 => doMethod 3
+                 | Primitives.Lua_method4 => doMethod 4
+                 | Primitives.Lua_method5 => doMethod 5
+                 | Primitives.Lua_method6 => doMethod 6
+                 | Primitives.Lua_method7 => doMethod 7
+                 | Primitives.Lua_method8 => doMethod 8
+                 | Primitives.Lua_method9 => doMethod 9
                  | Primitives.Lua_setGlobal =>
                      doBinary (fn (name, value) =>
                        let
@@ -2147,98 +2074,33 @@ struct
            | N.ValDec
                { exp =
                    N.PrimOp
-                     {primOp = F.LuaCall2Op, tyargs = _, args = f :: args}
+                     {primOp = F.LuaCallNOp n, tyargs = _, args = f :: args}
                , results
                } =>
                let
-                 val stmts =
-                   case results of
-                     [NONE, NONE] =>
-                       [L.CallStat
-                          ( doExp (ctx, env, f)
-                          , Vector.map (fn x => doExp (ctx, env, x))
-                              (vector args)
-                          )]
-                   | [r0, r1] =>
-                       let
-                         val r0 =
-                           case r0 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r1 =
-                           case r1 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                       in
-                         [L.LocalStat
-                            ( [(r0, L.CONST), (r1, L.CONST)]
-                            , [L.CallExp
-                                 ( doExp (ctx, env, f)
-                                 , Vector.map (fn x => doExp (ctx, env, x))
-                                     (vector args)
-                                 )]
-                            )]
-                       end
-                   | _ => raise CodeGenError "unexpected number of results"
+                 val stat =
+                   if List.exists Option.isSome results then
+                     let
+                       fun makeResultVar (SOME r) = (r, L.CONST)
+                         | makeResultVar NONE = (genSym ctx, L.CONST)
+                     in
+                       L.LocalStat
+                         ( List.map makeResultVar results
+                         , [L.CallExp
+                              ( doExp (ctx, env, f)
+                              , Vector.map (fn x => doExp (ctx, env, x))
+                                  (vector args)
+                              )]
+                         )
+                     end
+                   else
+                     L.CallStat
+                       ( doExp (ctx, env, f)
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+                       )
                in
                  doDecs
-                   ( ctx
-                   , env
-                   , defaultCont
-                   , decs
-                   , finalExp
-                   , List.revAppend (stmts, revStats)
-                   )
-               end
-           | N.ValDec
-               { exp =
-                   N.PrimOp
-                     {primOp = F.LuaCall3Op, tyargs = _, args = f :: args}
-               , results
-               } =>
-               let
-                 val stmts =
-                   case results of
-                     [NONE, NONE, NONE] =>
-                       [L.CallStat
-                          ( doExp (ctx, env, f)
-                          , Vector.map (fn x => doExp (ctx, env, x))
-                              (vector args)
-                          )]
-                   | [r0, r1, r2] =>
-                       let
-                         val r0 =
-                           case r0 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r1 =
-                           case r1 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r2 =
-                           case r2 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                       in
-                         [L.LocalStat
-                            ( [(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)]
-                            , [L.CallExp
-                                 ( doExp (ctx, env, f)
-                                 , Vector.map (fn x => doExp (ctx, env, x))
-                                     (vector args)
-                                 )]
-                            )]
-                       end
-                   | _ => raise CodeGenError "unexpected number of results"
-               in
-                 doDecs
-                   ( ctx
-                   , env
-                   , defaultCont
-                   , decs
-                   , finalExp
-                   , List.revAppend (stmts, revStats)
-                   )
+                   (ctx, env, defaultCont, decs, finalExp, stat :: revStats)
                end
            | N.ValDec
                { exp =
@@ -2310,7 +2172,7 @@ struct
            | N.ValDec
                { exp =
                    N.PrimOp
-                     { primOp = F.LuaMethod2Op name
+                     { primOp = F.LuaMethodNOp (name, n)
                      , tyargs = _
                      , args = obj :: args
                      }
@@ -2318,85 +2180,27 @@ struct
                } =>
                let
                  val stat =
-                   case results of
-                     [NONE, NONE] =>
-                       L.MethodStat
-                         ( doExp (ctx, env, obj)
-                         , name
-                         , Vector.map (fn x => doExp (ctx, env, x))
-                             (vector args)
+                   if List.exists Option.isSome results then
+                     let
+                       fun makeResultVar (SOME r) = (r, L.CONST)
+                         | makeResultVar NONE = (genSym ctx, L.CONST)
+                     in
+                       L.LocalStat
+                         ( List.map makeResultVar results
+                         , [L.MethodExp
+                              ( doExp (ctx, env, obj)
+                              , name
+                              , Vector.map (fn x => doExp (ctx, env, x))
+                                  (vector args)
+                              )]
                          )
-                   | [r0, r1] =>
-                       let
-                         val r0 =
-                           case r0 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r1 =
-                           case r1 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                       in
-                         L.LocalStat
-                           ( [(r0, L.CONST), (r1, L.CONST)]
-                           , [L.MethodExp
-                                ( doExp (ctx, env, obj)
-                                , name
-                                , Vector.map (fn x => doExp (ctx, env, x))
-                                    (vector args)
-                                )]
-                           )
-                       end
-                   | _ => raise CodeGenError "unexpected number of results"
-               in
-                 doDecs
-                   (ctx, env, defaultCont, decs, finalExp, stat :: revStats)
-               end
-           | N.ValDec
-               { exp =
-                   N.PrimOp
-                     { primOp = F.LuaMethod3Op name
-                     , tyargs = _
-                     , args = obj :: args
-                     }
-               , results
-               } =>
-               let
-                 val stat =
-                   case results of
-                     [NONE, NONE, NONE] =>
-                       L.MethodStat
-                         ( doExp (ctx, env, obj)
-                         , name
-                         , Vector.map (fn x => doExp (ctx, env, x))
-                             (vector args)
-                         )
-                   | [r0, r1, r2] =>
-                       let
-                         val r0 =
-                           case r0 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r1 =
-                           case r1 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                         val r2 =
-                           case r2 of
-                             SOME r => r
-                           | NONE => genSym ctx
-                       in
-                         L.LocalStat
-                           ( [(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)]
-                           , [L.MethodExp
-                                ( doExp (ctx, env, obj)
-                                , name
-                                , Vector.map (fn x => doExp (ctx, env, x))
-                                    (vector args)
-                                )]
-                           )
-                       end
-                   | _ => raise CodeGenError "unexpected number of results"
+                     end
+                   else
+                     L.MethodStat
+                       ( doExp (ctx, env, obj)
+                       , name
+                       , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+                       )
                in
                  doDecs
                    (ctx, env, defaultCont, decs, finalExp, stat :: revStats)

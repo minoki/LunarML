@@ -155,10 +155,22 @@ datatype PrimOp = EQUAL (* = *)
                 | Lua_call1 (* Lua.call1 *)
                 | Lua_call2 (* Lua.call2 *)
                 | Lua_call3 (* Lua.call3 *)
+                | Lua_call4 (* Lua.call4 *)
+                | Lua_call5 (* Lua.call5 *)
+                | Lua_call6 (* Lua.call6 *)
+                | Lua_call7 (* Lua.call7 *)
+                | Lua_call8 (* Lua.call8 *)
+                | Lua_call9 (* Lua.call9 *)
                 | Lua_method (* Lua.method *)
                 | Lua_method1 (* Lua.method1 *)
                 | Lua_method2 (* Lua.method2 *)
                 | Lua_method3 (* Lua.method3 *)
+                | Lua_method4 (* Lua.method4 *)
+                | Lua_method5 (* Lua.method5 *)
+                | Lua_method6 (* Lua.method6 *)
+                | Lua_method7 (* Lua.method7 *)
+                | Lua_method8 (* Lua.method8 *)
+                | Lua_method9 (* Lua.method9 *)
                 | Lua_global (* Lua.global *)
                 | Lua_setGlobal (* Lua.setGlobal *)
                 | Lua_newTable (* Lua.newTable *)
@@ -564,10 +576,22 @@ fun toString EQUAL = "="
   | toString Lua_call1 = "Lua.call1"
   | toString Lua_call2 = "Lua.call2"
   | toString Lua_call3 = "Lua.call3"
+  | toString Lua_call4 = "Lua.call4"
+  | toString Lua_call5 = "Lua.call5"
+  | toString Lua_call6 = "Lua.call6"
+  | toString Lua_call7 = "Lua.call7"
+  | toString Lua_call8 = "Lua.call8"
+  | toString Lua_call9 = "Lua.call9"
   | toString Lua_method = "Lua.method"
   | toString Lua_method1 = "Lua.method1"
   | toString Lua_method2 = "Lua.method2"
   | toString Lua_method3 = "Lua.method3"
+  | toString Lua_method4 = "Lua.method4"
+  | toString Lua_method5 = "Lua.method5"
+  | toString Lua_method6 = "Lua.method6"
+  | toString Lua_method7 = "Lua.method7"
+  | toString Lua_method8 = "Lua.method8"
+  | toString Lua_method9 = "Lua.method9"
   | toString Lua_global = "Lua.global"
   | toString Lua_setGlobal = "Lua.setGlobal"
   | toString Lua_newTable = "Lua.newTable"
@@ -973,10 +997,22 @@ fun fromString "=" = SOME EQUAL
   | fromString "Lua.call1" = SOME Lua_call1
   | fromString "Lua.call2" = SOME Lua_call2
   | fromString "Lua.call3" = SOME Lua_call3
+  | fromString "Lua.call4" = SOME Lua_call4
+  | fromString "Lua.call5" = SOME Lua_call5
+  | fromString "Lua.call6" = SOME Lua_call6
+  | fromString "Lua.call7" = SOME Lua_call7
+  | fromString "Lua.call8" = SOME Lua_call8
+  | fromString "Lua.call9" = SOME Lua_call9
   | fromString "Lua.method" = SOME Lua_method
   | fromString "Lua.method1" = SOME Lua_method1
   | fromString "Lua.method2" = SOME Lua_method2
   | fromString "Lua.method3" = SOME Lua_method3
+  | fromString "Lua.method4" = SOME Lua_method4
+  | fromString "Lua.method5" = SOME Lua_method5
+  | fromString "Lua.method6" = SOME Lua_method6
+  | fromString "Lua.method7" = SOME Lua_method7
+  | fromString "Lua.method8" = SOME Lua_method8
+  | fromString "Lua.method9" = SOME Lua_method9
   | fromString "Lua.global" = SOME Lua_global
   | fromString "Lua.setGlobal" = SOME Lua_setGlobal
   | fromString "Lua.newTable" = SOME Lua_newTable
@@ -1170,10 +1206,22 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Lua_call1 = true
   | mayRaise Lua_call2 = true
   | mayRaise Lua_call3 = true
+  | mayRaise Lua_call4 = true
+  | mayRaise Lua_call5 = true
+  | mayRaise Lua_call6 = true
+  | mayRaise Lua_call7 = true
+  | mayRaise Lua_call8 = true
+  | mayRaise Lua_call9 = true
   | mayRaise Lua_method = true
   | mayRaise Lua_method1 = true
   | mayRaise Lua_method2 = true
   | mayRaise Lua_method3 = true
+  | mayRaise Lua_method4 = true
+  | mayRaise Lua_method5 = true
+  | mayRaise Lua_method6 = true
+  | mayRaise Lua_method7 = true
+  | mayRaise Lua_method8 = true
+  | mayRaise Lua_method9 = true
   | mayRaise Lua_global = false
   | mayRaise Lua_setGlobal = false
   | mayRaise Lua_newTable = false
@@ -1366,10 +1414,22 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Lua_call1 = false
   | isDiscardable Lua_call2 = false
   | isDiscardable Lua_call3 = false
+  | isDiscardable Lua_call4 = false
+  | isDiscardable Lua_call5 = false
+  | isDiscardable Lua_call6 = false
+  | isDiscardable Lua_call7 = false
+  | isDiscardable Lua_call8 = false
+  | isDiscardable Lua_call9 = false
   | isDiscardable Lua_method = false
   | isDiscardable Lua_method1 = false
   | isDiscardable Lua_method2 = false
   | isDiscardable Lua_method3 = false
+  | isDiscardable Lua_method4 = false
+  | isDiscardable Lua_method5 = false
+  | isDiscardable Lua_method6 = false
+  | isDiscardable Lua_method7 = false
+  | isDiscardable Lua_method8 = false
+  | isDiscardable Lua_method9 = false
   | isDiscardable Lua_global = true
   | isDiscardable Lua_setGlobal = false
   | isDiscardable Lua_newTable = true
@@ -1620,10 +1680,22 @@ fun returnArity EQUAL = 1
   | returnArity Lua_call1 = 1
   | returnArity Lua_call2 = 2
   | returnArity Lua_call3 = 3
+  | returnArity Lua_call4 = 4
+  | returnArity Lua_call5 = 5
+  | returnArity Lua_call6 = 6
+  | returnArity Lua_call7 = 7
+  | returnArity Lua_call8 = 8
+  | returnArity Lua_call9 = 9
   | returnArity Lua_method = 1
   | returnArity Lua_method1 = 1
   | returnArity Lua_method2 = 2
   | returnArity Lua_method3 = 3
+  | returnArity Lua_method4 = 4
+  | returnArity Lua_method5 = 5
+  | returnArity Lua_method6 = 6
+  | returnArity Lua_method7 = 7
+  | returnArity Lua_method8 = 8
+  | returnArity Lua_method9 = 9
   | returnArity Lua_global = 1
   | returnArity Lua_setGlobal = 0
   | returnArity Lua_newTable = 1
@@ -2079,10 +2151,22 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue] }
   | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
   | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call4 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call5 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call6 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call7 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call8 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call9 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
   | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [vectorOf (LuaValue)] }
   | typeOf Primitives.Lua_method1 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue] }
   | typeOf Primitives.Lua_method2 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
   | typeOf Primitives.Lua_method3 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method4 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method5 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method6 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method7 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method8 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method9 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
   | typeOf Primitives.Lua_global = { vars = [], args = vector [string], results = [LuaValue] }
   | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], results = [] }
   | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], results = [LuaValue] }

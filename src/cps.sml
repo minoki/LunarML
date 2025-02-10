@@ -202,12 +202,10 @@ struct
       | isDiscardable (PrimOp {primOp = F.JsNewOp, ...}) = false
       | isDiscardable (PrimOp {primOp = F.LuaCallOp, ...}) = false
       | isDiscardable (PrimOp {primOp = F.LuaCall1Op, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaCall2Op, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaCall3Op, ...}) = false
+      | isDiscardable (PrimOp {primOp = F.LuaCallNOp _, ...}) = false
       | isDiscardable (PrimOp {primOp = F.LuaMethodOp _, ...}) = false
       | isDiscardable (PrimOp {primOp = F.LuaMethod1Op _, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaMethod2Op _, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaMethod3Op _, ...}) = false
+      | isDiscardable (PrimOp {primOp = F.LuaMethodNOp _, ...}) = false
       | isDiscardable (Record _) = true
       | isDiscardable (ExnTag _) = true
       | isDiscardable (Projection _) = true
@@ -660,10 +658,8 @@ struct
                      val returnArity =
                        case primOp of
                          F.PrimCall p => Primitives.returnArity p
-                       | F.LuaCall2Op => 2
-                       | F.LuaCall3Op => 3
-                       | F.LuaMethod2Op _ => 2
-                       | F.LuaMethod3Op _ => 3
+                       | F.LuaCallNOp n => n
+                       | F.LuaMethodNOp (_, n) => n
                        | _ => 1
                      val primOp =
                        case primOp of
