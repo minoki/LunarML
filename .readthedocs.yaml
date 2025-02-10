@@ -10,4 +10,4 @@ sphinx:
 
 python:
   install:
-    - requirements: docs/requirements.lock
+    - requirements: docs/requirements.txt
