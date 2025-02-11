@@ -36,6 +36,7 @@ initialenv.sml
 printer.sml
 fsyntax.sml
 fprinter.sml
+fcheck.sml
 pattern-match.sml
 ftransform.sml
 lua-syntax.sml

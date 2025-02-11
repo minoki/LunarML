@@ -285,13 +285,13 @@ struct
                    payloadTy payloadPat
              | {representation = Syntax.REP_ALIAS, ...} =>
                  genMatcher
-                   (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp]))
+                   (F.PrimExp (F.DataPayloadOp info, [ty, payloadTy], [exp]))
                    payloadTy payloadPat
              | {tag, ...} => (* REP_BOXED *)
                  let
                    val payload =
                      genMatcher
-                       (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp]))
+                       (F.PrimExp (F.DataPayloadOp info, [ty, payloadTy], [exp]))
                        payloadTy payloadPat
                    val (dataTagOp, equalTag) =
                      case #datatypeTag (#targetInfo ctx) of
@@ -303,7 +303,7 @@ struct
                    F.SimplifyingAndalsoExp
                      ( F.PrimExp
                          ( F.PrimCall equalTag
-                         , []
+                         , [ty]
                          , [ F.PrimExp (dataTagOp info, [], [exp])
                            , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                            ]
@@ -491,7 +491,7 @@ struct
                  end
              | _ =>
                  genBinders
-                   (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp]))
+                   (F.PrimExp (F.DataPayloadOp info, [ty, payloadTy], [exp]))
                    payloadTy payloadPat)
         | genBinders _ _
             (F.ValConPat {sourceSpan = _, info = _, payload = NONE}) = []

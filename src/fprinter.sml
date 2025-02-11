@@ -4,6 +4,9 @@
  *)
 structure FPrinter :>
 sig
+  val doTyVar: FSyntax.TyVar -> Printer.fragment list
+  val doKind: int -> FSyntax.Kind -> Printer.fragment list
+  val doTy: int -> FSyntax.Ty -> Printer.fragment list
   val doPrimOp: FSyntax.PrimOp -> Printer.fragment list
   val doExp: int -> FSyntax.Exp -> Printer.fragment list
 end =
