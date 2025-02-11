@@ -146,7 +146,6 @@ sig
   val PairType: Ty * Ty -> Ty
   val TuplePat: SourcePos.span * Pat list -> Pat
   val TupleExp: Exp list -> Exp
-  val tyNameToTyVar: TypedSyntax.TyName -> TypedSyntax.TyVar
   val TyCon: Ty list * TypedSyntax.TyName -> Ty
   val AsciiStringAsDatatypeTag: TargetInfo.target_info * string -> Exp
   val strIdToVId: TypedSyntax.StrId -> TypedSyntax.VId
@@ -347,11 +346,9 @@ struct
     in
       RecordExp (doFields 1 xs)
     end
-  fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) =
-    TypedSyntax.MkTyVar (name, n)
   fun TyCon (tyargs, tyname) =
     List.foldl (fn (arg, applied) => AppType {applied = applied, arg = arg})
-      (TyVar (tyNameToTyVar tyname)) tyargs
+      (TyVar tyname) tyargs
   fun AsciiStringAsDatatypeTag (targetInfo: TargetInfo.target_info, s: string) =
     (case #datatypeTag targetInfo of
        TargetInfo.STRING8 =>
@@ -374,8 +371,7 @@ struct
         else AndalsoExp (a, b)
     | SimplifyingAndalsoExp (a, b) = AndalsoExp (a, b)
   fun EqualityType t =
-    FnType (PairType (t, t), TyVar
-      (tyNameToTyVar (Typing.primTyName_bool))) (* t * t -> bool *)
+    FnType (PairType (t, t), TyVar Typing.primTyName_bool) (* t * t -> bool *)
   fun arityToKind 0 = TypeKind
     | arityToKind n =
         ArrowKind (TypeKind, arityToKind (n - 1))
@@ -383,16 +379,16 @@ struct
   (*: val occurCheck : TyVar -> Ty -> bool *)
   fun occurCheck tv =
     let
-      fun check (TyVar tv') = TypedSyntax.eqUTyVar (tv, tv')
+      fun check (TyVar tv') = TypedSyntax.eqTyVar (tv, tv')
         | check (RecordType xs) = Syntax.LabelMap.exists check xs
         | check (AppType {applied, arg}) = check applied orelse check arg
         | check (FnType (ty1, ty2)) = check ty1 orelse check ty2
         | check (ForallType (tv', _, ty)) =
-            if TypedSyntax.eqUTyVar (tv, tv') then false else check ty
+            if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (ExistsType (tv', _, ty)) =
-            if TypedSyntax.eqUTyVar (tv, tv') then false else check ty
+            if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (TypeFn (tv', _, ty)) =
-            if TypedSyntax.eqUTyVar (tv, tv') then false else check ty
+            if TypedSyntax.eqTyVar (tv, tv') then false else check ty
     in
       check
     end
@@ -401,7 +397,7 @@ struct
   fun substituteTy (tv, replacement) =
     let
       fun go (ty as TyVar tv') =
-            if TypedSyntax.eqUTyVar (tv, tv') then replacement else ty
+            if TypedSyntax.eqTyVar (tv, tv') then replacement else ty
         | go (RecordType fields) =
             RecordType (Syntax.LabelMap.map go fields)
         | go (AppType {applied, arg}) =
@@ -409,7 +405,7 @@ struct
         | go (FnType (ty1, ty2)) =
             FnType (go ty1, go ty2)
         | go (ty as ForallType (tv', kind, ty')) =
-            if TypedSyntax.eqUTyVar (tv, tv') then
+            if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
               (* TODO: generate fresh type variable *)
@@ -422,7 +418,7 @@ struct
             else
               ForallType (tv', kind, go ty')
         | go (ty as ExistsType (tv', kind, ty')) =
-            if TypedSyntax.eqUTyVar (tv, tv') then
+            if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
               (* TODO: generate fresh type variable *)
@@ -435,7 +431,7 @@ struct
             else
               ExistsType (tv', kind, go ty')
         | go (ty as TypeFn (tv', kind, ty')) =
-            if TypedSyntax.eqUTyVar (tv, tv') then
+            if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
               (* TODO: generate fresh type variable *)
@@ -2382,7 +2378,7 @@ struct
       | toFExp (ctx, env, T.HandleExp (span, exp, matches, resultTy)) =
           let
             val exnName = freshVId (ctx, "exn")
-            val exnTy = F.TyVar (F.tyNameToTyVar (Typing.primTyName_exn))
+            val exnTy = F.TyVar Typing.primTyName_exn
             fun doMatch (pat, exp) =
               let
                 val (valMap, pat') = toFPat (ctx, env, pat)
@@ -2742,7 +2738,7 @@ struct
                              F.ConBind (vid, SOME (toFTy (ctx, env, ty))))
                           conbinds
                     in
-                      F.DatBind (tyvars, F.tyNameToTyVar tycon, conbinds)
+                      F.DatBind (tyvars, tycon, conbinds)
                     end) datbinds)
             val constructors =
               List.foldr
@@ -2900,7 +2896,7 @@ struct
             val tyvarEqualities =
               if Typing.isRefOrArray tyname then []
               else List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
-            val ty = F.EqualityType (F.TyVar (F.tyNameToTyVar tyname))
+            val ty = F.EqualityType (F.TyVar tyname)
             val ty =
               List.foldr
                 (fn ((tv, _), ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
@@ -2969,7 +2965,7 @@ struct
         val nameMap =
           List.foldl
             (fn ( T.DatBind
-                    (_, _, tycon as TypedSyntax.MkTyName (name, _), _, true)
+                    (_, _, tycon as TypedSyntax.MkTyVar (name, _), _, true)
                 , map
                 ) =>
                TypedSyntax.TyNameMap.insert
@@ -3100,8 +3096,7 @@ struct
                              else
                                []) conbinds
                       , matchType = T.CASE
-                      , resultTy =
-                          F.TyVar (F.tyNameToTyVar Typing.primTyName_bool)
+                      , resultTy = F.TyVar Typing.primTyName_bool
                       })
                   end
                 val body =
@@ -3275,16 +3270,10 @@ struct
                    in
                      if admitsEquality then
                        let
-                         val packageTy =
-                           F.ExistsType
-                             ( F.tyNameToTyVar tyname
-                             , kind
-                             , F.PairType
-                                 ( EqualityTyForArity arity []
-                                     (F.TyVar (F.tyNameToTyVar tyname))
-                                 , packageTy
-                                 )
-                             ) (* exists 'a. ('a * 'a -> bool) * packageTy / exists t. (forall 'a. forall 'b. ... ('a * 'a -> bool) -> ('b * 'b -> bool) -> ... -> (t 'a 'b ... * t 'a 'b ... -> bool)) * packageTy *)
+                         val packageTy = F.ExistsType (tyname, kind, F.PairType
+                           ( EqualityTyForArity arity [] (F.TyVar tyname)
+                           , packageTy
+                           )) (* exists 'a. ('a * 'a -> bool) * packageTy / exists t. (forall 'a. forall 'b. ... ('a * 'a -> bool) -> ('b * 'b -> bool) -> ... -> (t 'a 'b ... * t 'a 'b ... -> bool)) * packageTy *)
                          val equality =
                            getEqualityForTypeFunction (ctx, env', typeFunction)
                        in
@@ -3298,9 +3287,7 @@ struct
                        end
                      else
                        let
-                         val packageTy =
-                           F.ExistsType
-                             (F.tyNameToTyVar tyname, kind, packageTy)
+                         val packageTy = F.ExistsType (tyname, kind, packageTy)
                        in
                          ( F.PackExp
                              { payloadTy = payloadTy'
@@ -3475,7 +3462,7 @@ struct
                                    )
                                  ::
                                  F.UnpackDec
-                                   ( F.tyNameToTyVar tyname
+                                   ( tyname
                                    , F.arityToKind arity
                                    , packageVId
                                    , payloadTy
@@ -3496,7 +3483,7 @@ struct
                              (fn m => T.VIdMap.insert (m, vid, payloadTy), env)
                          in
                            ( F.UnpackDec
-                               ( F.tyNameToTyVar tyname
+                               ( tyname
                                , F.arityToKind arity
                                , vid
                                , payloadTy
@@ -3538,7 +3525,7 @@ struct
                let
                  val vid = freshVId (ctx, "eq")
                  val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
-                 val ty = F.EqualityType (F.TyVar (F.tyNameToTyVar tyname))
+                 val ty = F.EqualityType (F.TyVar tyname)
                  val ty =
                    List.foldr
                      (fn (tv, ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
@@ -3566,27 +3553,23 @@ struct
         val funexp =
           List.foldr
             (fn ((tyname, _, vid), funexp) =>
-               F.FnExp
-                 ( vid
-                 , F.EqualityType (F.TyVar (F.tyNameToTyVar tyname))
-                 , funexp
-                 )) funexp equalityVars (* equalities *)
+               F.FnExp (vid, F.EqualityType (F.TyVar tyname), funexp)) funexp
+            equalityVars (* equalities *)
         val funTy =
           List.foldr
             (fn ((tyname, _, _), funTy) =>
-               F.FnType
-                 (F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funTy))
-            funTy equalityVars (* equalities *)
+               F.FnType (F.EqualityType (F.TyVar tyname), funTy)) funTy
+            equalityVars (* equalities *)
         val funexp =
           List.foldr
             (fn ({tyname, arity, admitsEquality = _}, funexp) =>
-               F.TyAbsExp (F.tyNameToTyVar tyname, F.arityToKind arity, funexp))
-            funexp types (* type parameters *)
+               F.TyAbsExp (tyname, F.arityToKind arity, funexp)) funexp
+            types (* type parameters *)
         val funTy =
           List.foldr
             (fn ({tyname, arity, admitsEquality = _}, funTy) =>
-               F.ForallType (F.tyNameToTyVar tyname, F.arityToKind arity, funTy))
-            funTy types (* type parameters *)
+               F.ForallType (tyname, F.arityToKind arity, funTy)) funTy
+            types (* type parameters *)
         val env = updateValMap (fn m => T.VIdMap.insert (m, funid, funTy), env)
       in
         (env, F.ValDec (funid, SOME funTy, funexp))

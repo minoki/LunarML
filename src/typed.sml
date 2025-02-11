@@ -6,14 +6,15 @@ structure TypedSyntax :>
 sig
   datatype VId = MkVId of string * int
   datatype TyVar = MkTyVar of string * int
-  datatype TyName = MkTyName of string * int
+  type TyName = TyVar
+  val MkTyName: string * int -> TyName
   datatype StrId = MkStrId of string * int
   datatype FunId = MkFunId of string * int
   datatype LongVId =
     MkShortVId of VId
   | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
   datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
-  val eqUTyVar: TyVar * TyVar -> bool
+  val eqTyVar: TyVar * TyVar -> bool
   val eqTyName: TyName * TyName -> bool
   val eqVId: VId * VId -> bool
   val tyVarAdmitsEquality: TyVar -> bool
@@ -303,16 +304,17 @@ end =
 struct
   datatype VId = MkVId of string * int
   datatype TyVar = MkTyVar of string * int
-  datatype TyName = MkTyName of string * int
+  type TyName = TyVar
+  val MkTyName = MkTyVar
   datatype StrId = MkStrId of string * int
   datatype FunId = MkFunId of string * int
   datatype LongVId =
     MkShortVId of VId
   | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
   datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
-  fun eqUTyVar (MkTyVar (name, a), MkTyVar (name', b)) =
-    name = name' andalso a = b
-  fun eqTyName (MkTyName (_, a), MkTyName (_, b)) = a = b
+  fun eqTyVar (MkTyVar (name, a), MkTyVar (name', b)) =
+    a = b andalso name = name'
+  val eqTyName = eqTyVar
   fun eqVId (a, b: VId) = a = b
 
   fun tyVarAdmitsEquality (MkTyVar (name, _)) = String.isPrefix "''" name
@@ -349,16 +351,8 @@ struct
     StronglyConnectedComponents
       (type t = VId structure Map = VIdMap structure Set = VIdSet)
 
-  structure TyNameKey =
-  struct
-    type ord_key = TyName
-    fun compare (MkTyName (x, a), MkTyName (y, b)) =
-      case String.compare (x, y) of
-        EQUAL => Int.compare (a, b)
-      | ord => ord
-  end : ORD_KEY
-  structure TyNameSet = RedBlackSetFn(TyNameKey)
-  structure TyNameMap = RedBlackMapFn(TyNameKey)
+  structure TyNameSet = TyVarSet
+  structure TyNameMap = TyVarMap
 
   structure StrIdKey =
   struct
@@ -660,22 +654,20 @@ struct
     fun print_LongStrId (MkLongStrId (strid, strids)) =
       String.concatWith "."
         (print_StrId strid :: List.map (fn Syntax.MkStrId name => name) strids)
-    fun print_TyVar (MkTyVar (tvname, n)) =
-      "MkTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
+    fun print_TyVar (MkTyVar ("int", 0)) = "primTyName_int"
+      | print_TyVar (MkTyVar ("word", 1)) = "primTyName_word"
+      | print_TyVar (MkTyVar ("real", 2)) = "primTyName_real"
+      | print_TyVar (MkTyVar ("string", 3)) = "primTyName_string"
+      | print_TyVar (MkTyVar ("char", 4)) = "primTyName_char"
+      | print_TyVar (MkTyVar ("exn", 5)) = "primTyName_exn"
+      | print_TyVar (MkTyVar ("bool", 6)) = "primTyName_bool"
+      | print_TyVar (MkTyVar ("ref", 7)) = "primTyName_ref"
+      | print_TyVar (MkTyVar ("list", 8)) = "primTyName_list"
+      | print_TyVar (MkTyVar (tvname, n)) =
+          "MkTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
     fun print_AnonymousTyVar _ =
       "<AnonymousTyVar>" (* (MkAnonymousTyVar n) = "AnonymousTyVar(" ^ Int.toString n ^ ")" *)
-    fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
-      | print_TyName (MkTyName ("word", 1)) = "primTyName_word"
-      | print_TyName (MkTyName ("real", 2)) = "primTyName_real"
-      | print_TyName (MkTyName ("string", 3)) = "primTyName_string"
-      | print_TyName (MkTyName ("char", 4)) = "primTyName_char"
-      | print_TyName (MkTyName ("exn", 5)) = "primTyName_exn"
-      | print_TyName (MkTyName ("bool", 6)) = "primTyName_bool"
-      | print_TyName (MkTyName ("ref", 7)) = "primTyName_ref"
-      | print_TyName (MkTyName ("list", 8)) = "primTyName_list"
-      | print_TyName (MkTyName (tyconname, n)) =
-          "MkTyName(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n
-          ^ ")"
+    val print_TyName = print_TyVar
     fun print_Ty (TyVar (_, x)) =
           "TyVar(" ^ print_TyVar x ^ ")"
       | print_Ty (AnonymousTyVar (_, ref (Unbound (_, level)))) =
@@ -702,13 +694,13 @@ struct
             Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty))
               xs ^ "," ^ print_Ty baseTy ^ ")"
           end
-      | print_Ty (TyCon (_, [], MkTyName ("int", 0))) = "primTy_int"
-      | print_Ty (TyCon (_, [], MkTyName ("word", 1))) = "primTy_word"
-      | print_Ty (TyCon (_, [], MkTyName ("real", 2))) = "primTy_real"
-      | print_Ty (TyCon (_, [], MkTyName ("string", 3))) = "primTy_string"
-      | print_Ty (TyCon (_, [], MkTyName ("char", 4))) = "primTy_char"
-      | print_Ty (TyCon (_, [], MkTyName ("exn", 5))) = "primTy_exn"
-      | print_Ty (TyCon (_, [], MkTyName ("bool", 6))) = "primTy_bool"
+      | print_Ty (TyCon (_, [], MkTyVar ("int", 0))) = "primTy_int"
+      | print_Ty (TyCon (_, [], MkTyVar ("word", 1))) = "primTy_word"
+      | print_Ty (TyCon (_, [], MkTyVar ("real", 2))) = "primTy_real"
+      | print_Ty (TyCon (_, [], MkTyVar ("string", 3))) = "primTy_string"
+      | print_Ty (TyCon (_, [], MkTyVar ("char", 4))) = "primTy_char"
+      | print_Ty (TyCon (_, [], MkTyVar ("exn", 5))) = "primTy_exn"
+      | print_Ty (TyCon (_, [], MkTyVar ("bool", 6))) = "primTy_bool"
       | print_Ty (TyCon (_, x, y)) =
           "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
       | print_Ty (FnType (_, x, y)) =

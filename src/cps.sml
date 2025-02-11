@@ -590,29 +590,24 @@ struct
                    (case tyargs of
                       [F.TyVar tv] =>
                         if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_int)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int)
                         then
                           apply revDecs k (C.IntConst
                             (#defaultInt (#targetInfo ctx), x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_int32)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int32)
                         then
                           apply revDecs k (C.IntConst (Primitives.I32, x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_int54)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int54)
                         then
                           apply revDecs k (C.IntConst (Primitives.I54, x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_int64)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int64)
                         then
                           apply revDecs k (C.IntConst (Primitives.I64, x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_intInf)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_intInf)
                         then
                           apply revDecs k (C.IntConst (Primitives.INT_INF, x))
                         else
@@ -622,19 +617,16 @@ struct
                    (case tyargs of
                       [F.TyVar tv] =>
                         if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_word)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word)
                         then
                           apply revDecs k (C.WordConst
                             (#defaultWord (#targetInfo ctx), x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_word32)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word32)
                         then
                           apply revDecs k (C.WordConst (Primitives.W32, x))
                         else if
-                          TypedSyntax.eqUTyVar
-                            (tv, F.tyNameToTyVar Typing.primTyName_word64)
+                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word64)
                         then
                           apply revDecs k (C.WordConst (Primitives.W64, x))
                         else

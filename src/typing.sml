@@ -673,7 +673,7 @@ struct
     end
   fun newTyName (ctx, Syntax.MkTyCon name) =
     TypedSyntax.MkTyName (name, genTyConId ctx)
-  fun renewTyName (ctx: Context, TypedSyntax.MkTyName (name, _)) =
+  fun renewTyName (ctx: Context, TypedSyntax.MkTyVar (name, _)) =
     let val id = !(#nextTyVar ctx)
     in #nextTyVar ctx := id + 1; TypedSyntax.MkTyName (name, id)
     end
@@ -812,7 +812,7 @@ struct
           , T.TyVar (_, tv as T.MkTyVar (name, _))
           , T.TyVar (_, tv' as T.MkTyVar (name', _))
           ) =
-          if T.eqUTyVar (tv, tv') then
+          if T.eqTyVar (tv, tv') then
             () (* do nothing *)
           else
             (case ConstraintInfo.sort (ci, name, name') of
@@ -1072,7 +1072,7 @@ struct
               case ty of
                 T.RecordType (_, _) => "a record"
               | T.RecordExtType (_, _, _) => "a record"
-              | T.TyCon (_, _, T.MkTyName (name, _)) => name
+              | T.TyCon (_, _, T.MkTyVar (name, _)) => name
               | T.FnType (_, _, _) => "a function"
               | T.TyVar (_, T.MkTyVar (name, _)) => name
               | T.AnonymousTyVar _ => "<anonymous>" (* should not occur *)
@@ -5641,7 +5641,7 @@ struct
                    T.eqTyName (tyname, tyname')
                    andalso
                    ListPair.allEq
-                     (fn (tv, T.TyVar (_, tv')) => T.eqUTyVar (tv, tv')
+                     (fn (tv, T.TyVar (_, tv')) => T.eqTyVar (tv, tv')
                        | _ => false) (tyvars, tyargs)
                | _ => false) tyConMap
       in
@@ -6874,9 +6874,9 @@ struct
         val tyargsA = List.map (fn (ty, c) => (T.forceTy ty, c)) tyargsA
         val trivial =
           ListPair.allEq
-            (fn ((tvE, NONE), (T.TyVar (_, tvA), NONE)) => T.eqUTyVar (tvE, tvA)
+            (fn ((tvE, NONE), (T.TyVar (_, tvA), NONE)) => T.eqTyVar (tvE, tvA)
               | ((tvE, SOME T.IsEqType), (T.TyVar (_, tvA), SOME T.IsEqType)) =>
-               T.eqUTyVar (tvE, tvA)
+               T.eqTyVar (tvE, tvA)
               | _ => false) (tyvarsE, tyargsA)
       in
         if trivial then
