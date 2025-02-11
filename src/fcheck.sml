@@ -69,15 +69,10 @@ struct
       end
 
     (* the argument must be well-kinded *)
-    fun normalizeType (env: (F.Ty option) TypedSyntax.TyVarMap.map)
-          (ty as F.TyVar tv) =
+    fun normalizeType (env: F.Ty TypedSyntax.TyVarMap.map) (ty as F.TyVar tv) =
           (case TypedSyntax.TyVarMap.find (env, tv) of
-             SOME (SOME ty') => normalizeType env ty'
-           | SOME NONE => ty
-           | NONE =>
-               raise TypeError
-                 ("undefiend type variable "
-                  ^ Printer.build (FPrinter.doTyVar tv)))
+             SOME ty' => normalizeType env ty'
+           | NONE => ty)
       | normalizeType env (F.RecordType fields) =
           F.RecordType (Syntax.LabelMap.map (normalizeType env) fields)
       | normalizeType env (F.AppType {applied, arg}) =
@@ -87,31 +82,18 @@ struct
           in
             case applied of
               F.TypeFn (tv, kind, body) =>
-                normalizeType (TypedSyntax.TyVarMap.insert (env, tv, SOME arg))
-                  body
+                normalizeType (TypedSyntax.TyVarMap.insert (env, tv, arg)) body
             | F.TyVar _ => F.AppType {applied = applied, arg = arg}
             | _ => raise TypeError "invalid kind"
           end
       | normalizeType env (F.FnType (param, result)) =
           F.FnType (normalizeType env param, normalizeType env result)
       | normalizeType env (F.ForallType (tv, kind, ty)) =
-          F.ForallType
-            ( tv
-            , kind
-            , normalizeType (TypedSyntax.TyVarMap.insert (env, tv, NONE)) ty
-            )
+          F.ForallType (tv, kind, normalizeType env ty)
       | normalizeType env (F.ExistsType (tv, kind, ty)) =
-          F.ExistsType
-            ( tv
-            , kind
-            , normalizeType (TypedSyntax.TyVarMap.insert (env, tv, NONE)) ty
-            )
+          F.ExistsType (tv, kind, normalizeType env ty)
       | normalizeType env (F.TypeFn (tv, kind, ty)) =
-          F.TypeFn
-            ( tv
-            , kind
-            , normalizeType (TypedSyntax.TyVarMap.insert (env, tv, NONE)) ty
-            )
+          F.TypeFn (tv, kind, normalizeType env ty)
     (*
     | normalizeType env (F.SigType {valMap, strMap, exnTags}) =
     F.SigType
@@ -230,10 +212,16 @@ struct
     val emptyValEnv: ValEnv = TypedSyntax.VIdMap.empty
     type Env =
       { valEnv: ValEnv
-      , tyEnv: (F.Kind * F.Ty option) TypedSyntax.TyVarMap.map
+      , tyVarEnv: F.Kind TypedSyntax.TyVarMap.map
+      , aliasEnv: F.Ty TypedSyntax.TyVarMap.map
       , valConEnv:
           ({tyParams: F.TyVar list, payload: F.Ty option} StringMap.map) TypedSyntax.TyVarMap.map
-      , boundTyVars: TypedSyntax.TyVarSet.set
+      }
+    fun modifyValEnv (f, {valEnv, tyVarEnv, aliasEnv, valConEnv}: Env) : Env =
+      { valEnv = f valEnv
+      , tyVarEnv = tyVarEnv
+      , aliasEnv = aliasEnv
+      , valConEnv = valConEnv
       }
     structure TypeOfPrimitives =
       TypeOfPrimitives
@@ -339,8 +327,8 @@ struct
           ; emptyValEnv
           )
       | typeCheckPat (env, expectedTy, F.VarPat (_, vid, ty)) =
-          ( checkKind (TypedSyntax.TyVarMap.map #1 (#tyEnv env), F.TypeKind) ty
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          ( checkKind (#tyVarEnv env, F.TypeKind) ty
+          ; checkType (#aliasEnv env, expectedTy) ty
           ; TypedSyntax.VIdMap.singleton (vid, ty)
           )
       | typeCheckPat
@@ -430,10 +418,7 @@ struct
           in
             case (payloadTy, payload) of
               (SOME expectedPayloadTy, SOME (actualPayloadTy, payloadPat)) =>
-                ( checkType
-                    ( TypedSyntax.TyVarMap.map #2 (#tyEnv env)
-                    , expectedPayloadTy
-                    ) actualPayloadTy
+                ( checkType (#aliasEnv env, expectedPayloadTy) actualPayloadTy
                 ; typeCheckPat (env, actualPayloadTy, payloadPat)
                 )
             | (NONE, NONE) => emptyValEnv
@@ -441,7 +426,7 @@ struct
           end
       | typeCheckPat
           (env, expectedTy, F.ExnConPat {sourceSpan = _, tagPath, payload}) =
-          ( checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ( checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_exn)
           ; typeCheckExp (env, F.TyVar Typing.primTyName_exntag, tagPath)
           (* TODO: check if the constructor has a payload *)
@@ -452,22 +437,18 @@ struct
           )
       | typeCheckPat (env, expectedTy, F.LayeredPat (_, vid, ty, pat)) =
           let
-            val ty = normalizeType (TypedSyntax.TyVarMap.map #2 (#tyEnv env)) ty
-            val () =
-              checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-                ty
+            val ty = normalizeType (#aliasEnv env) ty
+            val () = checkType (#aliasEnv env, expectedTy) ty
             val newEnv = typeCheckPat (env, expectedTy, pat)
           in
             TypedSyntax.VIdMap.insert (newEnv, vid, ty)
           end
       | typeCheckPat (env, expectedTy, F.VectorPat (_, pats, ellipsis, elemTy)) =
           let
-            val elemTy =
-              normalizeType (TypedSyntax.TyVarMap.map #2 (#tyEnv env)) elemTy
-            val () =
-              checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-                (F.AppType
-                   {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
+            val elemTy = normalizeType (#aliasEnv env) elemTy
+            val () = checkType (#aliasEnv env, expectedTy)
+              (F.AppType
+                 {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
           in
             Vector.foldl
               (fn (pat, newEnv) =>
@@ -476,6 +457,8 @@ struct
                    (newEnv, typeCheckPat (env, elemTy, pat)))
               TypedSyntax.VIdMap.empty pats
           end
+    and inferExp (env: Env, exp: F.Exp) : F.Ty =
+      raise Fail "not implemented yet"
     and typeCheckExp
           ( env: Env
           , expectedTy: F.Ty
@@ -498,38 +481,37 @@ struct
             ListPair.appEq
               (fn (expectedTy, exp) => typeCheckExp (env, expectedTy, exp))
               (Vector.foldr (op::) [] args, valargs);
-            checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              resultTy
+            checkType (#aliasEnv env, expectedTy) resultTy
           end
       | typeCheckExp (env, expectedTy, F.PrimExp (F.IntConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.WordConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.RealConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.Char8ConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.Char16ConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.String8ConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp
           (env, expectedTy, F.PrimExp (F.String16ConstOp _, [ty], [])) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          checkType (#aliasEnv env, expectedTy) ty
       | typeCheckExp (env, expectedTy, F.PrimExp (F.RaiseOp _, [ty], [e])) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_exn, e)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy) ty
+          ; checkType (#aliasEnv env, expectedTy) ty
           )
       | typeCheckExp (env, expectedTy, F.PrimExp (F.ListOp, [elemTy], elements)) =
           ( List.app (fn elem => typeCheckExp (env, elemTy, elem)) elements
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.AppType
                  {applied = F.TyVar Typing.primTyName_list, arg = elemTy})
           )
       | typeCheckExp
           (env, expectedTy, F.PrimExp (F.VectorOp, [elemTy], elements)) =
           ( List.app (fn elem => typeCheckExp (env, elemTy, elem)) elements
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.AppType
                  {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
           )
@@ -539,7 +521,7 @@ struct
           , F.PrimExp (F.DataTagAsStringOp _, [dataTy], [data])
           ) (* TODO: Check constructor info *) =
           ( typeCheckExp (env, dataTy, data)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_string)
           )
       | typeCheckExp
@@ -548,7 +530,7 @@ struct
           , F.PrimExp (F.DataTagAsString16Op _, [dataTy], [data])
           ) (* TODO: Check constructor info *) =
           ( typeCheckExp (env, dataTy, data)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_string16)
           )
       | typeCheckExp
@@ -557,8 +539,7 @@ struct
           , F.PrimExp (F.DataPayloadOp _, [dataTy, payloadTy], [data])
           ) (* TODO: Check constructor info *) =
           ( typeCheckExp (env, dataTy, data)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              payloadTy
+          ; checkType (#aliasEnv env, expectedTy) payloadTy
           )
       | typeCheckExp
           ( env
@@ -566,16 +547,14 @@ struct
           , F.PrimExp (F.ExnPayloadOp, [payloadTy], [data])
           ) (* TODO: Check constructor info *) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_exn, data)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              payloadTy
+          ; checkType (#aliasEnv env, expectedTy) payloadTy
           )
       | typeCheckExp
           ( env
           , expectedTy
           , F.PrimExp (F.ConstructValOp _, [dataTy], [])
           ) (* TODO: Check constructor info *) =
-          checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-            dataTy
+          checkType (#aliasEnv env, expectedTy) dataTy
       | typeCheckExp
           ( env
           , expectedTy
@@ -583,12 +562,11 @@ struct
               (F.ConstructValWithPayloadOp _, [dataTy, payloadTy], [payload])
           ) =
           ( typeCheckExp (env, payloadTy, payload)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              dataTy
+          ; checkType (#aliasEnv env, expectedTy) dataTy
           )
       | typeCheckExp (env, expectedTy, F.PrimExp (F.ConstructExnOp, [], [tag])) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_exntag, tag)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_exn)
           )
       | typeCheckExp
@@ -598,7 +576,7 @@ struct
           ) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_exntag, tag)
           ; typeCheckExp (env, payloadTy, payload)
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_exn)
           )
       | typeCheckExp (env, expectedTy, F.PrimExp (F.JsCallOp, [], f :: args)) =
@@ -607,8 +585,8 @@ struct
               (fn a =>
                  typeCheckExp
                    (env, F.TyVar Typing.primTyName_JavaScript_value, a)) args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              (F.TyVar Typing.primTyName_JavaScript_value)
+          ; checkType (#aliasEnv env, expectedTy) (F.TyVar
+              Typing.primTyName_JavaScript_value)
           )
       | typeCheckExp
           (env, expectedTy, F.PrimExp (F.JsMethodOp, [], f :: name :: args)) =
@@ -618,8 +596,8 @@ struct
               (fn a =>
                  typeCheckExp
                    (env, F.TyVar Typing.primTyName_JavaScript_value, a)) args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              (F.TyVar Typing.primTyName_JavaScript_value)
+          ; checkType (#aliasEnv env, expectedTy) (F.TyVar
+              Typing.primTyName_JavaScript_value)
           )
       | typeCheckExp (env, expectedTy, F.PrimExp (F.JsNewOp, [], f :: args)) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_JavaScript_value, f)
@@ -627,8 +605,8 @@ struct
               (fn a =>
                  typeCheckExp
                    (env, F.TyVar Typing.primTyName_JavaScript_value, a)) args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
-              (F.TyVar Typing.primTyName_JavaScript_value)
+          ; checkType (#aliasEnv env, expectedTy) (F.TyVar
+              Typing.primTyName_JavaScript_value)
           )
       | typeCheckExp (env, expectedTy, F.PrimExp (F.LuaCallOp, [], f :: args)) =
           ( typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, f)
@@ -636,7 +614,7 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.AppType
                  { applied = F.TyVar Typing.primTyName_vector
                  , arg = F.TyVar Typing.primTyName_Lua_value
@@ -648,7 +626,7 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_Lua_value)
           )
       | typeCheckExp
@@ -668,7 +646,7 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args;
-            checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+            checkType (#aliasEnv env, expectedTy)
               (loop (n, Syntax.LabelMap.empty))
           end
       | typeCheckExp
@@ -678,7 +656,7 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.AppType
                  { applied = F.TyVar Typing.primTyName_vector
                  , arg = F.TyVar Typing.primTyName_Lua_value
@@ -691,7 +669,7 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args
-          ; checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+          ; checkType (#aliasEnv env, expectedTy)
               (F.TyVar Typing.primTyName_Lua_value)
           )
       | typeCheckExp
@@ -711,17 +689,45 @@ struct
               (fn a =>
                  typeCheckExp (env, F.TyVar Typing.primTyName_Lua_value, a))
               args;
-            checkType (TypedSyntax.TyVarMap.map #2 (#tyEnv env), expectedTy)
+            checkType (#aliasEnv env, expectedTy)
               (loop (n, Syntax.LabelMap.empty))
           end
       | typeCheckExp (_, _, F.PrimExp (p, _, _)) =
           raise TypeError
             ("PrimOp with invalid arguments: "
              ^ Printer.build (FPrinter.doPrimOp p))
-      (* | typeCheckExp (env, expectedTy, F.VarExp vid) *)
-      (* | typeCheckExp (env, expectedTy, F.RecordExp fields) *)
-      (* | typeCheckExp (env, expectedTy, F.LetExp (decs, exp)) *)
-      (* | typeCheckExp (env, expectedTy, F.AppExp (f, arg)) *)
+      | typeCheckExp (env, expectedTy, F.VarExp vid) =
+          (case TypedSyntax.VIdMap.find (#valEnv env, vid) of
+             NONE =>
+               raise TypeError ("Unbound variable " ^ TypedSyntax.print_VId vid)
+           | SOME ty => checkType (#aliasEnv env, expectedTy) ty)
+      | typeCheckExp (env, expectedTy, F.RecordExp fields) =
+          (case expectedTy of
+             F.RecordType fieldTypes =>
+               if Syntax.LabelMap.numItems fieldTypes = List.length fields then
+                 List.app
+                   (fn (label, field) =>
+                      case Syntax.LabelMap.find (fieldTypes, label) of
+                        SOME fieldTy => typeCheckExp (env, fieldTy, field)
+                      | NONE => raise TypeError "field mismatch") fields
+               else
+                 raise TypeError "field mismatch"
+           | _ => raise TypeError "actual: record")
+      | typeCheckExp (env, expectedTy, F.LetExp (decs, exp)) =
+          let val env' = typeCheckDecs (env, decs)
+          in typeCheckExp (env', expectedTy, exp)
+          end
+      | typeCheckExp (env, expectedTy, F.AppExp (f, arg)) =
+          let
+            val fTy = inferExp (env, f)
+          in
+            case fTy of
+              F.FnType (paramTy, resultTy) =>
+                ( typeCheckExp (env, paramTy, arg)
+                ; checkType (#aliasEnv env, expectedTy) resultTy
+                )
+            | _ => raise TypeError "invalid function application"
+          end
       (* | typeCheckExp (env, expectedTy, F.HandleExp {body, exnName, handler}) *)
       (* | typeCheckExp (env, expectedTy, F.IfThenElseExp (cond, t, e)) *)
       (* | typeCheckExp (env, expectedTy, F.CaseExp { sourceSpan = _, subjectExp, subjectTy, matches, matchType, resultTy }) *)
@@ -735,5 +741,89 @@ struct
       (* | typeCheckExp (env, expectedTy, F.ExportValue _) = () *)
       (* | typeCheckExp (env, expectedTy, F.ExportModule _) = () *)
       | typeCheckExp _ = raise Fail "not implemented yet"
+    and typeCheckDecs (env, decs) =
+      List.foldl typeCheckDec env decs
+    and typeCheckDec (F.ValDec (vid, NONE, exp), env: Env) : Env =
+          let
+            val ty = inferExp (env, exp)
+          in
+            modifyValEnv
+              (fn valEnv => TypedSyntax.VIdMap.insert (valEnv, vid, ty), env)
+          end
+      | typeCheckDec (F.ValDec (vid, SOME ty, exp), env) =
+          ( typeCheckExp (env, ty, exp)
+          ; modifyValEnv
+              (fn valEnv => TypedSyntax.VIdMap.insert (valEnv, vid, ty), env)
+          )
+      | typeCheckDec (F.RecValDec defs, env) =
+          let
+            val env' = modifyValEnv
+              ( fn valEnv =>
+                  List.foldl
+                    (fn ((vid, ty, _), acc) =>
+                       TypedSyntax.VIdMap.insert (acc, vid, ty)) valEnv defs
+              , env
+              )
+          in
+            List.app (fn (_, ty, exp) => typeCheckExp (env', ty, exp)) defs;
+            env'
+          end
+      | typeCheckDec (F.UnpackDec (tv, kind, vid, ty, exp), env) =
+          (case inferExp (env, exp) of
+             F.ExistsType (tv', kind', ty') =>
+               ( if kind <> kind' then raise TypeError "kind mismatch" else ()
+               ; checkType (#aliasEnv env, ty)
+                   (#doTy
+                      (F.substTy
+                         (TypedSyntax.TyVarMap.singleton (tv', F.TyVar tv))) ty')
+               ; { valEnv = TypedSyntax.VIdMap.insert (#valEnv env, vid, ty)
+                 , tyVarEnv =
+                     TypedSyntax.TyVarMap.insert (#tyVarEnv env, tv, kind)
+                 , aliasEnv = #aliasEnv env
+                 , valConEnv = #valConEnv env
+                 }
+               )
+           | _ => raise TypeError "expected ExistsType")
+      | typeCheckDec (F.IgnoreDec exp, env) =
+          let val _ = inferExp (env, exp)
+          in env
+          end
+      | typeCheckDec (F.DatatypeDec datbinds, env) =
+          let
+            fun doDatBind (F.DatBind (tyvars, tyname, conbinds), valConEnv) =
+              let
+                fun doConBind
+                  (F.ConBind (TypedSyntax.MkVId (name, _), optPayloadTy), m) =
+                  StringMap.insert
+                    (m, name, {tyParams = tyvars, payload = optPayloadTy})
+              in
+                TypedSyntax.TyVarMap.insert
+                  ( valConEnv
+                  , tyname
+                  , List.foldl doConBind StringMap.empty conbinds
+                  )
+              end
+          in
+            { valEnv = #valEnv env
+            , tyVarEnv = #tyVarEnv env
+            , aliasEnv = #aliasEnv env
+            , valConEnv = List.foldl doDatBind (#valConEnv env) datbinds
+            }
+          end
+      | typeCheckDec (F.ExceptionDec {name = _, tagName, payloadTy = _}, env) =
+          modifyValEnv
+            ( fn valEnv =>
+                TypedSyntax.VIdMap.insert
+                  (valEnv, tagName, F.TyVar Typing.primTyName_exntag)
+            , env
+            )
+      | typeCheckDec (F.ESImportDec {pure = _, specs, moduleName = _}, env) =
+          modifyValEnv
+            ( fn valEnv =>
+                List.foldl
+                  (fn ((_, vid, ty), acc) =>
+                     TypedSyntax.VIdMap.insert (acc, vid, ty)) valEnv specs
+            , env
+            )
   end (* local *)
 end (* structure TypeCheckF *)
