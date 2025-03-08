@@ -486,12 +486,7 @@ struct
         if #internalConsistencyCheck opts then
           let
             fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
-              | toFTy
-                  (TypedSyntax.AnonymousTyVar (_, ref (TypedSyntax.Link ty))) =
-                  toFTy ty
-              | toFTy
-                  (TypedSyntax.AnonymousTyVar (_, ref (TypedSyntax.Unbound _))) =
-                  raise Fail "unexpected anonymous type variable"
+              | toFTy (TypedSyntax.AnonymousTyVar (_, x)) = Void.absurd x
               | toFTy (TypedSyntax.RecordType (_, fields)) =
                   FSyntax.RecordType (Syntax.LabelMap.map toFTy fields)
               | toFTy (TypedSyntax.RecordExtType (_, _, _)) =

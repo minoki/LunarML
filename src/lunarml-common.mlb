@@ -10,6 +10,7 @@ compat/ord_map.sig
 compat/red-black-set-fn.sml
 compat/red-black-map-fn.sml
 (* end *)
+void.sml
 list-util.sml
 vector-util.sml
 string-set.sml

@@ -56,44 +56,63 @@ sig
   | String
   type tyvar_constraint =
     {sourceSpan: SourcePos.span, equalityRequired: bool, class: class option}
-  datatype Ty =
+  datatype 'link BaseTy =
     TyVar of SourcePos.span * TyVar (* named type variable *)
   | AnonymousTyVar of
       SourcePos.span
-      * TyVarData ref (* anonymous type variable; only used during type checking *)
+      * 'link (* anonymous type variable; only used during type checking *)
   | RecordType of
-      SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
-  | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
-  | FnType of SourcePos.span * Ty * Ty (* function type expression *)
+      SourcePos.span
+      * ('link BaseTy) Syntax.LabelMap.map (* record type expression *)
+  | TyCon of
+      SourcePos.span * ('link BaseTy) list * TyName (* type construction *)
+  | FnType of
+      SourcePos.span
+      * 'link BaseTy
+      * 'link BaseTy (* function type expression *)
   | RecordExtType of
       SourcePos.span
-      * Ty Syntax.LabelMap.map
-      * Ty (* only used during type checking *)
-  and TyVarData =
+      * ('link BaseTy) Syntax.LabelMap.map
+      * 'link BaseTy (* only used during type checking *)
+  datatype TyVarData =
     Unbound of tyvar_constraint * level
-  | Link of Ty
+  | Link of (TyVarData ref) BaseTy
   type AnonymousTyVar = TyVarData ref
-  val PairType: SourcePos.span * Ty * Ty -> Ty
-  val TupleType: SourcePos.span * Ty list -> Ty
-  datatype TypeFunction = TypeFunction of TyVar list * Ty
-  datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint option) list * Ty
-  type ValEnv =
-    (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
-  val emptyValEnv: ValEnv
-  type TypeStructure = {typeFunction: TypeFunction, valEnv: ValEnv}
-  datatype Signature' =
+  type Ty = AnonymousTyVar BaseTy
+  type PureTy = Void.void BaseTy
+  val thawPureTy: PureTy -> 'l BaseTy
+  val PairType: SourcePos.span * 'l BaseTy * 'l BaseTy -> 'l BaseTy
+  val TupleType: SourcePos.span * 'l BaseTy list -> 'l BaseTy
+  datatype TypeFunction = TypeFunction of TyVar list * PureTy
+  datatype 'l BaseTypeScheme =
+    TypeScheme of (TyVar * UnaryConstraint option) list * 'l BaseTy
+  type TypeScheme = AnonymousTyVar BaseTypeScheme
+  type PureTypeScheme = Void.void BaseTypeScheme
+  val thawPureTypeScheme: PureTypeScheme -> 'l BaseTypeScheme
+  type 'link BaseValEnv =
+    ('link BaseTypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+  type ValEnv = AnonymousTyVar BaseValEnv
+  type PureValEnv = Void.void BaseValEnv
+  val emptyValEnv: 'l BaseValEnv
+  type TypeStructure = {typeFunction: TypeFunction, valEnv: PureValEnv}
+  datatype 'link BaseSignature' =
     MkSignature of
-      { valMap: (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+      { valMap:
+          ('link BaseTypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
       , tyConMap: TypeStructure Syntax.TyConMap.map
-      , strMap: Signature' Syntax.StrIdMap.map
+      , strMap: ('link BaseSignature') Syntax.StrIdMap.map
       }
-  type Signature =
-    { valMap: (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+  type 'link BaseSignature =
+    { valMap:
+        ('link BaseTypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
     , tyConMap: TypeStructure Syntax.TyConMap.map
-    , strMap: Signature' Syntax.StrIdMap.map
+    , strMap: ('link BaseSignature') Syntax.StrIdMap.map
     }
+  type Signature = AnonymousTyVar BaseSignature
+  type WrittenSignature = Void.void BaseSignature
+  val thawWrittenSignature: WrittenSignature -> 'l BaseSignature
   type QSignature =
-    { s: Signature
+    { s: WrittenSignature
     , bound: {arity: int, admitsEquality: bool, longtycon: Syntax.LongTyCon} TyNameMap.map
     }
   type PackedSignature =
@@ -107,7 +126,7 @@ sig
         , admitsEquality: bool
         , longtycon: Syntax.LongTyCon
         } list (* forall-bound type names *)
-    , paramSig: Signature
+    , paramSig: WrittenSignature
     , resultSig: PackedSignature
     }
   datatype Pat =
@@ -131,9 +150,11 @@ sig
   | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
   | VectorPat of
       SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
-  datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
+  datatype TypBind =
+    TypBind of SourcePos.span * TyVar list * Syntax.TyCon * PureTy
   datatype ConBind =
-    ConBind of SourcePos.span * VId * Ty option * Syntax.ValueConstructorInfo
+    ConBind of
+      SourcePos.span * VId * PureTy option * Syntax.ValueConstructorInfo
   datatype DatBind =
     DatBind of
       SourcePos.span
@@ -142,8 +163,8 @@ sig
       * ConBind list
       * (* admits equality? *) bool
   datatype ExBind =
-    ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
-  | ExReplication of SourcePos.span * VId * LongVId * Ty option
+    ExBind of SourcePos.span * VId * PureTy option (* <op> vid <of ty> *)
+  | ExReplication of SourcePos.span * VId * LongVId * PureTy option
   datatype match_type = CASE | VAL | HANDLE
   datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
   datatype Exp =
@@ -249,7 +270,7 @@ sig
   type FunExp =
     {tyname: TyName, arity: int, admitsEquality: bool} list
     * StrId
-    * Signature
+    * WrittenSignature
     * StrExp
   datatype TopDec = StrDec of StrDec | FunDec of FunId * FunExp
   type Program = (TopDec list) list
@@ -274,6 +295,7 @@ sig
   val freeTyVarsInTy: TyVarSet.set * Ty -> TyVarSet.set
   val freeAnonymousTyVarsInTy: Ty -> AnonymousTyVar list
   val applySubstTy: Ty TyVarMap.map -> Ty -> Ty
+  val applySubstPureTy: PureTy TyVarMap.map -> PureTy -> PureTy
   val applySubstTyInExpOrDec: Ty TyVarMap.map
                               -> {doExp: Exp -> Exp, doDec: Dec -> Dec}
   val substVId:
@@ -397,45 +419,82 @@ struct
   type tyvar_constraint =
     {sourceSpan: SourcePos.span, equalityRequired: bool, class: class option}
 
-  datatype Ty =
+  datatype 'link BaseTy =
     TyVar of SourcePos.span * TyVar (* named type variable *)
   | AnonymousTyVar of
       SourcePos.span
-      * TyVarData ref (* anonymous type variable; only used during type checking *)
+      * 'link (* anonymous type variable; only used during type checking *)
   | RecordType of
-      SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
-  | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
-  | FnType of SourcePos.span * Ty * Ty (* function type expression *)
+      SourcePos.span
+      * ('link BaseTy) Syntax.LabelMap.map (* record type expression *)
+  | TyCon of
+      SourcePos.span * ('link BaseTy) list * TyName (* type construction *)
+  | FnType of
+      SourcePos.span
+      * 'link BaseTy
+      * 'link BaseTy (* function type expression *)
   | RecordExtType of
       SourcePos.span
-      * Ty Syntax.LabelMap.map
-      * Ty (* only used during type checking *)
-  and TyVarData =
-    Unbound of tyvar_constraint * level
-  | Link of Ty
-
+      * ('link BaseTy) Syntax.LabelMap.map
+      * 'link BaseTy (* only used during type checking *)
+  datatype TyVarData = Unbound of tyvar_constraint * level | Link of Ty
+  withtype Ty = (TyVarData ref) BaseTy
   type AnonymousTyVar = TyVarData ref
+  type PureTy = Void.void BaseTy
+
+  fun thawPureTy (TyVar a) = TyVar a
+    | thawPureTy (AnonymousTyVar (_, x)) = Void.absurd x
+    | thawPureTy (RecordType (span, fields)) =
+        RecordType (span, Syntax.LabelMap.map thawPureTy fields)
+    | thawPureTy (TyCon (span, tyargs, tyname)) =
+        TyCon (span, List.map thawPureTy tyargs, tyname)
+    | thawPureTy (FnType (span, a, b)) =
+        FnType (span, thawPureTy a, thawPureTy b)
+    | thawPureTy (RecordExtType (span, fields, baseTy)) =
+        RecordExtType
+          (span, Syntax.LabelMap.map thawPureTy fields, thawPureTy baseTy)
 
   fun PairType (span, a, b) =
     RecordType (span, Syntax.LabelMapFromList
       [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
 
-  datatype TypeFunction = TypeFunction of TyVar list * Ty
-  datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint option) list * Ty
-  type ValEnv =
-    (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
-  val emptyValEnv: ValEnv = Syntax.VIdMap.empty
+  datatype TypeFunction = TypeFunction of TyVar list * PureTy
 
-  type TypeStructure = {typeFunction: TypeFunction, valEnv: ValEnv}
+  datatype 'l BaseTypeScheme =
+    TypeScheme of (TyVar * UnaryConstraint option) list * 'l BaseTy
+  type TypeScheme = AnonymousTyVar BaseTypeScheme
+  type PureTypeScheme = Void.void BaseTypeScheme
+  fun thawPureTypeScheme (TypeScheme (vars, ty)) =
+    TypeScheme (vars, thawPureTy ty)
 
-  datatype Signature' = MkSignature of Signature
-  withtype Signature =
-    { valMap: (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+  type 'link BaseValEnv =
+    ('link BaseTypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+  type ValEnv = AnonymousTyVar BaseValEnv
+  type PureValEnv = Void.void BaseValEnv
+  val emptyValEnv: 'l BaseValEnv = Syntax.VIdMap.empty
+
+  type TypeStructure = {typeFunction: TypeFunction, valEnv: PureValEnv}
+
+  datatype 'link BaseSignature' = MkSignature of 'link BaseSignature
+  withtype 'link BaseSignature =
+    { valMap:
+        ('link BaseTypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
     , tyConMap: TypeStructure Syntax.TyConMap.map
-    , strMap: Signature' Syntax.StrIdMap.map
+    , strMap: ('link BaseSignature') Syntax.StrIdMap.map
+    }
+  type Signature = AnonymousTyVar BaseSignature
+  type WrittenSignature = Void.void BaseSignature
+  fun thawWrittenSignature {valMap, tyConMap, strMap} =
+    { valMap =
+        Syntax.VIdMap.map (fn (tysc, ids) => (thawPureTypeScheme tysc, ids))
+          valMap
+    , tyConMap = tyConMap
+    , strMap =
+        Syntax.StrIdMap.map
+          (fn MkSignature s => MkSignature (thawWrittenSignature s)) strMap
     }
   type QSignature =
-    { s: Signature
+    { s: WrittenSignature
     , bound: {arity: int, admitsEquality: bool, longtycon: Syntax.LongTyCon} TyNameMap.map
     }
   type PackedSignature =
@@ -449,7 +508,7 @@ struct
         , admitsEquality: bool
         , longtycon: Syntax.LongTyCon
         } list
-    , paramSig: Signature
+    , paramSig: WrittenSignature
     , resultSig: PackedSignature
     }
 
@@ -475,9 +534,11 @@ struct
   | VectorPat of
       SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
 
-  datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
+  datatype TypBind =
+    TypBind of SourcePos.span * TyVar list * Syntax.TyCon * PureTy
   datatype ConBind =
-    ConBind of SourcePos.span * VId * Ty option * Syntax.ValueConstructorInfo
+    ConBind of
+      SourcePos.span * VId * PureTy option * Syntax.ValueConstructorInfo
   datatype DatBind =
     DatBind of
       SourcePos.span
@@ -486,8 +547,8 @@ struct
       * ConBind list
       * (* admits equality? *) bool
   datatype ExBind =
-    ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
-  | ExReplication of SourcePos.span * VId * LongVId * Ty option
+    ExBind of SourcePos.span * VId * PureTy option (* <op> vid <of ty> *)
+  | ExReplication of SourcePos.span * VId * LongVId * PureTy option
 
   datatype match_type = CASE | VAL | HANDLE
   datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
@@ -596,7 +657,7 @@ struct
   type FunExp =
     {tyname: TyName, arity: int, admitsEquality: bool} list
     * StrId
-    * Signature
+    * WrittenSignature
     * StrExp
 
   datatype TopDec = StrDec of StrDec | FunDec of FunId * FunExp
@@ -707,6 +768,43 @@ struct
           "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
       | print_Ty (FnType (_, x, y)) =
           "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
+    fun print_PureTy (TyVar (_, x)) =
+          "TyVar(" ^ print_TyVar x ^ ")"
+      | print_PureTy (AnonymousTyVar (_, x)) = Void.absurd x
+      | print_PureTy (RecordType (_, xs)) =
+          let
+            val xs = Syntax.LabelMap.listItemsi xs
+          in
+            case Syntax.extractTuple (1, xs) of
+              NONE =>
+                "RecordType "
+                ^
+                Syntax.print_list
+                  (Syntax.print_pair (Syntax.print_Label, print_PureTy)) xs
+            | SOME ys => "TupleType " ^ Syntax.print_list print_PureTy ys
+          end
+      | print_PureTy (RecordExtType (_, xs, baseTy)) =
+          let
+            val xs = Syntax.LabelMap.listItemsi xs
+          in
+            "RecordExtType("
+            ^
+            Syntax.print_list
+              (Syntax.print_pair (Syntax.print_Label, print_PureTy)) xs ^ ","
+            ^ print_PureTy baseTy ^ ")"
+          end
+      | print_PureTy (TyCon (_, [], MkTyVar ("int", 0))) = "primTy_int"
+      | print_PureTy (TyCon (_, [], MkTyVar ("word", 1))) = "primTy_word"
+      | print_PureTy (TyCon (_, [], MkTyVar ("real", 2))) = "primTy_real"
+      | print_PureTy (TyCon (_, [], MkTyVar ("string", 3))) = "primTy_string"
+      | print_PureTy (TyCon (_, [], MkTyVar ("char", 4))) = "primTy_char"
+      | print_PureTy (TyCon (_, [], MkTyVar ("exn", 5))) = "primTy_exn"
+      | print_PureTy (TyCon (_, [], MkTyVar ("bool", 6))) = "primTy_bool"
+      | print_PureTy (TyCon (_, x, y)) =
+          "TyCon(" ^ Syntax.print_list print_PureTy x ^ "," ^ print_TyName y
+          ^ ")"
+      | print_PureTy (FnType (_, x, y)) =
+          "FnType(" ^ print_PureTy x ^ "," ^ print_PureTy y ^ ")"
     fun print_Pat (WildcardPat _) = "WildcardPat"
       | print_Pat (SConPat (_, x, _)) =
           "SConPat(" ^ Syntax.print_SCon x ^ ")"
@@ -808,7 +906,7 @@ struct
       | print_Dec (ESImportDec _) = "ESImportDec"
     and print_TypBind (TypBind (_, tyvars, tycon, ty)) =
       "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ ","
-      ^ Syntax.print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
+      ^ Syntax.print_TyCon tycon ^ "," ^ print_PureTy ty ^ ")"
     and print_DatBind (DatBind (_, tyvars, tycon, conbinds, _)) =
       "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ ","
       ^ print_TyName tycon ^ "," ^ Syntax.print_list print_ConBind conbinds
@@ -816,7 +914,7 @@ struct
     and print_ConBind (ConBind (_, vid, NONE, _)) =
           "ConBind(" ^ print_VId vid ^ ",NONE)"
       | print_ConBind (ConBind (_, vid, SOME ty, _)) =
-          "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
+          "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_PureTy ty ^ ")"
     and print_ValBind (TupleBind (_, xs, exp)) =
           "TupleBind("
           ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ ","
@@ -845,12 +943,19 @@ struct
         (Syntax.print_pair
            (print_TyVar, Syntax.print_option print_UnaryConstraint)) tyvars
       ^ "," ^ print_Ty ty ^ ")"
+    fun print_PureTypeScheme (TypeScheme (tyvars, ty)) =
+      "TypeScheme("
+      ^
+      Syntax.print_list
+        (Syntax.print_pair
+           (print_TyVar, Syntax.print_option print_UnaryConstraint)) tyvars
+      ^ "," ^ print_PureTy ty ^ ")"
     (* and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env *)
     (* fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x) *)
     (* fun print_TyNameMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyName,print_elem)) (TyNameMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
     fun print_TypeFunction (TypeFunction (tyvars, ty)) =
-      "TypeFunction(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_Ty ty
-      ^ ")"
+      "TypeFunction(" ^ Syntax.print_list print_TyVar tyvars ^ ","
+      ^ print_PureTy ty ^ ")"
     (* val print_Decs = Syntax.print_list print_Dec *)
     (* fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
       | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")" *)
@@ -861,6 +966,15 @@ struct
         (Syntax.print_pair
            ( Syntax.print_VId
            , Syntax.print_pair (print_TypeScheme, Syntax.print_IdStatus)
+           )) (Syntax.VIdMap.listItemsi valMap) ^ ",tyConMap=..."
+      ^ ",strMap=..." ^ "}"
+    fun print_WrittenSignature {valMap, tyConMap = _, strMap = _} =
+      "{valMap="
+      ^
+      Syntax.print_list
+        (Syntax.print_pair
+           ( Syntax.print_VId
+           , Syntax.print_pair (print_PureTypeScheme, Syntax.print_IdStatus)
            )) (Syntax.VIdMap.listItemsi valMap) ^ ",tyConMap=..."
       ^ ",strMap=..." ^ "}"
     fun print_PackedSignature {s, bound} =
@@ -905,7 +1019,7 @@ struct
             (fn {tyname, arity, admitsEquality} =>
                "(" ^ print_TyName tyname ^ "," ^ Int.toString arity ^ ","
                ^ Bool.toString admitsEquality ^ ")") typarams ^ ","
-          ^ print_Signature s ^ "," ^ print_StrExp strexp ^ "))"
+          ^ print_WrittenSignature s ^ "," ^ print_StrExp strexp ^ "))"
   end (* structure PrettyPrint *)
   open PrettyPrint
 
@@ -958,6 +1072,27 @@ struct
              | SOME replacement => replacement)
         | substTy (AnonymousTyVar (_, ref (Link ty))) = substTy ty
         | substTy (ty as AnonymousTyVar (_, ref (Unbound _))) = ty
+        | substTy (RecordType (span, fields)) =
+            RecordType (span, Syntax.LabelMap.map substTy fields)
+        | substTy (TyCon (span, tyargs, tycon)) =
+            TyCon (span, List.map substTy tyargs, tycon)
+        | substTy (FnType (span, ty1, ty2)) =
+            FnType (span, substTy ty1, substTy ty2)
+        | substTy (RecordExtType (span, fields, baseTy)) =
+            RecordExtType
+              (span, Syntax.LabelMap.map substTy fields, substTy baseTy)
+    in
+      substTy
+    end
+
+  (*: val applySubstPureTy : PureTy TyVarMap.map -> PureTy -> PureTy *)
+  fun applySubstPureTy subst =
+    let
+      fun substTy (ty as TyVar (_, tv')) =
+            (case TyVarMap.find (subst, tv') of
+               NONE => ty
+             | SOME replacement => replacement)
+        | substTy (AnonymousTyVar (_, x)) = Void.absurd x
         | substTy (RecordType (span, fields)) =
             RecordType (span, Syntax.LabelMap.map substTy fields)
         | substTy (TyCon (span, tyargs, tycon)) =
@@ -1082,60 +1217,9 @@ struct
             RecValDec (span, List.map doValBind valbinds)
         | doDec (IgnoreDec (span, exp, ty)) =
             IgnoreDec (span, doExp exp, doTy ty)
-        | doDec (TypeDec (span, typbinds)) =
-            let
-              fun doTypBind (TypBind (span, tyvars, tycon, ty)) =
-                let
-                  val subst' =
-                    List.foldl
-                      (fn (tv, s) =>
-                         if TyVarMap.inDomain (s, tv) then
-                           #1 (TyVarMap.remove (s, tv))
-                         else
-                           s) subst tyvars
-                in
-                  TypBind (span, tyvars, tycon, applySubstTy subst' ty)
-                end
-            in
-              TypeDec (span, List.map doTypBind typbinds)
-            end
-        | doDec (DatatypeDec (span, datbinds)) =
-            let
-              fun doDatBind
-                (DatBind (span, tyvars, tyname, conbinds, admitsEquality)) =
-                let
-                  val subst' =
-                    List.foldl
-                      (fn (tv, s) =>
-                         if TyVarMap.inDomain (s, tv) then
-                           #1 (TyVarMap.remove (s, tv))
-                         else
-                           s) subst tyvars
-                  val doTy' = applySubstTy subst'
-                in
-                  DatBind
-                    ( span
-                    , tyvars
-                    , tyname
-                    , List.map
-                        (fn ConBind (span, vid, optTy, info) =>
-                           ConBind (span, vid, Option.map doTy' optTy, info))
-                        conbinds
-                    , admitsEquality
-                    )
-                end
-            in
-              DatatypeDec (span, List.map doDatBind datbinds)
-            end
-        | doDec (ExceptionDec (span, exbinds)) =
-            let
-              fun doExBind (ExBind (span, vid, optTy)) =
-                    ExBind (span, vid, Option.map doTy optTy)
-                | doExBind (ExReplication (span, vid, longvid, optTy)) =
-                    ExReplication (span, vid, longvid, Option.map doTy optTy)
-            in
-              ExceptionDec (span, List.map doExBind exbinds)
-            end
+        | doDec (dec as TypeDec _) = dec
+        | doDec (dec as DatatypeDec _) = dec
+        | doDec (dec as ExceptionDec _) = dec
         | doDec (OverloadDec (span, class, tyname, map)) =
             OverloadDec
               (span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
@@ -1522,12 +1606,9 @@ struct
             RecValDec (span, List.map doValBind valbind)
         | doDec (IgnoreDec (span, exp, ty)) =
             IgnoreDec (span, doExp exp, doTy ty)
-        | doDec (TypeDec (span, typbinds)) =
-            TypeDec (span, List.map doTypBind typbinds)
-        | doDec (DatatypeDec (span, datbinds)) =
-            DatatypeDec (span, List.map doDatBind datbinds)
-        | doDec (ExceptionDec (span, exbinds)) =
-            ExceptionDec (span, List.map doExBind exbinds)
+        | doDec (dec as TypeDec _) = dec
+        | doDec (dec as DatatypeDec _) = dec
+        | doDec (dec as ExceptionDec _) = dec
         | doDec (OverloadDec (span, class, tyname, map)) =
             OverloadDec
               (span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
@@ -1596,30 +1677,11 @@ struct
             LayeredPat (span, vid, doTy ty, doPat pat)
         | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
             VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
-      and doTypBind (TypBind (span, tyvars, tycon, ty)) =
-        TypBind (span, tyvars, tycon, forceTy ty)
-      and doDatBind (DatBind (span, tyvars, tycon, conbinds, eq)) =
-        let
-          fun doConBind (ConBind (span, vid, optTy, info)) =
-            ConBind (span, vid, Option.map doTy optTy, info)
-        in
-          DatBind (span, tyvars, tycon, List.map doConBind conbinds, eq)
-        end
-      and doExBind (ExBind (span, vid, optTy)) =
-            ExBind (span, vid, Option.map doTy optTy)
-        | doExBind (ExReplication (span, vid, longvid, optTy)) =
-            ExReplication (span, vid, longvid, Option.map doTy optTy)
-      fun doTypeStructure {typeFunction = TypeFunction (tyvars, ty), valEnv} =
-        { typeFunction = TypeFunction (tyvars, doTy ty)
-        , valEnv =
-            Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids))
-              valEnv
-        }
       fun doSignature ({valMap, tyConMap, strMap}: Signature) =
         { valMap =
             Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids))
               valMap
-        , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap
+        , tyConMap = tyConMap
         , strMap =
             Syntax.StrIdMap.map
               (fn MkSignature s => MkSignature (doSignature s)) strMap
@@ -1628,7 +1690,7 @@ struct
             StructExp
               { sourceSpan = sourceSpan
               , valMap = valMap
-              , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap
+              , tyConMap = tyConMap
               , strMap = strMap
               }
         | doStrExp (exp as StrIdExp _) = exp
@@ -1636,10 +1698,7 @@ struct
             PackedStrExp
               { sourceSpan = sourceSpan
               , strExp = doStrExp strExp
-              , payloadTypes =
-                  List.map
-                    (fn TypeFunction (tyvars, ty) =>
-                       TypeFunction (tyvars, doTy ty)) payloadTypes
+              , payloadTypes = payloadTypes
               , packageSig =
                   {s = doSignature (#s packageSig), bound = #bound packageSig}
               }
@@ -1649,14 +1708,7 @@ struct
             FunctorAppExp
               { sourceSpan = sourceSpan
               , funId = funId
-              , argumentTypes =
-                  List.map
-                    (fn { typeFunction = TypeFunction (tyvars, ty)
-                        , admitsEquality
-                        } =>
-                       { typeFunction = TypeFunction (tyvars, doTy ty)
-                       , admitsEquality = admitsEquality
-                       }) argumentTypes
+              , argumentTypes = argumentTypes
               , argumentStr = doStrExp argumentStr
               , packageSig =
                   {s = doSignature (#s packageSig), bound = #bound packageSig}
@@ -1669,7 +1721,7 @@ struct
             StrBindDec
               (span, strid, doStrExp strexp, {s = doSignature s, bound = bound})
       fun doFunExp (bound, strid, s, strexp) =
-        (bound, strid, doSignature s, doStrExp strexp)
+        (bound, strid, s, doStrExp strexp)
       fun doTopDec (StrDec strdec) =
             StrDec (doStrDec strdec)
         | doTopDec (FunDec (funid, funexp)) =
@@ -1785,18 +1837,9 @@ struct
            valbinds
      | IgnoreDec (_, exp, ty) =>
          freeTyVarsInExp (bound, exp) @ freeAnonymousTyVarsInTy ty
-     | TypeDec (_, typbinds) =>
-         List.foldl
-           (fn (typbind, acc) =>
-              acc @ freeAnonymousTyVarsInTypBind (bound, typbind)) [] typbinds
-     | DatatypeDec (_, datbinds) =>
-         List.foldl
-           (fn (datbind, acc) => acc @ freeTyVarsInDatBind (bound, datbind)) []
-           datbinds
-     | ExceptionDec (_, exbinds) =>
-         List.foldl
-           (fn (exbind, acc) => acc @ freeTyVarsInExBind (bound, exbind)) []
-           exbinds
+     | TypeDec _ => []
+     | DatatypeDec _ => []
+     | ExceptionDec _ => []
      | OverloadDec (_, _, _, map) =>
          Syntax.OverloadKeyMap.foldl
            (fn (exp, acc) => acc @ freeTyVarsInExp (bound, exp)) [] map
@@ -1817,21 +1860,6 @@ struct
           (freeTyVarsInExp (bound, exp)) xs
     | freeTyVarsInValBind (bound, PolyVarBind (_, _, TypeScheme (_, ty), exp)) =
         freeAnonymousTyVarsInTy ty @ freeTyVarsInExp (bound, exp)
-  and freeAnonymousTyVarsInTypBind (_, TypBind (_, _, _, ty)) =
-    freeAnonymousTyVarsInTy ty
-  and freeTyVarsInDatBind (bound, DatBind (_, _, _, conbinds, _)) =
-    List.foldl (fn (conbind, acc) => acc @ freeTyVarsInConBind (bound, conbind))
-      [] conbinds
-  and freeTyVarsInConBind (_, ConBind (_, _, NONE, _)) = []
-    | freeTyVarsInConBind (_, ConBind (_, _, SOME ty, _)) =
-        freeAnonymousTyVarsInTy ty
-  and freeTyVarsInExBind (_ (* bound *), ExBind (_, _, NONE)) = []
-    | freeTyVarsInExBind (_, ExBind (_, _, SOME ty)) =
-        freeAnonymousTyVarsInTy ty
-    | freeTyVarsInExBind (_, ExReplication (_, _, _, NONE)) = []
-    | freeTyVarsInExBind (_, ExReplication (_, _, _, SOME ty)) =
-        freeAnonymousTyVarsInTy ty
-  (* and freeTyVarsInUnaryConstraint (_ (* bound *), _ (* unaryConstraint *)) = [] *)
 
   (*: val filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
   fun filterVarsInPat pred =

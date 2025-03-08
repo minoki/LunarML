@@ -1482,6 +1482,7 @@ struct
     in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
     end
 
+  (*
   local structure F = FSyntax
   in
     fun refreshTy (ctx: Context) =
@@ -1521,6 +1522,7 @@ struct
         goTy TypedSyntax.TyVarMap.empty
       end
   end
+  *)
 
   local
     structure T = TypedSyntax
@@ -1545,6 +1547,23 @@ struct
           ]
       end
   in
+    (*: val toFTyPure : Context * 'dummy * TypedSyntax.PureTy -> FSyntax.Ty *)
+    fun toFTyPure (_, _: 'dummy, T.TyVar (_, tv)) = F.TyVar tv
+      | toFTyPure (_, _, T.AnonymousTyVar (_, x)) = Void.absurd x
+      | toFTyPure (ctx, env, T.RecordType (_, fields)) =
+          F.RecordType
+            (Syntax.LabelMap.map (fn ty => toFTyPure (ctx, env, ty)) fields)
+      | toFTyPure (ctx, _, T.RecordExtType (span, _, _)) =
+          emitFatalError (ctx, [span], "unexpected record extension")
+      | toFTyPure (ctx, env, T.TyCon (_, tyargs, tyname)) =
+          F.TyCon
+            (List.map (fn arg => toFTyPure (ctx, env, arg)) tyargs, tyname)
+      | toFTyPure (ctx, env, T.FnType (_, paramTy, resultTy)) =
+          let
+            fun doTy ty = toFTyPure (ctx, env, ty)
+          in
+            F.FnType (doTy paramTy, doTy resultTy)
+          end
     (*: val toFTy : Context * 'dummy * TypedSyntax.Ty -> FSyntax.Ty *)
     fun toFTy (_, _: 'dummy, T.TyVar (_, tv)) = F.TyVar tv
       | toFTy (ctx, env, T.AnonymousTyVar (_, ref (T.Link ty))) =
@@ -2793,7 +2812,7 @@ struct
                           (fn T.ConBind (_, vid, NONE, _) =>
                              F.ConBind (vid, NONE)
                             | T.ConBind (_, vid, SOME ty, _) =>
-                             F.ConBind (vid, SOME (toFTy (ctx, env, ty))))
+                             F.ConBind (vid, SOME (toFTyPure (ctx, env, ty))))
                           conbinds
                     in
                       F.DatBind (tyvars, tycon, conbinds)
@@ -2817,7 +2836,8 @@ struct
                               | SOME payloadTy =>
                                   let
                                     val payloadId = freshVId (ctx, "payload")
-                                    val payloadTy = toFTy (ctx, env, payloadTy)
+                                    val payloadTy =
+                                      toFTyPure (ctx, env, payloadTy)
                                     val ty = F.FnType (payloadTy, baseTy)
                                   in
                                     ( ty
@@ -2873,7 +2893,8 @@ struct
                    let
                      val tag = freshVId (ctx, name ^ "_tag")
                      val optPayloadTy =
-                       Option.map (fn ty => toFTy (ctx, env, ty)) optPayloadTy
+                       Option.map (fn ty => toFTyPure (ctx, env, ty))
+                         optPayloadTy
                      val (ty, exp) =
                        case optPayloadTy of
                          NONE =>
@@ -2915,7 +2936,8 @@ struct
                           val conTy =
                             case optTy of
                               SOME payloadTy =>
-                                F.FnType (toFTy (ctx, env, payloadTy), exnTy)
+                                F.FnType
+                                  (toFTyPure (ctx, env, payloadTy), exnTy)
                             | NONE => exnTy
                           val env = updateValMap
                             (fn m => T.VIdMap.insert (m, vid, conTy), env)
@@ -3120,8 +3142,9 @@ struct
                                  val payload1 = freshVId (ctx, "a")
                                  val payload2 = freshVId (ctx, "b")
                                  val payloadEq =
-                                   getEquality (ctx, env'', payloadTy)
-                                 val payloadTy = toFTy (ctx, env, payloadTy)
+                                   getEquality
+                                     (ctx, env'', T.thawPureTy payloadTy)
+                                 val payloadTy = toFTyPure (ctx, env, payloadTy)
                                in
                                  ( F.TuplePat
                                      ( span
@@ -3215,7 +3238,7 @@ struct
                 tyvars'
           , equalityEnv
           )
-        val equality = getEquality (ctx, equalityEnv, ty)
+        val equality = getEquality (ctx, equalityEnv, T.thawPureTy ty)
         val equality =
           List.foldr
             (fn ((tv, eqParam), body) =>
@@ -3327,7 +3350,7 @@ struct
                      val kind = F.arityToKind arity
                      val payloadTy' =
                        List.foldr (fn (tv, ty) => F.TypeFn (tv, F.TypeKind, ty))
-                         (toFTy (ctx, env', payloadTy)) tyvars
+                         (toFTyPure (ctx, env', payloadTy)) tyvars
                      val exp =
                        #doExp
                          (F.substTy (T.TyVarMap.singleton (tyname, payloadTy')))
@@ -3399,7 +3422,7 @@ struct
                    let
                      val ty =
                        List.foldr (fn (tv, ty) => F.TypeFn (tv, F.TypeKind, ty))
-                         (toFTy (ctx, env', ty)) tyvars
+                         (toFTyPure (ctx, env', ty)) tyvars
                    in
                      F.TyAppExp (exp, ty)
                    end) exp argumentTypes (* apply the types *)
@@ -3411,7 +3434,7 @@ struct
                    let
                      val tf =
                        List.foldr (fn (tv, t) => F.TypeFn (tv, F.TypeKind, t))
-                         (toFTy (ctx, env', ta)) tyvars
+                         (toFTyPure (ctx, env', ta)) tyvars
                    in
                      F.substituteTy (tv, tf) ty
                    end
@@ -3632,7 +3655,8 @@ struct
         val env' =
           updateEqualityForTyNameMap (fn _ => equalityForTyNameMap, env)
         val env' = updateValMap (fn _ => valMap, env')
-        val paramSigTy = signatureToTy (ctx, env, paramSig)
+        val paramSigTy =
+          signatureToTy (ctx, env, T.thawWrittenSignature paramSig)
         val env' = updateValMap
           (fn m => T.VIdMap.insert (m, paramId, paramSigTy), env')
         val (_, bodyDecs, bodyExp, bodyTy) = strExpToFExp (ctx, env', bodyStr)
@@ -3796,9 +3820,7 @@ struct
           let
             open InitialEnv
             fun toFTy (T.TyVar (_, tv)) = F.TyVar tv
-              | toFTy (T.AnonymousTyVar (_, ref (T.Link ty))) = toFTy ty
-              | toFTy (T.AnonymousTyVar (_, ref (T.Unbound _))) =
-                  raise Fail "unexpected anonymous type variable"
+              | toFTy (T.AnonymousTyVar (_, x)) = Void.absurd x
               | toFTy (T.RecordType (_, fields)) =
                   F.RecordType (Syntax.LabelMap.map toFTy fields)
               | toFTy (T.RecordExtType (_, _, _)) =

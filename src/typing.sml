@@ -30,25 +30,25 @@ sig
   val primTyName_int64: TypedSyntax.TyName
   val primTyName_word32: TypedSyntax.TyName
   val primTyName_word64: TypedSyntax.TyName
-  val primTy_unit: TypedSyntax.Ty
-  val primTy_int: TypedSyntax.Ty
-  val primTy_word: TypedSyntax.Ty
-  val primTy_real: TypedSyntax.Ty
-  val primTy_string: TypedSyntax.Ty
-  val primTy_char: TypedSyntax.Ty
-  val primTy_exn: TypedSyntax.Ty
-  val primTy_exntag: TypedSyntax.Ty
-  val primTy_bool: TypedSyntax.Ty
-  val primTy_char16: TypedSyntax.Ty
-  val primTy_string16: TypedSyntax.Ty
-  val primTy_intInf: TypedSyntax.Ty
-  val primTy_Lua_value: TypedSyntax.Ty
-  val primTy_JavaScript_value: TypedSyntax.Ty
-  val primTy_int32: TypedSyntax.Ty
-  val primTy_int54: TypedSyntax.Ty
-  val primTy_int64: TypedSyntax.Ty
-  val primTy_word32: TypedSyntax.Ty
-  val primTy_word64: TypedSyntax.Ty
+  val primTy_unit: 'l TypedSyntax.BaseTy
+  val primTy_int: 'l TypedSyntax.BaseTy
+  val primTy_word: 'l TypedSyntax.BaseTy
+  val primTy_real: 'l TypedSyntax.BaseTy
+  val primTy_string: 'l TypedSyntax.BaseTy
+  val primTy_char: 'l TypedSyntax.BaseTy
+  val primTy_exn: 'l TypedSyntax.BaseTy
+  val primTy_exntag: 'l TypedSyntax.BaseTy
+  val primTy_bool: 'l TypedSyntax.BaseTy
+  val primTy_char16: 'l TypedSyntax.BaseTy
+  val primTy_string16: 'l TypedSyntax.BaseTy
+  val primTy_intInf: 'l TypedSyntax.BaseTy
+  val primTy_Lua_value: 'l TypedSyntax.BaseTy
+  val primTy_JavaScript_value: 'l TypedSyntax.BaseTy
+  val primTy_int32: 'l TypedSyntax.BaseTy
+  val primTy_int54: 'l TypedSyntax.BaseTy
+  val primTy_int64: 'l TypedSyntax.BaseTy
+  val primTy_word32: 'l TypedSyntax.BaseTy
+  val primTy_word64: 'l TypedSyntax.BaseTy
   val VId_Bind: TypedSyntax.VId
   val VId_ref: TypedSyntax.VId
   val VId_DCOLON: TypedSyntax.VId
@@ -259,8 +259,8 @@ struct
   fun emitFatalTypeError (ctx: InferenceContext, spans, message) =
     emitFatalError (#context ctx, spans, message)
 
-  (*: val lookupStr : Context * TypedSyntax.Signature * SourcePos.span * Syntax.StrId list -> TypedSyntax.Signature *)
-  fun lookupStr (_, s: TypedSyntax.Signature, _, nil) = s
+  (*: val lookupStr : Context * 'l TypedSyntax.BaseSignature * SourcePos.span * Syntax.StrId list -> 'l TypedSyntax.BaseSignature *)
+  fun lookupStr (_, s: 'l TypedSyntax.BaseSignature, _, nil) = s
     | lookupStr
         ( ctx
         , {strMap = strMap, ...}
@@ -323,8 +323,8 @@ struct
   | ValueNotFound of Syntax.VId Syntax.Qualified
   | StructureNotFound of Syntax.StrId Syntax.Qualified
 
-  (*: val lookupStr' : 'context * TypedSyntax.Signature * Syntax.StrId list * Syntax.StrId list -> TypedSyntax.Signature LookupResult *)
-  fun lookupStr' (_, s: TypedSyntax.Signature, _, nil) = Found s
+  (*: val lookupStr' : 'context * 'l TypedSyntax.BaseSignature * Syntax.StrId list * Syntax.StrId list -> ('l TypedSyntax.BaseSignature) LookupResult *)
+  fun lookupStr' (_, s: 'l TypedSyntax.BaseSignature, _, nil) = Found s
     | lookupStr' (ctx, {strMap, ...}, revStrIds, strid0 :: strids) =
         (case Syntax.StrIdMap.find (strMap, strid0) of
            NONE =>
@@ -361,7 +361,7 @@ struct
                   ValueNotFound notfound (* cannot occur *))
          | NONE => StructureNotFound (Syntax.MkQualified ([], strid0)))
 
-  (*: val getConstructedType : Context * SourcePos.span * TypedSyntax.Ty -> TypedSyntax.TyName *)
+  (*: val getConstructedType : Context * SourcePos.span * 'l TypedSyntax.BaseTy -> TypedSyntax.TyName *)
   fun getConstructedType (ctx, span, TypedSyntax.TyVar _) =
         emitFatalError (ctx, [span], "getConstructedType: got a type variable")
     | getConstructedType (ctx, span, TypedSyntax.AnonymousTyVar _) =
@@ -1556,8 +1556,9 @@ struct
       unify
         (ctx, env, ConstraintInfo.ACTUAL_EXPECTED, span, actualTy, expectedTy)
 
-    (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
-    fun evalTy (ctx: Context, env: ('val, 'str) Env', S.TyVar (span, tv)) : T.Ty =
+    (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.PureTy *)
+    fun evalTy (ctx: Context, env: ('val, 'str) Env', S.TyVar (span, tv)) :
+      T.PureTy =
           (case Syntax.TyVarMap.find (#boundTyVars env, tv) of
              SOME tv => T.TyVar (span, tv)
            | NONE =>
@@ -1607,7 +1608,7 @@ struct
               handle ListPair.UnequalLengths =>
                 emitFatalError (ctx, [span], "invalid type construction")
           in
-            T.applySubstTy subst ty
+            T.applySubstPureTy subst ty
           end
       | evalTy (ctx, env, S.FnType (span, ty1, ty2)) =
           T.FnType (span, evalTy (ctx, env, ty1), evalTy (ctx, env, ty2))
@@ -1864,7 +1865,7 @@ struct
                  ))
       | synthTypeOfPat (ctx, env, S.TypedPat (span, pat, ty)) =
           let
-            val ty = evalTy (#context ctx, env, ty)
+            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
             val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty)
           in
             (ty, vars, T.TypedPat (span, pat, ty))
@@ -1887,7 +1888,7 @@ struct
           end
       | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, SOME ty, pat)) =
           let
-            val ty = evalTy (#context ctx, env, ty)
+            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
             val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty)
             val () =
               case Syntax.VIdMap.find (vars, vid) of
@@ -2579,7 +2580,7 @@ struct
           end
       | synthTypeOfExp (ctx, env, S.TypedExp (span, exp, ty)) =
           let
-            val ty = evalTy (#context ctx, env, ty)
+            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
             val exp = checkTypeOfExp (ctx, env, exp, ty)
           in
             (ty, T.TypedExp (span, exp, ty))
@@ -3208,8 +3209,11 @@ struct
                        val (expTy, exp) =
                          case pat of
                            S.TypedPat (_, _, ty) =>
-                             let val ty = evalTy (#context ctx', env, ty)
-                             in (ty, checkTypeOfExp (ctx', env, exp, ty))
+                             let
+                               val ty = T.thawPureTy
+                                 (evalTy (#context ctx', env, ty))
+                             in
+                               (ty, checkTypeOfExp (ctx', env, exp, ty))
                              end
                          | _ => synthTypeOfExp (ctx', env, exp)
                        val (newValEnv, pat) =
@@ -3593,7 +3597,7 @@ struct
                            , funMap = #funMap env
                            , boundTyVars = boundTyVars
                            }
-                         val ty = evalTy (#context ctx, env, ty)
+                         val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
                          fun doTyVar tv =
                            case S.TyVarMap.find (boundTyVars, tv) of
                              SOME tv =>
@@ -3857,7 +3861,7 @@ struct
                            , funMap = #funMap env
                            , boundTyVars = boundTyVars
                            }
-                         val ty = evalTy (#context ctx, env, ty)
+                         val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
                          fun doTyVar tv =
                            case S.TyVarMap.find (boundTyVars, tv) of
                              SOME tv =>
@@ -4068,7 +4072,10 @@ struct
                              ( Syntax.VIdMap.insert
                                  ( valEnv
                                  , vid
-                                 , (tysc, idstatus, T.MkShortVId vid')
+                                 , ( T.thawPureTypeScheme tysc
+                                   , idstatus
+                                   , T.MkShortVId vid'
+                                   )
                                  ) (* TODO: check for duplicate *)
                              , conbind :: conbinds
                              )
@@ -4113,6 +4120,10 @@ struct
                   , []
                   ) datbinds
               end
+            val valMap =
+              Syntax.VIdMap.map
+                (fn (tysc, idstatus, longvid) =>
+                   (T.thawPureTypeScheme tysc, idstatus, longvid)) valMap
             val (tyConMap, typbinds) =
               let
                 fun doTypBind
@@ -4198,7 +4209,8 @@ struct
             val env' =
               { valMap =
                   Syntax.VIdMap.mapi
-                    (fn (vid, (tysc, ids)) => (tysc, ids, getLongVId vid))
+                    (fn (vid, (tysc, ids)) =>
+                       (T.thawPureTypeScheme tysc, ids, getLongVId vid))
                     (#valEnv tystr)
               , tyConMap = Syntax.TyConMap.singleton (tycon, tystr)
               , tyNameMap = TypedSyntax.TyNameMap.empty
@@ -4258,7 +4270,8 @@ struct
                             ( []
                             , case optTy of
                                 NONE => primTy_exn
-                              | SOME ty => T.FnType (span, ty, primTy_exn)
+                              | SOME ty =>
+                                  T.FnType (span, T.thawPureTy ty, primTy_exn)
                             )
                         , Syntax.ExceptionConstructor
                         , T.MkShortVId vid'
@@ -4275,10 +4288,30 @@ struct
                     case lookupLongVIdInEnv (ctx, env, span, longvid) of
                       Found (longvid, tysc, ids as Syntax.ExceptionConstructor) =>
                         let
+                          fun toPureTy (T.TyVar (span, tv)) = T.TyVar (span, tv)
+                            | toPureTy (T.AnonymousTyVar _) =
+                                emitFatalTypeError
+                                  ( ctx
+                                  , [span]
+                                  , "exception constructor must not refer to anonymous type variable"
+                                  )
+                            | toPureTy (T.RecordType (span, fields)) =
+                                T.RecordType
+                                  (span, Syntax.LabelMap.map toPureTy fields)
+                            | toPureTy (T.TyCon (span, ta, tn)) =
+                                T.TyCon (span, List.map toPureTy ta, tn)
+                            | toPureTy (T.FnType (span, a, b)) =
+                                T.FnType (span, toPureTy a, toPureTy b)
+                            | toPureTy (T.RecordExtType (span, fields, baseTy)) =
+                                T.RecordExtType
+                                  ( span
+                                  , Syntax.LabelMap.map toPureTy fields
+                                  , toPureTy baseTy
+                                  )
                           val optTy =
                             case tysc of
                               T.TypeScheme ([], T.FnType (_, payloadTy, _)) =>
-                                SOME payloadTy
+                                SOME (toPureTy payloadTy)
                             | T.TypeScheme ([], _) => NONE
                             | T.TypeScheme (_ :: _, _) =>
                                 ( emitTypeError
@@ -4654,7 +4687,7 @@ struct
                    ( name
                    , vid
                    , newVId (#context ctx, vid)
-                   , evalTy (#context ctx, env, ty)
+                   , T.thawPureTy (evalTy (#context ctx, env, ty))
                    )) specs
             val valMap =
               List.foldl
@@ -5299,6 +5332,35 @@ struct
               )
           | goTy (T.FnType (_, ty1, ty2)) =
               (goTy ty1; goTy ty2)
+        fun goPureTy (T.TyVar (span, tv)) =
+              if T.TyVarSet.member (tvset, tv) then
+                ()
+              else
+                emitError
+                  ( ctx
+                  , [span]
+                  , "type variable scope violation: "
+                    ^ TypedSyntax.PrettyPrint.print_TyVar tv
+                  )
+          | goPureTy (T.AnonymousTyVar (_, x)) = Void.absurd x
+          | goPureTy (T.RecordType (_, fields)) =
+              Syntax.LabelMap.app goPureTy fields
+          | goPureTy (T.RecordExtType (_, fields, baseTy)) =
+              (Syntax.LabelMap.app goPureTy fields; goPureTy baseTy)
+          | goPureTy (T.TyCon (span, tyargs, tyname)) =
+              ( if T.TyNameSet.member (tynameset, tyname) then
+                  ()
+                else
+                  emitError
+                    ( ctx
+                    , [span]
+                    , "type constructor scope violation: "
+                      ^ TypedSyntax.PrettyPrint.print_TyName tyname
+                    )
+              ; List.app goPureTy tyargs
+              )
+          | goPureTy (T.FnType (_, ty1, ty2)) =
+              (goPureTy ty1; goPureTy ty2)
         fun goTypeScheme (T.TypeScheme (typarams, ty)) =
           #goTy
             (checkTyScope
@@ -5398,10 +5460,10 @@ struct
               let
                 fun goTypBind (T.TypBind (_, tyvars, _, ty)) =
                   let
-                    val {goTy, ...} = checkTyScope
+                    val {goPureTy, ...} = checkTyScope
                       (ctx, T.TyVarSet.addList (tvset, tyvars), tynameset)
                   in
-                    goTy ty
+                    goPureTy ty
                   end
               in
                 List.app goTypBind typbinds;
@@ -5415,10 +5477,10 @@ struct
                        T.TyNameSet.add (tynameset, tyname)) tynameset datbinds
                 fun goDatBind (T.DatBind (_, tyvars, _, conbinds, _)) =
                   let
-                    val {goTy, ...} = checkTyScope
+                    val {goPureTy, ...} = checkTyScope
                       (ctx, T.TyVarSet.addList (tvset, tyvars), tynameset)
                     fun goConBind (T.ConBind (_, _, optTy, _)) =
-                      Option.app goTy optTy
+                      Option.app goPureTy optTy
                   in
                     List.app goConBind conbinds
                   end
@@ -5428,9 +5490,9 @@ struct
               end
           | goDec (T.ExceptionDec (_, exbinds)) =
               ( List.app
-                  (fn T.ExBind (_, _, optTy) => Option.app goTy optTy
-                    | T.ExReplication (_, _, _, optTy) => Option.app goTy optTy)
-                  exbinds
+                  (fn T.ExBind (_, _, optTy) => Option.app goPureTy optTy
+                    | T.ExReplication (_, _, _, optTy) =>
+                     Option.app goPureTy optTy) exbinds
               ; tynameset
               )
           | goDec (T.OverloadDec (span, _, tyname, map)) =
@@ -5571,6 +5633,7 @@ struct
                end) tynameset decs
       in
         { goTy = goTy
+        , goPureTy = goPureTy
         , goTypeScheme = goTypeScheme
         , goPat = goPat
         , goExp = goExp
@@ -5594,13 +5657,14 @@ struct
              goTopDecs topdec
            end) tynameset program
 
-    val emptySignature: TypedSyntax.Signature =
+    val emptySignature: 'link TypedSyntax.BaseSignature =
       { valMap = Syntax.VIdMap.empty
       , tyConMap = Syntax.TyConMap.empty
       , strMap = Syntax.StrIdMap.empty
       }
 
-    fun mergeSignature (s1: T.Signature, s2: T.Signature) : T.Signature =
+    fun mergeSignature (s1: 'link T.BaseSignature, s2: 'link T.BaseSignature) :
+      'link T.BaseSignature =
       { valMap = Syntax.VIdMap.unionWith #2 (#valMap s1, #valMap s2)
       , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap s1, #tyConMap s2)
       , strMap = Syntax.StrIdMap.unionWith #2 (#strMap s1, #strMap s2)
@@ -5630,7 +5694,7 @@ struct
              bound')
       end
     and canonicalPathForTyName
-      ({valMap = _, tyConMap, strMap}: T.Signature, tyname: T.TyName) :
+      ({valMap = _, tyConMap, strMap}: T.WrittenSignature, tyname: T.TyName) :
       Syntax.LongTyCon option =
       let
         val t =
@@ -5662,8 +5726,10 @@ struct
       end
 
     fun addSignatureToEnv
-      (env: SigEnv, s: T.Signature, tyNameMap: TyNameAttr T.TyNameMap.map) :
-      SigEnv =
+      ( env: SigEnv
+      , s: T.WrittenSignature
+      , tyNameMap: TyNameAttr T.TyNameMap.map
+      ) : SigEnv =
       { valMap = #valMap env (* not used *)
       , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env, #tyConMap s)
       , tyNameMap =
@@ -5671,7 +5737,8 @@ struct
             (#tyNameMap env, tyNameMap) (* should not overlap *)
       , strMap = Syntax.StrIdMap.unionWith #2
           ( #strMap env
-          , Syntax.StrIdMap.map (fn T.MkSignature s => (s, ())) (#strMap s)
+          , Syntax.StrIdMap.map
+              (fn T.MkSignature s => (T.thawWrittenSignature s, ())) (#strMap s)
           )
       , sigMap = #sigMap env
       , funMap = #funMap env
@@ -5705,7 +5772,42 @@ struct
                            , "invalid type constructor substitution"
                            )
                    in
-                     T.applySubstTy subst' ty
+                     T.applySubstTy subst' (T.thawPureTy ty)
+                   end)
+          | goTy (T.FnType (span, ty1, ty2)) =
+              T.FnType (span, goTy ty1, goTy ty2)
+      in
+        goTy
+      end
+    fun applySubstTyConInPureTy
+      (ctx: Context, subst: T.TypeFunction T.TyNameMap.map) : T.PureTy
+                                                              -> T.PureTy =
+      let
+        fun goTy (ty as T.TyVar _) = ty
+          | goTy (T.AnonymousTyVar (_, x)) = Void.absurd x
+          | goTy (T.RecordType (span, fields)) =
+              T.RecordType (span, Syntax.LabelMap.map goTy fields)
+          | goTy (T.RecordExtType (span, fields, baseTy)) =
+              T.RecordExtType
+                (span, Syntax.LabelMap.map goTy fields, goTy baseTy)
+          | goTy (T.TyCon (span, tyargs, tycon)) =
+              (case T.TyNameMap.find (subst, tycon) of
+                 NONE => T.TyCon (span, List.map goTy tyargs, tycon)
+               | SOME (T.TypeFunction (tyvars, ty)) =>
+                   let
+                     val subst' =
+                       (ListPair.foldlEq
+                          (fn (tv, tyarg, m) =>
+                             TypedSyntax.TyVarMap.insert (m, tv, goTy tyarg))
+                          TypedSyntax.TyVarMap.empty (tyvars, tyargs))
+                       handle ListPair.UnequalLengths =>
+                         emitFatalError
+                           ( ctx
+                           , [span]
+                           , "invalid type constructor substitution"
+                           )
+                   in
+                     T.applySubstPureTy subst' ty
                    end)
           | goTy (T.FnType (span, ty1, ty2)) =
               T.FnType (span, goTy ty1, goTy ty2)
@@ -5716,11 +5818,15 @@ struct
       (ctx: Context, subst: T.TypeFunction T.TyNameMap.map) : T.Signature
                                                               -> T.Signature =
       let
-        val goTy = applySubstTyConInTy (ctx, subst)
+        val goTy: T.Ty -> T.Ty = applySubstTyConInTy (ctx, subst)
+        val goPureTy: T.PureTy -> T.PureTy =
+          applySubstTyConInPureTy (ctx, subst)
         fun goTypeScheme (T.TypeScheme (tvs, ty)) =
           T.TypeScheme (tvs, goTy ty)
+        fun goPureTypeScheme (T.TypeScheme (tvs, ty)) =
+          T.TypeScheme (tvs, goPureTy ty)
         fun goTypeFunction (T.TypeFunction (tvs, ty)) =
-          T.TypeFunction (tvs, goTy ty)
+          T.TypeFunction (tvs, goPureTy ty)
         fun goSig {valMap, tyConMap, strMap} =
           { valMap =
               Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids))
@@ -5731,7 +5837,37 @@ struct
                    { typeFunction = goTypeFunction typeFunction
                    , valEnv =
                        Syntax.VIdMap.map
-                         (fn (tysc, ids) => (goTypeScheme tysc, ids)) valEnv
+                         (fn (tysc, ids) => (goPureTypeScheme tysc, ids)) valEnv
+                   }) tyConMap
+          , strMap =
+              Syntax.StrIdMap.map
+                (fn T.MkSignature s => T.MkSignature (goSig s)) strMap
+          }
+      in
+        goSig
+      end
+    fun applySubstTyConInWrittenSig
+      (ctx: Context, subst: T.TypeFunction T.TyNameMap.map) :
+      T.WrittenSignature
+      -> T.WrittenSignature =
+      let
+        val goPureTy: T.PureTy -> T.PureTy =
+          applySubstTyConInPureTy (ctx, subst)
+        fun goPureTypeScheme (T.TypeScheme (tvs, ty)) =
+          T.TypeScheme (tvs, goPureTy ty)
+        fun goTypeFunction (T.TypeFunction (tvs, ty)) =
+          T.TypeFunction (tvs, goPureTy ty)
+        fun goSig {valMap, tyConMap, strMap} =
+          { valMap =
+              Syntax.VIdMap.map (fn (tysc, ids) => (goPureTypeScheme tysc, ids))
+                valMap
+          , tyConMap =
+              Syntax.TyConMap.map
+                (fn {typeFunction, valEnv} =>
+                   { typeFunction = goTypeFunction typeFunction
+                   , valEnv =
+                       Syntax.VIdMap.map
+                         (fn (tysc, ids) => (goPureTypeScheme tysc, ids)) valEnv
                    }) tyConMap
           , strMap =
               Syntax.StrIdMap.map
@@ -5742,8 +5878,8 @@ struct
       end
 
     fun refreshTyNameInTy (_: Context, subst: T.TyName T.TyNameMap.map) :
-      T.Ty
-      -> T.Ty =
+      'l T.BaseTy
+      -> 'l T.BaseTy =
       let
         fun goTy (ty as T.TyVar _) = ty
           | goTy (ty as T.AnonymousTyVar _) = ty
@@ -5766,14 +5902,17 @@ struct
         goTy
       end
     fun refreshTyNameInSig (ctx: Context, subst: T.TyName T.TyNameMap.map) :
-      T.Signature
-      -> T.Signature =
+      'l T.BaseSignature
+      -> 'l T.BaseSignature =
       let
-        val goTy = refreshTyNameInTy (ctx, subst)
+        val goTy: 'l T.BaseTy -> 'l T.BaseTy = refreshTyNameInTy (ctx, subst)
+        val goPureTy: T.PureTy -> T.PureTy = refreshTyNameInTy (ctx, subst)
         fun goTypeScheme (T.TypeScheme (tvs, ty)) =
           T.TypeScheme (tvs, goTy ty)
+        fun goPureTypeScheme (T.TypeScheme (tvs, ty)) =
+          T.TypeScheme (tvs, goPureTy ty)
         fun goTypeFunction (T.TypeFunction (tvs, ty)) =
-          T.TypeFunction (tvs, goTy ty)
+          T.TypeFunction (tvs, goPureTy ty)
         fun goSig {valMap, tyConMap, strMap} =
           { valMap =
               Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids))
@@ -5784,7 +5923,7 @@ struct
                    { typeFunction = goTypeFunction typeFunction
                    , valEnv =
                        Syntax.VIdMap.map
-                         (fn (tysc, ids) => (goTypeScheme tysc, ids)) valEnv
+                         (fn (tysc, ids) => (goPureTypeScheme tysc, ids)) valEnv
                    }) tyConMap
           , strMap =
               Syntax.StrIdMap.map
@@ -5853,13 +5992,13 @@ struct
       end
 
     fun checkEquality
-      (ctx: Context, env: ('val, 'str) Env', tyvars: T.TyVarSet.set) : T.Ty
+      (ctx: Context, env: ('val, 'str) Env', tyvars: T.TyVarSet.set) : T.PureTy
                                                                        -> bool =
       let
         fun goTy (T.TyVar (_, tv)) =
               if T.TyVarSet.member (tyvars, tv) then true
               else T.tyVarAdmitsEquality tv
-          | goTy (T.AnonymousTyVar _) = false (* should be an error *)
+          | goTy (T.AnonymousTyVar (_, x)) = Void.absurd x
           | goTy (T.RecordType (_, fields)) = Syntax.LabelMap.all goTy fields
           | goTy (T.RecordExtType (_, fields, baseTy)) =
               Syntax.LabelMap.all goTy fields andalso goTy baseTy
@@ -5991,7 +6130,7 @@ struct
                           T.TyNameMap.singleton (tyname, T.TypeFunction
                             (List.map #2 tyvars, ty))
                       in
-                        { s = applySubstTyConInSig (ctx, subst) (#s s)
+                        { s = applySubstTyConInWrittenSig (ctx, subst) (#s s)
                         , bound = #1 (T.TyNameMap.remove (#bound s, tyname))
                         }
                       end
@@ -6559,7 +6698,7 @@ struct
                                   , "sharing: type alias is invalid"
                                   )) (T.TyNameMap.empty, admitsEquality) tystrs
                    in
-                     { s = applySubstTyConInSig (ctx, subst) (#s s)
+                     { s = applySubstTyConInWrittenSig (ctx, subst) (#s s)
                      , bound =
                          T.TyNameMap.mapPartiali
                            (fn ( tyname
@@ -6586,7 +6725,7 @@ struct
     and collectLongTyCons
       ( ctx
       , strids: Syntax.StrId list
-      , {valMap = _, tyConMap, strMap}: T.Signature
+      , {valMap = _, tyConMap, strMap}: T.WrittenSignature
       ) : Syntax.LongTyConSet.set =
       let
         val set =
@@ -6637,8 +6776,8 @@ struct
               (fn ((tv, _), tv', m) =>
                  T.TyVarMap.insert (m, tv, T.TyVar (span, tv')))
               T.TyVarMap.empty (tyvarsA, tyvars)
-          val tyE = applySubstTy substE tyE
-          val tyA = applySubstTy substA tyA
+          val tyE = T.applySubstPureTy substE tyE
+          val tyA = T.applySubstPureTy substA tyA
         in
           sameType (tyE, tyA)
         end
@@ -6706,7 +6845,7 @@ struct
                  typeFunction
                end) (#bound expected)
         val instantiated =
-          applySubstTyConInSig (ctx, instantiation) (#s expected)
+          applySubstTyConInWrittenSig (ctx, instantiation) (#s expected)
       in
         matchSignature
           (ctx, env, span, instantiated, T.MkLongStrId (strid, []), actual)
@@ -6715,7 +6854,7 @@ struct
       ( ctx
       , env
       , span
-      , expected: T.Signature
+      , expected: T.WrittenSignature
       , longstrid: T.LongStrId
       , actual: T.Signature
       ) : T.Signature * T.StrExp =
@@ -6756,7 +6895,7 @@ struct
                      )) (#tyConMap expected)
         val
           valMap:
-            (T.TypeScheme
+            (T.PureTypeScheme
              * T.Dec list
              * T.LongVId
              * Syntax.ValueConstructorInfo Syntax.IdStatus) S.VIdMap.map =
@@ -6847,7 +6986,7 @@ struct
           , strMap = strMap
           }
       in
-        ( expected
+        ( T.thawWrittenSignature expected
         , if List.null decs then strexp else T.LetInStrExp (span, decs, strexp)
         )
       end
@@ -6875,8 +7014,8 @@ struct
                 (fn (tv, tv', m) =>
                    T.TyVarMap.insert (m, tv, T.TyVar (span, tv')))
                 T.TyVarMap.empty (tyvarsA, tyvars)
-            val tyE = applySubstTy substE tyE
-            val tyA = applySubstTy substA tyA
+            val tyE = T.applySubstPureTy substE tyE
+            val tyA = T.applySubstPureTy substA tyA
             fun checkConstructor (vid, (tyscE, _)) =
               case Syntax.VIdMap.find (valEnvA, vid) of
                 SOME (tyscA, _) => sameTypeScheme (ctx, span, tyscE, tyscA)
@@ -6913,16 +7052,16 @@ struct
       ( ctx
       , env
       , span
-      , expected: T.TypeScheme
+      , expected: T.PureTypeScheme
       , longvid: T.LongVId
       , actual: T.TypeScheme
       , ids: Syntax.ValueConstructorInfo Syntax.IdStatus
-      ) : T.TypeScheme * T.Dec list * T.LongVId =
+      ) : T.PureTypeScheme * T.Dec list * T.LongVId =
       let
         val T.TypeScheme (tyvarsE, tyE) = expected
         val ictx = {context = ctx, level = 0}
         val (tyA, tyargsA) = instantiate (ictx, span, actual)
-        val () = checkSubsumption (ictx, env, span, tyA, tyE)
+        val () = checkSubsumption (ictx, env, span, tyA, T.thawPureTy tyE)
         val vid = newVId
           ( ctx
           , case longvid of
@@ -6947,7 +7086,11 @@ struct
             val dec = T.ValDec
               ( span
               , [T.PolyVarBind
-                   (span, vid, expected, T.VarExp (span, longvid, ids, tyargsA))]
+                   ( span
+                   , vid
+                   , T.thawPureTypeScheme expected
+                   , T.VarExp (span, longvid, ids, tyargsA)
+                   )]
               )
           in
             (expected, [dec], T.MkShortVId vid)
@@ -7053,7 +7196,7 @@ struct
               (ctx, env', span, sE, strid, #s sA)
             val tynames = canonicalOrderForQSignature sE
             val packageSig =
-              { s = #s sE
+              { s = T.thawWrittenSignature (#s sE)
               , bound =
                   List.map
                     (fn tyname =>
@@ -7190,7 +7333,7 @@ struct
                         T.TyNameMap.insert (map, tyname, typeFunction))
                      T.TyNameMap.empty argumentTypes
                  val instantiated =
-                   applySubstTyConInSig (ctx, instantiation) paramSig
+                   applySubstTyConInWrittenSig (ctx, instantiation) paramSig
                  val (_, strexp') = matchSignature
                    ( ctx
                    , env'
@@ -7420,7 +7563,9 @@ struct
               , strMap = S.StrIdMap.insert
                   ( #strMap env
                   , strid
-                  , (#s paramSig, T.MkLongStrId (strid', []))
+                  , ( T.thawWrittenSignature (#s paramSig)
+                    , T.MkLongStrId (strid', [])
+                    )
                   )
               , sigMap = #sigMap env
               , funMap = #funMap env
@@ -7441,19 +7586,19 @@ struct
                    , admitsEquality = admitsEquality
                    , overloadClass = NONE
                    }) (#bound paramSig)
+            val paramSig' = T.thawWrittenSignature (#s paramSig)
             val paramEnv =
               { valMap =
                   Syntax.VIdMap.mapi
                     (fn (vid, (tysc, ids)) =>
                        (tysc, ids, TypedSyntax.MkLongVId (strid0, [], vid)))
-                    (#valMap (#s paramSig))
-              , tyConMap = #tyConMap (#s paramSig)
+                    (#valMap paramSig')
+              , tyConMap = #tyConMap paramSig'
               , tyNameMap = tyNameMap
               , strMap =
                   Syntax.StrIdMap.mapi
                     (fn (strid, T.MkSignature s) =>
-                       (s, T.MkLongStrId (strid0, [strid])))
-                    (#strMap (#s paramSig))
+                       (s, T.MkLongStrId (strid0, [strid]))) (#strMap paramSig')
               , sigMap = Syntax.SigIdMap.empty
               , funMap = Syntax.FunIdMap.empty
               , boundTyVars = Syntax.TyVarMap.empty
