@@ -87,7 +87,21 @@ struct
             case applied of
               F.TypeFn (tv, kind, body) =>
                 (* TODO: checkKind (env, kind) applied *)
-                normalizeType (TypedSyntax.TyVarMap.insert (env, tv, arg)) body
+                if
+                  case arg of
+                    F.TyVar tv' => tv = tv'
+                  | _ => false
+                then
+                  normalizeType env body
+                else if
+                  F.occurCheck tv arg
+                then
+                  raise TypeError
+                    ("occur check failed: " ^ TypedSyntax.print_TyVar tv
+                     ^ " in " ^ Printer.build (FPrinter.doTy 0 arg))
+                else
+                  normalizeType (TypedSyntax.TyVarMap.insert (env, tv, arg))
+                    body
             | _ => F.AppType {applied = applied, arg = arg}
           end
       | normalizeType env (F.FnType (param, result)) =
@@ -683,7 +697,10 @@ struct
                ( checkKind (#tyVarEnv env, k) ty
                ; #doTy (F.substTy (TypedSyntax.TyVarMap.singleton (tv, ty))) ty'
                )
-           | _ => raise TypeError "invalid type application")
+           | actualTy =>
+               raise TypeError
+                 ("invalid type application: actual type was "
+                  ^ Printer.build (FPrinter.doTy 0 actualTy)))
       | inferExp (env, F.PackExp {payloadTy, exp, packageTy}) =
           (case packageTy of
              F.ExistsType (tv, k, ty) =>
@@ -769,14 +786,18 @@ struct
                  checkExp (env', b, exp)
                end
            | _ => raise TypeError "invalid function expression")
-      | checkExp (env, expectedTy, F.TyAbsExp (tv, kind, exp)) =
+      | checkExp (env, expectedTy, exp0 as F.TyAbsExp (tv, kind, exp)) =
           (case normalizeType (#aliasEnv env) expectedTy of
              F.ForallType (tv', k, ty') =>
                let
                  val ty'' =
-                   #doTy
-                     (F.substTy
-                        (TypedSyntax.TyVarMap.singleton (tv', F.TyVar tv))) ty'
+                   if tv = tv' then
+                     ty'
+                   else
+                     #doTy
+                       (F.substTy
+                          (TypedSyntax.TyVarMap.singleton (tv', F.TyVar tv)))
+                       ty'
                  val env' =
                    { valEnv = #valEnv env
                    , tyVarEnv =
@@ -788,7 +809,11 @@ struct
                  if k = kind then () else raise TypeError "kind mismatch";
                  checkExp (env', ty'', exp)
                end
-           | _ => raise TypeError "invalid type application")
+           | expectedTy =>
+               raise TypeError
+                 ("invalid type abstraction: expected type was "
+                  ^ Printer.build (FPrinter.doTy 0 expectedTy)
+                  ^ ", expression was " ^ Printer.build (FPrinter.doExp 0 exp0)))
       | checkExp (_, _, F.ExitProgram) = ()
       | checkExp (env, _, F.ExportValue exp) =
           ignore (inferExp (env, exp))

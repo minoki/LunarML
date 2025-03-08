@@ -43,11 +43,11 @@ jobs:
         run: make -C thirdparty install
       - name: Compile myself (Lua)
         run: |
-          bin/lunarml compile -o lunarml.lua --default-ann "valDescInComments error" src/lunarml-main.mlb
+          bin/lunarml compile -o lunarml.lua --default-ann "valDescInComments error" --internal-consistency-check src/lunarml-main.mlb
           luac -p lunarml.lua
       - name: Compile myself (LuaJIT)
         run: |
-          bin/lunarml compile --luajit -o lunarml-luajit.lua --default-ann "valDescInComments error" src/lunarml-main.mlb
+          bin/lunarml compile --luajit -o lunarml-luajit.lua --default-ann "valDescInComments error" --internal-consistency-check src/lunarml-main.mlb
           luajit -bl lunarml-luajit.lua > /dev/null
       - name: Compile myself and validate (JavaScript)
         run: make validate-js

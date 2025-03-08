@@ -468,6 +468,7 @@ struct
         | LibraryMode =>
             ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
       val frontTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+      (*
       val () =
         let
           val outs = TextIO.openOut "dump.txt"
@@ -475,6 +476,12 @@ struct
           TextIO.output (outs, (Printer.build (FPrinter.doExp 0 fexp)));
           TextIO.closeOut outs
         end
+      *)
+      val () =
+        if #dump opts = DUMP_INITIAL then
+          print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
+        else
+          ()
       val () =
         if #internalConsistencyCheck opts then
           let
@@ -556,13 +563,10 @@ struct
               , fexp
               )
             handle CheckF.TypeError message =>
-              print ("internal type check failed: " ^ message ^ "\n")
+              ( print ("internal type check failed: " ^ message ^ "\n")
+              ; raise Message.Abort
+              )
           end
-        else
-          ()
-      val () =
-        if #dump opts = DUMP_INITIAL then
-          print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
         else
           ()
       val fexp =

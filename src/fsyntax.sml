@@ -2542,6 +2542,7 @@ struct
                    | SOME _ =>
                        emitFatalError (ctx, [span], "invalid type constraint"))
                 ty0 tvs
+            (* val ty' = refreshTy ctx ty' *)
             fun doExp (env', []) = toFExp (ctx, env', exp)
               | doExp (env', (tv, ct) :: rest) =
                   (case ct of
@@ -2728,6 +2729,7 @@ struct
                                 emitFatalError
                                   (ctx, [span], "invalid type constraint")) ty0
                          tvs
+                   (* val ty' = refreshTy ctx ty' *)
                    in
                      (span, vid, ty', tvs, ty, exp)
                    end) valbinds
@@ -2830,6 +2832,7 @@ struct
                               List.foldr
                                 (fn (tv, ty) =>
                                    F.ForallType (tv, F.TypeKind, ty)) ty tyvars
+                            (* val ty = refreshTy ctx ty *)
                             val exp =
                               List.foldr
                                 (fn (tv, exp) =>
@@ -2960,6 +2963,7 @@ struct
             val ty =
               List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty)) ty
                 tyvars
+            (* val ty = refreshTy ctx ty *)
             val env = updateEqualityForTyNameMap
               ( fn m =>
                   TypedSyntax.TyNameMap.insert
@@ -3607,7 +3611,8 @@ struct
                let
                  val vid = freshVId (ctx, "eq")
                  val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
-                 val ty = F.EqualityType (F.TyVar tyname)
+                 val ty = F.EqualityType (F.TyCon
+                   (List.map F.TyVar tyvars, tyname))
                  val ty =
                    List.foldr
                      (fn (tv, ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
@@ -3615,6 +3620,7 @@ struct
                  val ty =
                    List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty))
                      ty tyvars
+               (* ty = forall tv1 ... tvN. equality[tv1] -> ... -> equality[tvN] -> equality[tyname[tv1, ..., tvN]] *)
                in
                  ( T.TyNameMap.insert (m, tyname, T.MkShortVId vid)
                  , T.VIdMap.insert (valMap, vid, ty)
@@ -3634,14 +3640,38 @@ struct
         val funTy = F.FnType (paramSigTy, bodyTy)
         val funexp =
           List.foldr
-            (fn ((tyname, _, vid), funexp) =>
-               F.FnExp (vid, F.EqualityType (F.TyVar tyname), funexp)) funexp
-            equalityVars (* equalities *)
+            (fn ((tyname, arity, vid), funexp) =>
+               let
+                 val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
+                 val equalityType = F.EqualityType (F.TyCon
+                   (List.map F.TyVar tyvars, tyname))
+                 val equalityType =
+                   List.foldr
+                     (fn (tv, ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
+                     equalityType tyvars
+                 val equalityType =
+                   List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty))
+                     equalityType tyvars
+               in
+                 F.FnExp (vid, equalityType, funexp)
+               end) funexp equalityVars (* equalities *)
         val funTy =
           List.foldr
-            (fn ((tyname, _, _), funTy) =>
-               F.FnType (F.EqualityType (F.TyVar tyname), funTy)) funTy
-            equalityVars (* equalities *)
+            (fn ((tyname, arity, _), funTy) =>
+               let
+                 val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
+                 val equalityType = F.EqualityType (F.TyCon
+                   (List.map F.TyVar tyvars, tyname))
+                 val equalityType =
+                   List.foldr
+                     (fn (tv, ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
+                     equalityType tyvars
+                 val equalityType =
+                   List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty))
+                     equalityType tyvars
+               in
+                 F.FnType (equalityType, funTy)
+               end) funTy equalityVars (* equalities *)
         val funexp =
           List.foldr
             (fn ({tyname, arity, admitsEquality = _}, funexp) =>
@@ -3652,7 +3682,8 @@ struct
             (fn ({tyname, arity, admitsEquality = _}, funTy) =>
                F.ForallType (tyname, F.arityToKind arity, funTy)) funTy
             types (* type parameters *)
-        val funTy = refreshTy ctx funTy
+        (* funTy = forall tv1 ... tvN. (forall e1 ... eM. equality[e1] -> ... equality[eM] -> equality[tvK[e1, ..., eM]]) -> ... -> (forall e1 ... eM'. equality[e1] -> ... equality[eM'] -> equality[tvK'[e1, ..., eM']]) -> paramSigTy -> bodyTy *)
+        (* val funTy = refreshTy ctx funTy (* Maybe not needed *) *)
         val env = updateValMap (fn m => T.VIdMap.insert (m, funid, funTy), env)
       in
         (env, F.ValDec (funid, SOME funTy, funexp))
