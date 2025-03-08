@@ -122,6 +122,7 @@ sig
       * TypedSyntax.VId
       * (* the type of the new identifier *) Ty
       * Exp
+  (* unpack (tyvar : kind, vid : ty) = exp *)
   | IgnoreDec of Exp (* val _ = ... *)
   | DatatypeDec of DatBind list (* does not define value-level constructors *)
   | ExceptionDec of
@@ -152,6 +153,8 @@ sig
   val SimplifyingAndalsoExp: Exp * Exp -> Exp
   val EqualityType: Ty -> Ty
   val arityToKind: int -> Kind
+  val occurCheck: TyVar -> Ty -> bool
+  val substituteTy: TyVar * Ty -> Ty -> Ty
   val substTy:
     Ty TypedSyntax.TyVarMap.map
     -> { doTy: Ty -> Ty
@@ -1470,10 +1473,54 @@ struct
     let val n = !(#nextTyVar ctx)
     in #nextTyVar ctx := n + 1; TypedSyntax.MkTyVar ("'?", n)
     end
+  fun renewTyVar (ctx: Context, TypedSyntax.MkTyVar (name, _)) =
+    let val n = !(#nextTyVar ctx)
+    in #nextTyVar ctx := n + 1; TypedSyntax.MkTyVar (name, n)
+    end
   fun freshVId (ctx: Context, name: string) =
     let val n = !(#nextVId ctx)
     in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
     end
+
+  local structure F = FSyntax
+  in
+    fun refreshTy (ctx: Context) =
+      let
+        fun goTy env (ty as F.TyVar tv) =
+              (case TypedSyntax.TyVarMap.find (env, tv) of
+                 SOME tv' => F.TyVar tv'
+               | NONE => ty)
+          | goTy env (F.RecordType fields) =
+              F.RecordType (Syntax.LabelMap.map (goTy env) fields)
+          | goTy env (F.AppType {applied, arg}) =
+              F.AppType {applied = goTy env applied, arg = goTy env arg}
+          | goTy env (F.FnType (a, b)) =
+              F.FnType (goTy env a, goTy env b)
+          | goTy env (F.ForallType (tv, k, ty)) =
+              let
+                val tv' = renewTyVar (ctx, tv)
+                val env' = TypedSyntax.TyVarMap.insert (env, tv, tv')
+              in
+                F.ForallType (tv', k, goTy env' ty)
+              end
+          | goTy env (F.ExistsType (tv, k, ty)) =
+              let
+                val tv' = renewTyVar (ctx, tv)
+                val env' = TypedSyntax.TyVarMap.insert (env, tv, tv')
+              in
+                F.ExistsType (tv', k, goTy env' ty)
+              end
+          | goTy env (F.TypeFn (tv, k, ty)) =
+              let
+                val tv' = renewTyVar (ctx, tv)
+                val env' = TypedSyntax.TyVarMap.insert (env, tv, tv')
+              in
+                F.TypeFn (tv', k, goTy env' ty)
+              end
+      in
+        goTy TypedSyntax.TyVarMap.empty
+      end
+  end
 
   local
     structure T = TypedSyntax
@@ -2905,7 +2952,7 @@ struct
             val tyvarEqualities =
               if Typing.isRefOrArray tyname then []
               else List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
-            val ty = F.EqualityType (F.TyVar tyname)
+            val ty = F.EqualityType (F.TyCon (List.map F.TyVar tyvars, tyname))
             val ty =
               List.foldr
                 (fn ((tv, _), ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
@@ -3272,16 +3319,21 @@ struct
                     , (exp, packageTy)
                     ) =>
                    let
+                     val tyname' = renewTyVar (ctx, tyname)
                      val kind = F.arityToKind arity
                      val payloadTy' =
                        List.foldr (fn (tv, ty) => F.TypeFn (tv, F.TypeKind, ty))
                          (toFTy (ctx, env', payloadTy)) tyvars
+                     val exp =
+                       #doExp
+                         (F.substTy (T.TyVarMap.singleton (tyname, payloadTy')))
+                         exp
                    in
                      if admitsEquality then
                        let
-                         val packageTy = F.ExistsType (tyname, kind, F.PairType
-                           ( EqualityTyForArity arity [] (F.TyVar tyname)
-                           , packageTy
+                         val packageTy = F.ExistsType (tyname', kind, F.PairType
+                           ( EqualityTyForArity arity [] (F.TyVar tyname')
+                           , F.substituteTy (tyname, F.TyVar tyname') packageTy
                            )) (* exists 'a. ('a * 'a -> bool) * packageTy / exists t. (forall 'a. forall 'b. ... ('a * 'a -> bool) -> ('b * 'b -> bool) -> ... -> (t 'a 'b ... * t 'a 'b ... -> bool)) * packageTy *)
                          val equality =
                            getEqualityForTypeFunction (ctx, env', typeFunction)
@@ -3296,7 +3348,11 @@ struct
                        end
                      else
                        let
-                         val packageTy = F.ExistsType (tyname, kind, packageTy)
+                         val packageTy = F.ExistsType
+                           ( tyname'
+                           , kind
+                           , F.substituteTy (tyname, F.TyVar tyname') packageTy
+                           )
                        in
                          ( F.PackExp
                              { payloadTy = payloadTy'
@@ -3345,7 +3401,16 @@ struct
                    end) exp argumentTypes (* apply the types *)
             val ty =
               List.foldl
-                (fn (_, F.ForallType (_, _, ty)) => ty
+                (fn ( {typeFunction = T.TypeFunction (tyvars, ta), ...}
+                    , F.ForallType (tv, _, ty)
+                    ) =>
+                   let
+                     val tf =
+                       List.foldr (fn (tv, t) => F.TypeFn (tv, F.TypeKind, t))
+                         (toFTy (ctx, env', ta)) tyvars
+                   in
+                     F.substituteTy (tv, tf) ty
+                   end
                   | (_, _) =>
                    emitFatalError (ctx, [sourceSpan], "invalid functor type"))
                 ty argumentTypes (* apply the types *)
@@ -3401,108 +3466,116 @@ struct
                     , (revDecs, exp, packageTy, env)
                     ) =>
                    case packageTy of
-                     F.ExistsType (_, _, payloadTy) =>
-                       if admitsEquality then
-                         case payloadTy of
-                           F.RecordType fieldTypes =>
-                             let
-                               val packageVId = freshVId
-                                 (ctx, case vid of T.MkVId (name, _) => name)
-                               val equalityVId = freshVId (ctx, "eq")
-                               val equalityTy =
-                                 case
-                                   Syntax.LabelMap.find
-                                     (fieldTypes, Syntax.NumericLabel 1)
-                                 of
-                                   SOME ty => ty
-                                 | NONE =>
-                                     emitFatalError
-                                       (ctx, [span], "invalid record")
-                               val strVId = freshVId
-                                 (ctx, case vid of T.MkVId (name, _) => name)
-                               val strTy =
-                                 case
-                                   Syntax.LabelMap.find
-                                     (fieldTypes, Syntax.NumericLabel 2)
-                                 of
-                                   SOME ty => ty
-                                 | NONE =>
-                                     emitFatalError
-                                       (ctx, [span], "invalid record")
-                               val env = updateEqualityForTyNameMap
-                                 ( fn m =>
-                                     T.TyNameMap.insert
-                                       (m, tyname, T.MkShortVId equalityVId)
+                     F.ExistsType (tyname_, _, payloadTy) =>
+                       let
+                         val payloadTy =
+                           F.substituteTy (tyname_, F.TyVar tyname) payloadTy
+                       in
+                         if admitsEquality then
+                           case payloadTy of
+                             F.RecordType fieldTypes =>
+                               let
+                                 val packageVId = freshVId
+                                   (ctx, case vid of T.MkVId (name, _) => name)
+                                 val equalityVId = freshVId (ctx, "eq")
+                                 val equalityTy =
+                                   case
+                                     Syntax.LabelMap.find
+                                       (fieldTypes, Syntax.NumericLabel 1)
+                                   of
+                                     SOME ty => ty
+                                   | NONE =>
+                                       emitFatalError
+                                         (ctx, [span], "invalid record")
+                                 val strVId = freshVId
+                                   (ctx, case vid of T.MkVId (name, _) => name)
+                                 val strTy =
+                                   case
+                                     Syntax.LabelMap.find
+                                       (fieldTypes, Syntax.NumericLabel 2)
+                                   of
+                                     SOME ty => ty
+                                   | NONE =>
+                                       emitFatalError
+                                         (ctx, [span], "invalid record")
+                                 val env = updateEqualityForTyNameMap
+                                   ( fn m =>
+                                       T.TyNameMap.insert
+                                         (m, tyname, T.MkShortVId equalityVId)
+                                   , env
+                                   )
+                                 val env = updateValMap
+                                   ( fn m =>
+                                       T.VIdMap.insert
+                                         ( T.VIdMap.insert
+                                             ( T.VIdMap.insert
+                                                 (m, packageVId, payloadTy)
+                                             , equalityVId
+                                             , equalityTy
+                                             )
+                                         , strVId
+                                         , strTy
+                                         )
+                                   , env
+                                   )
+                               in
+                                 ( F.ValDec
+                                     ( equalityVId
+                                     , SOME equalityTy
+                                     , F.ProjectionExp
+                                         { label = Syntax.NumericLabel 1
+                                         , record = F.VarExp packageVId
+                                         , fieldTypes = fieldTypes
+                                         }
+                                     )
+                                   ::
+                                   F.ValDec
+                                     ( strVId
+                                     , SOME strTy
+                                     , F.ProjectionExp
+                                         { label = Syntax.NumericLabel 2
+                                         , record = F.VarExp packageVId
+                                         , fieldTypes = fieldTypes
+                                         }
+                                     )
+                                   ::
+                                   F.UnpackDec
+                                     ( tyname
+                                     , F.arityToKind arity
+                                     , packageVId
+                                     , payloadTy
+                                     , exp
+                                     ) :: revDecs
+                                 , F.VarExp strVId
+                                 , strTy
                                  , env
                                  )
-                               val env = updateValMap
-                                 ( fn m =>
-                                     T.VIdMap.insert
-                                       ( T.VIdMap.insert
-                                           ( T.VIdMap.insert
-                                               (m, packageVId, payloadTy)
-                                           , equalityVId
-                                           , equalityTy
-                                           )
-                                       , strVId
-                                       , strTy
-                                       )
-                                 , env
-                                 )
-                             in
-                               ( F.ValDec
-                                   ( equalityVId
-                                   , SOME equalityTy
-                                   , F.ProjectionExp
-                                       { label = Syntax.NumericLabel 1
-                                       , record = F.VarExp packageVId
-                                       , fieldTypes = fieldTypes
-                                       }
-                                   )
-                                 ::
-                                 F.ValDec
-                                   ( strVId
-                                   , SOME strTy
-                                   , F.ProjectionExp
-                                       { label = Syntax.NumericLabel 2
-                                       , record = F.VarExp packageVId
-                                       , fieldTypes = fieldTypes
-                                       }
-                                   )
-                                 ::
-                                 F.UnpackDec
-                                   ( tyname
-                                   , F.arityToKind arity
-                                   , packageVId
-                                   , payloadTy
-                                   , exp
-                                   ) :: revDecs
-                               , F.VarExp strVId
-                               , strTy
+                               end
+                           | _ =>
+                               emitFatalError
+                                 (ctx, [span], "expected RecordType")
+                         else
+                           let
+                             val vid = freshVId
+                               (ctx, case vid of T.MkVId (name, _) => name)
+                             val env = updateValMap
+                               ( fn m => T.VIdMap.insert (m, vid, payloadTy)
                                , env
                                )
-                             end
-                         | _ =>
-                             emitFatalError (ctx, [span], "expected RecordType")
-                       else
-                         let
-                           val vid = freshVId
-                             (ctx, case vid of T.MkVId (name, _) => name)
-                           val env = updateValMap
-                             (fn m => T.VIdMap.insert (m, vid, payloadTy), env)
-                         in
-                           ( F.UnpackDec
-                               ( tyname
-                               , F.arityToKind arity
-                               , vid
-                               , payloadTy
-                               , exp
-                               ) :: revDecs
-                           , F.VarExp vid
-                           , payloadTy
-                           , env
-                           )
-                         end
+                           in
+                             ( F.UnpackDec
+                                 ( tyname
+                                 , F.arityToKind arity
+                                 , vid
+                                 , payloadTy
+                                 , exp
+                                 ) :: revDecs
+                             , F.VarExp vid
+                             , payloadTy
+                             , env
+                             )
+                           end
+                       end
                    | _ =>
                        emitFatalError
                          ( ctx
@@ -3579,6 +3652,7 @@ struct
             (fn ({tyname, arity, admitsEquality = _}, funTy) =>
                F.ForallType (tyname, F.arityToKind arity, funTy)) funTy
             types (* type parameters *)
+        val funTy = refreshTy ctx funTy
         val env = updateValMap (fn m => T.VIdMap.insert (m, funid, funTy), env)
       in
         (env, F.ValDec (funid, SOME funTy, funexp))
@@ -3690,7 +3764,6 @@ struct
       , valMap =
           let
             open InitialEnv
-            val initialValMap = #valMap initialEnv
             fun toFTy (T.TyVar (_, tv)) = F.TyVar tv
               | toFTy (T.AnonymousTyVar (_, ref (T.Link ty))) = toFTy ty
               | toFTy (T.AnonymousTyVar (_, ref (T.Unbound _))) =
@@ -3718,11 +3791,8 @@ struct
             val initialValMap =
               Syntax.VIdMap.foldl
                 (fn ((tysc, _, vid), m) =>
-                   case vid of
-                     TypedSyntax.MkShortVId vid =>
-                       TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc)
-                   | TypedSyntax.MkLongVId _ => raise Fail "unexpected longvid")
-                TypedSyntax.VIdMap.empty initialValMap
+                   TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
+                TypedSyntax.VIdMap.empty initialValEnv
           in
             List.foldl TypedSyntax.VIdMap.insert' initialValMap
               [ (VId_Match_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))

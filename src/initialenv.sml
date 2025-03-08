@@ -86,6 +86,10 @@ sig
   val VId_DelimCont_withSubCont: TypedSyntax.VId
   val VId_DelimCont_pushSubCont: TypedSyntax.VId
   val VId_DelimCont_topLevel: TypedSyntax.VId
+  val initialValEnv:
+    (TypedSyntax.TypeScheme
+     * Syntax.ValueConstructorInfo Syntax.IdStatus
+     * TypedSyntax.VId) Syntax.VIdMap.map
   val initialEnv: Typing.Env
   val primOverloadEnv: Typing.Env
   val initialTyNameSet: TypedSyntax.TyNameSet.set
@@ -252,7 +256,7 @@ struct
   val VId_DelimCont_pushSubCont = newVId "_Prim.DelimCont.pushSubCont"
   val VId_DelimCont_topLevel = newVId "_Prim.DelimCont.topLevel"
 
-  val initialEnv: Typing.Env =
+  val (initialValEnv, initialEnv: Typing.Env) =
     let
       open Typing
       fun mkValConMap (cons, rep) =
@@ -305,10 +309,7 @@ struct
                    }
                in
                  Syntax.VIdMap.insert
-                   ( m
-                   , Syntax.MkVId vid
-                   , (tysc, idstatus, TypedSyntax.MkShortVId conid)
-                   )
+                   (m, Syntax.MkVId vid, (tysc, idstatus, conid))
                end) Syntax.VIdMap.empty cons
         end
       val tyVarA = TypedSyntax.MkTyVar ("'a", 0)
@@ -328,20 +329,20 @@ struct
       val op--> = mkFnType
       fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
       fun mkTyCon (a, b) = TypedSyntax.TyCon (SourcePos.nullSpan, a, b)
-      fun refOf (t) =
+      fun refOf t =
         mkTyCon ([t], primTyName_ref)
-      fun listOf (t) =
+      fun listOf t =
         mkTyCon ([t], primTyName_list)
-      fun arrayOf (t) =
+      fun arrayOf t =
         mkTyCon ([t], primTyName_array)
-      fun vectorOf (t) =
+      fun vectorOf t =
         mkTyCon ([t], primTyName_vector)
       fun function2 (resultTy, arg1Ty, arg2Ty) =
         mkTyCon ([resultTy, arg1Ty, arg2Ty], primTyName_function2)
       fun function3 (resultTy, arg1Ty, arg2Ty, arg3Ty) =
         mkTyCon ([resultTy, arg1Ty, arg2Ty, arg3Ty], primTyName_function3)
-    in
-      { valMap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty
+      val initialValEnv =
+        List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty
           [ mkTopValConMap
               ( [( "ref"
                  , VId_ref
@@ -375,10 +376,7 @@ struct
                  Syntax.VIdMap.insert
                    ( m
                    , Syntax.MkVId name
-                   , ( tysc
-                     , Syntax.ExceptionConstructor
-                     , TypedSyntax.MkShortVId vid
-                     )
+                   , (tysc, Syntax.ExceptionConstructor, vid)
                    )) Syntax.VIdMap.empty
               [ ("Match", VId_Match, TypeScheme ([], primTy_exn))
               , ("Bind", VId_Bind, TypeScheme ([], primTy_exn))
@@ -398,11 +396,29 @@ struct
           , List.foldl
               (fn ((name, vid, tysc), m) =>
                  Syntax.VIdMap.insert
-                   ( m
-                   , Syntax.MkVId name
-                   , (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)
-                   )) Syntax.VIdMap.empty
-              [ ( "_Prim.General.exnName"
+                   (m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
+              Syntax.VIdMap.empty
+              [ ( "_Prim.Match.tag"
+                , VId_Match_tag
+                , TypeScheme ([], primTy_exntag)
+                )
+              , ("_Prim.Bind.tag", VId_Bind_tag, TypeScheme ([], primTy_exntag))
+              , ("_Prim.Div.tag", VId_Div_tag, TypeScheme ([], primTy_exntag))
+              , ( "_Prim.Overflow.tag"
+                , VId_Overflow_tag
+                , TypeScheme ([], primTy_exntag)
+                )
+              , ("_Prim.Size.tag", VId_Size_tag, TypeScheme ([], primTy_exntag))
+              , ( "_Prim.Subscript.tag"
+                , VId_Subscript_tag
+                , TypeScheme ([], primTy_exntag)
+                )
+              , ("_Prim.Fail.tag", VId_Fail_tag, TypeScheme ([], primTy_exntag))
+              , ( "_Prim.Lua.Error.tag"
+                , VId_Lua_Error_tag
+                , TypeScheme ([], primTy_exntag)
+                )
+              , ( "_Prim.General.exnName"
                 , VId_exnName
                 , TypeScheme ([], primTy_exn --> primTy_string)
                 )
@@ -621,298 +637,307 @@ struct
                 )
               ]
           ]
-      , tyConMap =
-          List.foldl
-            (fn ((name, tystr), m) =>
-               Syntax.TyConMap.insert (m, Syntax.MkTyCon name, tystr))
-            Syntax.TyConMap.empty
-            [ ( "bool"
-              , { typeFunction = TypeFunction ([], primTy_bool)
-                , valEnv = mkValConMap
-                    ( [ ("true", TypeScheme ([], primTy_bool))
-                      , ("false", TypeScheme ([], primTy_bool))
-                      ]
-                    , Syntax.REP_BOOL
-                    )
-                }
-              )
-            , ( "int"
-              , { typeFunction = TypeFunction ([], primTy_int)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "word"
-              , { typeFunction = TypeFunction ([], primTy_word)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "real"
-              , { typeFunction = TypeFunction ([], primTy_real)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "string"
-              , { typeFunction = TypeFunction ([], primTy_string)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "char"
-              , { typeFunction = TypeFunction ([], primTy_char)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "list"
-              , { typeFunction = TypeFunction ([tyVarA], listOf tyA)
-                , valEnv = mkValConMap
-                    ( [ ("nil", TypeScheme ([(tyVarA, NONE)], listOf tyA))
-                      , ( "::"
-                        , TypeScheme
-                            ( [(tyVarA, NONE)]
-                            , mkPairType (tyA, listOf tyA) --> listOf tyA
-                            )
-                        )
-                      ]
-                    , Syntax.REP_LIST
-                    )
-                }
-              )
-            , ( "ref"
-              , { typeFunction = TypeFunction ([tyVarA], refOf tyA)
-                , valEnv = mkValConMap
-                    ( [("ref", TypeScheme ([(tyVarA, NONE)], tyA --> refOf tyA))]
-                    , Syntax.REP_REF
-                    )
-                }
-              )
-            , ( "exn"
-              , { typeFunction = TypeFunction ([], primTy_exn)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "array"
-              , { typeFunction = TypeFunction ([tyVarA], arrayOf tyA)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "vector"
-              , { typeFunction = TypeFunction ([tyVarA], vectorOf tyA)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Char16.char"
-              , { typeFunction = TypeFunction ([], primTy_char16)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.String16.string"
-              , { typeFunction = TypeFunction ([], primTy_string16)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Int32.int"
-              , { typeFunction = TypeFunction ([], primTy_int32)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Int54.int"
-              , { typeFunction = TypeFunction ([], primTy_int54)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Int64.int"
-              , { typeFunction = TypeFunction ([], primTy_int64)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.IntInf.int"
-              , { typeFunction = TypeFunction ([], primTy_intInf)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Word32.word"
-              , { typeFunction = TypeFunction ([], primTy_word32)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Word64.word"
-              , { typeFunction = TypeFunction ([], primTy_word64)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Function2.function2"
-              , { typeFunction = TypeFunction
-                    ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Function3.function3"
-              , { typeFunction = TypeFunction
-                    ( [tyVarA, tyVarB, tyVarC, tyVarD]
-                    , function3 (tyA, tyB, tyC, tyD)
-                    )
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.Lua.value"
-              , { typeFunction = TypeFunction ([], primTy_Lua_value)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.JavaScript.value"
-              , { typeFunction = TypeFunction ([], primTy_JavaScript_value)
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.DelimCont.prompt_tag"
-              , { typeFunction = TypeFunction
-                    ([tyVarA], mkTyCon ([tyA], primTyName_prompt_tag))
-                , valEnv = emptyValEnv
-                }
-              )
-            , ( "_Prim.DelimCont.subcont"
-              , { typeFunction = TypeFunction
-                    ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont))
-                , valEnv = emptyValEnv
-                }
-              )
-            ]
-      , tyNameMap =
-          List.foldl TypedSyntax.TyNameMap.insert' TypedSyntax.TyNameMap.empty
-            [ ( primTyName_bool
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE
-                }
-              )
-            , ( primTyName_int
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
-                }
-              )
-            , ( primTyName_int32
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
-                }
-              )
-            , ( primTyName_int54
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
-                }
-              )
-            , ( primTyName_int64
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
-                }
-              )
-            , ( primTyName_intInf
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
-                }
-              )
-            , ( primTyName_word
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
-                }
-              )
-            , ( primTyName_word32
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
-                }
-              )
-            , ( primTyName_word64
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
-                }
-              )
-            , ( primTyName_real
-              , { arity = 0
-                , admitsEquality = false
-                , overloadClass = NONE (* SOME Syntax.CLASS_REAL *)
-                }
-              )
-            , ( primTyName_char
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
-                }
-              )
-            , ( primTyName_char16
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
-                }
-              )
-            , ( primTyName_string
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
-                }
-              )
-            , ( primTyName_string16
-              , { arity = 0
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
-                }
-              )
-            , ( primTyName_list
-              , { arity = 1
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE
-                }
-              )
-            , ( primTyName_ref
-              , { arity = 1
-                , admitsEquality = false (* must be handled specially *)
-                , overloadClass = NONE
-                }
-              )
-            , ( primTyName_exn
-              , {arity = 0, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_array
-              , { arity = 1
-                , admitsEquality = false (* must be handled specially *)
-                , overloadClass = NONE
-                }
-              )
-            , ( primTyName_vector
-              , { arity = 1
-                , admitsEquality = false (* true *)
-                , overloadClass = NONE
-                }
-              )
-            , ( primTyName_Lua_value
-              , {arity = 0, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_JavaScript_value
-              , {arity = 0, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_function2
-              , {arity = 3, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_function3
-              , {arity = 4, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_prompt_tag
-              , {arity = 1, admitsEquality = false, overloadClass = NONE}
-              )
-            , ( primTyName_subcont
-              , {arity = 2, admitsEquality = false, overloadClass = NONE}
-              )
-            ]
-      , strMap = Syntax.StrIdMap.empty
-      , sigMap = Syntax.SigIdMap.empty
-      , funMap = Syntax.FunIdMap.empty
-      , boundTyVars = Syntax.TyVarMap.empty
-      }
+      val initialTyConMap =
+        List.foldl
+          (fn ((name, tystr), m) =>
+             Syntax.TyConMap.insert (m, Syntax.MkTyCon name, tystr))
+          Syntax.TyConMap.empty
+          [ ( "bool"
+            , { typeFunction = TypeFunction ([], primTy_bool)
+              , valEnv = mkValConMap
+                  ( [ ("true", TypeScheme ([], primTy_bool))
+                    , ("false", TypeScheme ([], primTy_bool))
+                    ]
+                  , Syntax.REP_BOOL
+                  )
+              }
+            )
+          , ( "int"
+            , { typeFunction = TypeFunction ([], primTy_int)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "word"
+            , { typeFunction = TypeFunction ([], primTy_word)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "real"
+            , { typeFunction = TypeFunction ([], primTy_real)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "string"
+            , { typeFunction = TypeFunction ([], primTy_string)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "char"
+            , { typeFunction = TypeFunction ([], primTy_char)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "list"
+            , { typeFunction = TypeFunction ([tyVarA], listOf tyA)
+              , valEnv = mkValConMap
+                  ( [ ("nil", TypeScheme ([(tyVarA, NONE)], listOf tyA))
+                    , ( "::"
+                      , TypeScheme
+                          ( [(tyVarA, NONE)]
+                          , mkPairType (tyA, listOf tyA) --> listOf tyA
+                          )
+                      )
+                    ]
+                  , Syntax.REP_LIST
+                  )
+              }
+            )
+          , ( "ref"
+            , { typeFunction = TypeFunction ([tyVarA], refOf tyA)
+              , valEnv = mkValConMap
+                  ( [("ref", TypeScheme ([(tyVarA, NONE)], tyA --> refOf tyA))]
+                  , Syntax.REP_REF
+                  )
+              }
+            )
+          , ( "exn"
+            , { typeFunction = TypeFunction ([], primTy_exn)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "array"
+            , { typeFunction = TypeFunction ([tyVarA], arrayOf tyA)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "vector"
+            , { typeFunction = TypeFunction ([tyVarA], vectorOf tyA)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Char16.char"
+            , { typeFunction = TypeFunction ([], primTy_char16)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.String16.string"
+            , { typeFunction = TypeFunction ([], primTy_string16)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Int32.int"
+            , { typeFunction = TypeFunction ([], primTy_int32)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Int54.int"
+            , { typeFunction = TypeFunction ([], primTy_int54)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Int64.int"
+            , { typeFunction = TypeFunction ([], primTy_int64)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.IntInf.int"
+            , { typeFunction = TypeFunction ([], primTy_intInf)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Word32.word"
+            , { typeFunction = TypeFunction ([], primTy_word32)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Word64.word"
+            , { typeFunction = TypeFunction ([], primTy_word64)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Function2.function2"
+            , { typeFunction = TypeFunction
+                  ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Function3.function3"
+            , { typeFunction = TypeFunction
+                  ( [tyVarA, tyVarB, tyVarC, tyVarD]
+                  , function3 (tyA, tyB, tyC, tyD)
+                  )
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.Lua.value"
+            , { typeFunction = TypeFunction ([], primTy_Lua_value)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.JavaScript.value"
+            , { typeFunction = TypeFunction ([], primTy_JavaScript_value)
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.DelimCont.prompt_tag"
+            , { typeFunction = TypeFunction
+                  ([tyVarA], mkTyCon ([tyA], primTyName_prompt_tag))
+              , valEnv = emptyValEnv
+              }
+            )
+          , ( "_Prim.DelimCont.subcont"
+            , { typeFunction = TypeFunction
+                  ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont))
+              , valEnv = emptyValEnv
+              }
+            )
+          ]
+      val initialTyNameMap =
+        List.foldl TypedSyntax.TyNameMap.insert' TypedSyntax.TyNameMap.empty
+          [ ( primTyName_bool
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE
+              }
+            )
+          , ( primTyName_int
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
+              }
+            )
+          , ( primTyName_int32
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
+              }
+            )
+          , ( primTyName_int54
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
+              }
+            )
+          , ( primTyName_int64
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
+              }
+            )
+          , ( primTyName_intInf
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
+              }
+            )
+          , ( primTyName_word
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
+              }
+            )
+          , ( primTyName_word32
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
+              }
+            )
+          , ( primTyName_word64
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
+              }
+            )
+          , ( primTyName_real
+            , { arity = 0
+              , admitsEquality = false
+              , overloadClass = NONE (* SOME Syntax.CLASS_REAL *)
+              }
+            )
+          , ( primTyName_char
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
+              }
+            )
+          , ( primTyName_char16
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
+              }
+            )
+          , ( primTyName_string
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
+              }
+            )
+          , ( primTyName_string16
+            , { arity = 0
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
+              }
+            )
+          , ( primTyName_list
+            , { arity = 1
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE
+              }
+            )
+          , ( primTyName_ref
+            , { arity = 1
+              , admitsEquality = false (* must be handled specially *)
+              , overloadClass = NONE
+              }
+            )
+          , ( primTyName_exn
+            , {arity = 0, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_array
+            , { arity = 1
+              , admitsEquality = false (* must be handled specially *)
+              , overloadClass = NONE
+              }
+            )
+          , ( primTyName_vector
+            , { arity = 1
+              , admitsEquality = false (* true *)
+              , overloadClass = NONE
+              }
+            )
+          , ( primTyName_Lua_value
+            , {arity = 0, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_JavaScript_value
+            , {arity = 0, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_function2
+            , {arity = 3, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_function3
+            , {arity = 4, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_prompt_tag
+            , {arity = 1, admitsEquality = false, overloadClass = NONE}
+            )
+          , ( primTyName_subcont
+            , {arity = 2, admitsEquality = false, overloadClass = NONE}
+            )
+          ]
+      val initialEnv =
+        { valMap =
+            Syntax.VIdMap.map
+              (fn (tysc, ids, vid) => (tysc, ids, TypedSyntax.MkShortVId vid))
+              initialValEnv
+        , tyConMap = initialTyConMap
+        , tyNameMap = initialTyNameMap
+        , strMap = Syntax.StrIdMap.empty
+        , sigMap = Syntax.SigIdMap.empty
+        , funMap = Syntax.FunIdMap.empty
+        , boundTyVars = Syntax.TyVarMap.empty
+        }
+    in
+      (initialValEnv, initialEnv)
     end
 
   val primOverloadEnv: Typing.Env =

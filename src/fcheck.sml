@@ -28,7 +28,9 @@ struct
     fun kindOf (env: F.Kind TypedSyntax.TyVarMap.map) (F.TyVar tv) =
           (case TypedSyntax.TyVarMap.find (env, tv) of
              SOME kind => kind
-           | NONE => raise TypeError "undefined type variable")
+           | NONE =>
+               raise TypeError
+                 ("undefined type variable " ^ TypedSyntax.print_TyVar tv))
       | kindOf env (F.RecordType fields) =
           (Syntax.LabelMap.app (checkKind (env, F.TypeKind)) fields; F.TypeKind)
       | kindOf env (F.AppType {applied, arg}) =
@@ -84,9 +86,9 @@ struct
           in
             case applied of
               F.TypeFn (tv, kind, body) =>
+                (* TODO: checkKind (env, kind) applied *)
                 normalizeType (TypedSyntax.TyVarMap.insert (env, tv, arg)) body
-            | F.TyVar _ => F.AppType {applied = applied, arg = arg}
-            | _ => raise TypeError "invalid kind"
+            | _ => F.AppType {applied = applied, arg = arg}
           end
       | normalizeType env (F.FnType (param, result)) =
           F.FnType (normalizeType env param, normalizeType env result)
@@ -166,15 +168,15 @@ struct
     fun sameType env (ty, ty') =
       sameType' (0, TypedSyntax.TyVarMap.empty, TypedSyntax.TyVarMap.empty)
         (normalizeType env ty, normalizeType env ty')
-    (*: val checkSame : F.Ty TypedSyntax.TyVarMap.map * F.Ty -> F.Ty -> unit *)
-    fun checkSame (env, expectedTy) actualTy =
+    (*: val checkSame : F.Ty TypedSyntax.TyVarMap.map * string * F.Ty -> F.Ty -> unit *)
+    fun checkSame (env, comment, expectedTy) actualTy =
       if sameType env (expectedTy, actualTy) then
         ()
       else
         raise TypeError
           ("type mismatch: expected "
            ^ Printer.build (FPrinter.doTy 0 expectedTy) ^ ", but got "
-           ^ Printer.build (FPrinter.doTy 0 actualTy))
+           ^ Printer.build (FPrinter.doTy 0 actualTy) ^ " (" ^ comment ^ ")")
 
     type ValEnv = (F.Ty (* * Syntax.IdStatus *)) TypedSyntax.VIdMap.map
     val emptyValEnv: ValEnv = TypedSyntax.VIdMap.empty
@@ -299,7 +301,7 @@ struct
           )
       | checkPat (env, expectedTy, F.VarPat (_, vid, ty)) =
           ( checkKind (#tyVarEnv env, F.TypeKind) ty
-          ; checkSame (#aliasEnv env, expectedTy) ty
+          ; checkSame (#aliasEnv env, "VarPat", expectedTy) ty
           ; TypedSyntax.VIdMap.singleton (vid, ty)
           )
       | checkPat
@@ -358,46 +360,15 @@ struct
       | checkPat (env, _, F.RecordPat _) =
           raise TypeError "RecordPat: non-record type"
       | checkPat
-          ( env
-          , expectedTy
-          , F.ValConPat {sourceSpan = _, info as {tag, ...}, payload}
-          ) =
-          let
-            fun getDatatype (args, ty) =
-              case ty of
-                F.TyVar tv => (List.rev args, tv)
-              | F.AppType {applied, arg} => getDatatype (arg :: args, applied)
-              | _ => raise TypeError "unexpected datatype"
-            val (expectedArgs, tyCon) = getDatatype ([], expectedTy)
-            val payloadTy =
-              case TypedSyntax.TyVarMap.find (#valConEnv env, tyCon) of
-                NONE => raise TypeError "unknown datatype"
-              | SOME conMap =>
-                  (case StringMap.find (conMap, tag) of
-                     NONE => raise TypeError "unknown value constructor"
-                   | SOME {tyParams = _, payload = NONE} => NONE
-                   | SOME {tyParams, payload = SOME payloadTy} =>
-                       let
-                         val subst =
-                           ListPair.foldlEq
-                             (fn (tv, ty, acc) =>
-                                TypedSyntax.TyVarMap.insert (acc, tv, ty))
-                             TypedSyntax.TyVarMap.empty (tyParams, expectedArgs)
-                       in
-                         SOME (#doTy (F.substTy subst) payloadTy)
-                       end)
-          in
-            case (payloadTy, payload) of
-              (SOME expectedPayloadTy, SOME (actualPayloadTy, payloadPat)) =>
-                ( checkSame (#aliasEnv env, expectedPayloadTy) actualPayloadTy
-                ; checkPat (env, actualPayloadTy, payloadPat)
-                )
-            | (NONE, NONE) => emptyValEnv
-            | _ => raise TypeError "payload mismatch"
-          end
+          (env, expectedTy, F.ValConPat {sourceSpan = _, info = _, payload}) =
+          (* TODO: check if the constructor has a payload *)
+          (case payload of
+             SOME (payloadTy, payloadPat) =>
+               checkPat (env, payloadTy, payloadPat)
+           | NONE => emptyValEnv)
       | checkPat
           (env, expectedTy, F.ExnConPat {sourceSpan = _, tagPath, payload}) =
-          ( checkSame (#aliasEnv env, expectedTy)
+          ( checkSame (#aliasEnv env, "ExnConPat", expectedTy)
               (F.TyVar Typing.primTyName_exn)
           ; checkExp (env, F.TyVar Typing.primTyName_exntag, tagPath)
           (* TODO: check if the constructor has a payload *)
@@ -409,15 +380,15 @@ struct
       | checkPat (env, expectedTy, F.LayeredPat (_, vid, ty, pat)) =
           let
             val ty = normalizeType (#aliasEnv env) ty
-            val () = checkSame (#aliasEnv env, expectedTy) ty
+            val () = checkSame (#aliasEnv env, "LayeredPat", expectedTy) ty
             val newEnv = checkPat (env, expectedTy, pat)
           in
             TypedSyntax.VIdMap.insert (newEnv, vid, ty)
           end
-      | checkPat (env, expectedTy, F.VectorPat (_, pats, ellipsis, elemTy)) =
+      | checkPat (env, expectedTy, F.VectorPat (_, pats, _, elemTy)) =
           let
             val elemTy = normalizeType (#aliasEnv env) elemTy
-            val () = checkSame (#aliasEnv env, expectedTy)
+            val () = checkSame (#aliasEnv env, "VectorPat", expectedTy)
               (F.AppType
                  {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
           in
@@ -716,26 +687,39 @@ struct
       | inferExp (env, F.PackExp {payloadTy, exp, packageTy}) =
           (case packageTy of
              F.ExistsType (tv, k, ty) =>
-               ( checkKind (#tyVarEnv env, k) payloadTy
-               ; checkSame (#aliasEnv env, payloadTy)
-                   (#doTy
-                      (F.substTy
-                         (TypedSyntax.TyVarMap.singleton (tv, payloadTy))) ty)
-               ; checkExp
-                   (env, #doTy (F.substTy (#aliasEnv env)) payloadTy, exp)
-               ; packageTy
-               )
+               let
+                 val () =
+                   if F.occurCheck tv payloadTy then
+                     raise TypeError
+                       ("occur check failed: " ^ TypedSyntax.print_TyVar tv
+                        ^ " in " ^ Printer.build (FPrinter.doTy 0 payloadTy)
+                        ^ " / " ^ Printer.build (FPrinter.doExp 0 exp))
+                   else
+                     ()
+                 val aliasEnv' =
+                   TypedSyntax.TyVarMap.insert (#aliasEnv env, tv, payloadTy)
+                 val env' =
+                   { valEnv = #valEnv env
+                   , tyVarEnv = #tyVarEnv env
+                   , aliasEnv = aliasEnv'
+                   , valConEnv = #valConEnv env
+                   }
+               in
+                 checkKind (#tyVarEnv env, k) payloadTy;
+                 checkExp (env', #doTy (F.substTy aliasEnv') ty, exp);
+                 packageTy
+               end
            | _ => raise TypeError "invalid package")
       | inferExp (_, F.BogusExp ty) = ty
       | inferExp (_, F.ExitProgram) =
           raise TypeError "ExitProgram without expected type"
       | inferExp (env, F.ExportValue exp) =
           ( ignore (inferExp (env, exp))
-          ; raise TypeError "ExitProgram without expected type"
+          ; raise TypeError "ExportValue without expected type"
           )
       | inferExp (env, F.ExportModule bindings) =
           ( Vector.app (fn (_, exp) => ignore (inferExp (env, exp))) bindings
-          ; raise TypeError "ExitProgram without expected type"
+          ; raise TypeError "ExportModule without expected type"
           )
     and checkExp (env, expectedTy, F.RecordExp fields) =
           (case expectedTy of
@@ -770,14 +754,18 @@ struct
           ; checkExp (env, expectedTy, then')
           ; checkExp (env, expectedTy, else')
           )
-      | checkExp (env, expectedTy, F.FnExp (vid, ty, exp)) =
+      | checkExp (env, expectedTy, fnexp as F.FnExp (vid, ty, exp)) =
           (case normalizeType (#aliasEnv env) expectedTy of
              F.FnType (a, b) =>
                let
                  val env' = modifyValEnv
                    (fn m => TypedSyntax.VIdMap.insert (m, vid, ty), env)
                in
-                 checkSame (#aliasEnv env, a) ty;
+                 checkSame
+                   ( #aliasEnv env
+                   , "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
+                   , a
+                   ) ty;
                  checkExp (env', b, exp)
                end
            | _ => raise TypeError "invalid function expression")
@@ -789,9 +777,16 @@ struct
                    #doTy
                      (F.substTy
                         (TypedSyntax.TyVarMap.singleton (tv', F.TyVar tv))) ty'
+                 val env' =
+                   { valEnv = #valEnv env
+                   , tyVarEnv =
+                       TypedSyntax.TyVarMap.insert (#tyVarEnv env, tv, kind)
+                   , aliasEnv = #aliasEnv env
+                   , valConEnv = #valConEnv env
+                   }
                in
                  if k = kind then () else raise TypeError "kind mismatch";
-                 checkExp (env, ty'', exp)
+                 checkExp (env', ty'', exp)
                end
            | _ => raise TypeError "invalid type application")
       | checkExp (_, _, F.ExitProgram) = ()
@@ -800,7 +795,11 @@ struct
       | checkExp (env, _, F.ExportModule bindings) =
           Vector.app (fn (_, exp) => ignore (inferExp (env, exp))) bindings
       | checkExp (env, expectedTy, exp) =
-          checkSame (#aliasEnv env, expectedTy) (inferExp (env, exp))
+          checkSame
+            ( #aliasEnv env
+            , "checkExp: " ^ Printer.build (FPrinter.doExp 0 exp)
+            , expectedTy
+            ) (inferExp (env, exp))
     and inferDecs (env, decs) =
       List.foldl inferDec env decs
     and inferDec (F.ValDec (vid, NONE, exp), env: Env) : Env =
@@ -829,27 +828,26 @@ struct
             env'
           end
       | inferDec (F.UnpackDec (tv, kind, vid, ty, exp), env) =
-          (case inferExp (env, exp) of
-             F.ExistsType (tv', kind', ty') =>
-               ( if kind <> kind' then raise TypeError "kind mismatch" else ()
-               ; checkSame (#aliasEnv env, ty)
-                   (#doTy
-                      (F.substTy
-                         (TypedSyntax.TyVarMap.singleton (tv', F.TyVar tv))) ty')
-               ; { valEnv = TypedSyntax.VIdMap.insert (#valEnv env, vid, ty)
-                 , tyVarEnv =
-                     TypedSyntax.TyVarMap.insert (#tyVarEnv env, tv, kind)
-                 , aliasEnv = #aliasEnv env
-                 , valConEnv = #valConEnv env
-                 }
-               )
-           | _ => raise TypeError "expected ExistsType")
+          ( checkExp (env, F.ExistsType (tv, kind, ty), exp)
+          ; { valEnv = TypedSyntax.VIdMap.insert (#valEnv env, vid, ty)
+            , tyVarEnv = TypedSyntax.TyVarMap.insert (#tyVarEnv env, tv, kind)
+            , aliasEnv = #aliasEnv env
+            , valConEnv = #valConEnv env
+            }
+          )
       | inferDec (F.IgnoreDec exp, env) =
           let val _ = inferExp (env, exp)
           in env
           end
       | inferDec (F.DatatypeDec datbinds, env) =
           let
+            fun doTyName (F.DatBind (tyvars, tyname, _), tyVarEnv) =
+              TypedSyntax.TyVarMap.insert
+                ( tyVarEnv
+                , tyname
+                , List.foldl (fn (_, k) => F.ArrowKind (F.TypeKind, k))
+                    F.TypeKind tyvars
+                )
             fun doDatBind (F.DatBind (tyvars, tyname, conbinds), valConEnv) =
               let
                 fun doConBind
@@ -865,7 +863,7 @@ struct
               end
           in
             { valEnv = #valEnv env
-            , tyVarEnv = #tyVarEnv env
+            , tyVarEnv = List.foldl doTyName (#tyVarEnv env) datbinds
             , aliasEnv = #aliasEnv env
             , valConEnv = List.foldl doDatBind (#valConEnv env) datbinds
             }

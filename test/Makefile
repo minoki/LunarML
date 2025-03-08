@@ -9,7 +9,7 @@ NODE= node
 LUNARML_GEN2= false
 VARIANT_GEN2= gen2
 
-DEFAULT_ANN= --default-ann "nonexhaustiveBind ignore"
+DEFAULT_ANN= --default-ann "nonexhaustiveBind ignore" --internal-consistency-check
 
 ifeq ($(VARIANT), lua)
 LUNARML_OPTION= --lua $(DEFAULT_ANN)

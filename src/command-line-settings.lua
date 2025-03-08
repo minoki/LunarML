@@ -7,6 +7,7 @@ return "CommandLineSettings", {
   "backend",
   "libDir",
   "printTimings",
+  "internalConsistencyCheck",
   "mlbPathSettings",
   "defaultAnnotations",
 }

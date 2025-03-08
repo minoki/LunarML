@@ -60,6 +60,7 @@ struct
     , backend: backend
     , libDir: string
     , printTimings: bool
+    , internalConsistencyCheck: bool
     , mlbPathSettings: MLBEval.path_setting list (* --mlb-path-map=file1 ... --mlb-path-map=fileN -> [PATH_MAP fileN, ..., PATH_MAP file1] *)
     , defaultAnnotations: string list (* --default-ann ann1 ... --default-ann annN -> [annN, ..., ann1] *)
     }
@@ -468,6 +469,98 @@ struct
             ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
       val frontTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
+        let
+          val outs = TextIO.openOut "dump.txt"
+        in
+          TextIO.output (outs, (Printer.build (FPrinter.doExp 0 fexp)));
+          TextIO.closeOut outs
+        end
+      val () =
+        if #internalConsistencyCheck opts then
+          let
+            fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
+              | toFTy
+                  (TypedSyntax.AnonymousTyVar (_, ref (TypedSyntax.Link ty))) =
+                  toFTy ty
+              | toFTy
+                  (TypedSyntax.AnonymousTyVar (_, ref (TypedSyntax.Unbound _))) =
+                  raise Fail "unexpected anonymous type variable"
+              | toFTy (TypedSyntax.RecordType (_, fields)) =
+                  FSyntax.RecordType (Syntax.LabelMap.map toFTy fields)
+              | toFTy (TypedSyntax.RecordExtType (_, _, _)) =
+                  raise Fail "unexpected record extension"
+              | toFTy (TypedSyntax.TyCon (_, tyargs, tyname)) =
+                  FSyntax.TyCon (List.map toFTy tyargs, tyname)
+              | toFTy (TypedSyntax.FnType (_, paramTy, resultTy)) =
+                  FSyntax.FnType (toFTy paramTy, toFTy resultTy)
+            fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty)) =
+              let
+                fun go [] = toFTy ty
+                  | go ((tv, NONE) :: xs) =
+                      FSyntax.ForallType (tv, FSyntax.TypeKind, go xs)
+                  | go ((tv, SOME TypedSyntax.IsEqType) :: xs) =
+                      FSyntax.ForallType (tv, FSyntax.TypeKind, FSyntax.FnType
+                        (FSyntax.EqualityType (FSyntax.TyVar tv), go xs))
+                  | go ((_, SOME _) :: _) = raise Fail "invalid type scheme"
+              in
+                go vars
+              end
+            val initialValEnv =
+              Syntax.VIdMap.foldl
+                (fn ((tysc, _, vid), m) =>
+                   TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
+                TypedSyntax.VIdMap.empty InitialEnv.initialValEnv
+            val initialTyVarEnv =
+              TypedSyntax.TyNameMap.foldli
+                (fn (tn, {arity, ...}, acc) =>
+                   TypedSyntax.TyVarMap.insert
+                     (acc, tn, FSyntax.arityToKind arity))
+                TypedSyntax.TyVarMap.empty (#tyNameMap InitialEnv.initialEnv)
+            val initialValConMap =
+              Syntax.TyConMap.foldl
+                (fn ({typeFunction, valEnv}, acc) =>
+                   let
+                     val tyName =
+                       case typeFunction of
+                         TypedSyntax.TypeFunction
+                           (_, TypedSyntax.TyCon (_, _, tyName)) => tyName
+                       | _ => raise Fail "invalid type function"
+                     val valConMap =
+                       Syntax.VIdMap.foldli
+                         (fn (vid, (TypedSyntax.TypeScheme (tvs, ty), _), acc) =>
+                            StringMap.insert
+                              ( acc
+                              , Syntax.getVIdName vid
+                              , { tyParams = List.map #1 tvs
+                                , payload =
+                                    case ty of
+                                      TypedSyntax.FnType (_, payloadTy, _) =>
+                                        SOME (toFTy payloadTy)
+                                    | _ => NONE
+                                }
+                              )) StringMap.empty valEnv
+                   in
+                     TypedSyntax.TyVarMap.insert (acc, tyName, valConMap)
+                   end) TypedSyntax.TyVarMap.empty
+                (#tyConMap InitialEnv.initialEnv)
+            val checkEnv =
+              { valEnv = initialValEnv
+              , tyVarEnv = initialTyVarEnv
+              , aliasEnv = TypedSyntax.TyVarMap.empty
+              , valConEnv = initialValConMap
+              }
+          in
+            CheckF.checkExp
+              ( checkEnv
+              , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+              , fexp
+              )
+            handle CheckF.TypeError message =>
+              print ("internal type check failed: " ^ message ^ "\n")
+          end
+        else
+          ()
+      val () =
         if #dump opts = DUMP_INITIAL then
           print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
         else
@@ -657,7 +750,8 @@ struct
   | OPT_MLB_PATH_VAR of string (* --mlb-path-var *)
   | OPT_DEFAULT_ANN of string (* --default-ann, -default-ann *)
   | OPT_LIB_DIR of string (* -B *)
-  | OPT_PRINT_TIMINGS
+  | OPT_PRINT_TIMINGS (* --print-timings *)
+  | OPT_INTERNAL_CONSISTENCY_CHECK (* --internal-consistency-check *)
   val optionDescs =
     [ (SHORT "-o", WITH_ARG OPT_OUTPUT)
     , (LONG "--output", WITH_ARG OPT_OUTPUT)
@@ -684,6 +778,9 @@ struct
     , (LONG "-default-ann", WITH_ARG OPT_DEFAULT_ANN)
     , (SHORT "-B", WITH_ARG OPT_LIB_DIR)
     , (LONG "--print-timings", SIMPLE OPT_PRINT_TIMINGS)
+    , ( LONG "--internal-consistency-check"
+      , SIMPLE OPT_INTERNAL_CONSISTENCY_CHECK
+      )
     ]
   fun parseArgs (opts: options) args =
     case parseOption (optionDescs, args) of
@@ -735,6 +832,8 @@ struct
         parseArgs (S.set.libDir libDir opts) args
     | SOME (OPT_PRINT_TIMINGS, args) =>
         parseArgs (S.set.printTimings true opts) args
+    | SOME (OPT_INTERNAL_CONSISTENCY_CHECK, args) =>
+        parseArgs (S.set.internalConsistencyCheck true opts) args
     | NONE =>
         (case args of
            arg :: args' =>
@@ -776,6 +875,7 @@ struct
               (fn (arc, dir) => OS.Path.joinDirFile {dir = dir, file = arc})
               progDir [OS.Path.parentArc, "lib", "lunarml"]
         , printTimings = false
+        , internalConsistencyCheck = false
         , mlbPathSettings = []
         , defaultAnnotations = []
         }

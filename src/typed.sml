@@ -98,7 +98,7 @@ sig
     }
   type PackedSignature =
     { s: Signature
-    , bound: {tyname: TyName, arity: int, admitsEquality: bool} list
+    , bound: {tyname: TyName, arity: int, admitsEquality: bool} list (* existentially-bound type names *)
     }
   type FunSig =
     { bound:
@@ -106,7 +106,7 @@ sig
         , arity: int
         , admitsEquality: bool
         , longtycon: Syntax.LongTyCon
-        } list
+        } list (* forall-bound type names *)
     , paramSig: Signature
     , resultSig: PackedSignature
     }
@@ -241,7 +241,7 @@ sig
       , argumentTypes: {typeFunction: TypeFunction, admitsEquality: bool} list
       , argumentStr: StrExp
       , packageSig: PackedSignature
-      }
+      } (* <funid> <type 1> ... <type n> ... <equality 1> ... <equality m> (<structure>) : <packageSig> *)
   | LetInStrExp of SourcePos.span * StrDec list * StrExp
   and StrDec =
     CoreDec of SourcePos.span * Dec
@@ -262,6 +262,8 @@ sig
     val print_AnonymousTyVar: AnonymousTyVar -> string
     val print_TyName: TyName -> string
     val print_Ty: Ty -> string
+    val print_StrExp: StrExp -> string
+    val print_TopDec: TopDec -> string
   end
   val print_VId: VId -> string
   val print_LongVId: LongVId -> string
@@ -895,8 +897,15 @@ struct
     and print_StrDec (CoreDec (_, dec)) = print_Dec dec
       | print_StrDec (StrBindDec (_, strid, strexp, _)) =
           "StrBindDec(" ^ print_StrId strid ^ "," ^ print_StrExp strexp ^ ")"
-  (* fun print_TopDec (StrDec strdec) = print_StrDec strdec
-    | print_TopDec (FunDec (funid, (typarams, strid, s, strexp))) = "FunDec(" ^ print_FunId funid ^ ",(" ^ Syntax.print_list (fn { tyname, arity, admitsEquality } => "(" ^ print_TyName tyname ^ "," ^ Int.toString arity ^ "," ^ Bool.toString admitsEquality ^ ")") typarams ^ "," ^ print_Signature s ^ "," ^ print_StrExp strexp ^ "))" *)
+    fun print_TopDec (StrDec strdec) = print_StrDec strdec
+      | print_TopDec (FunDec (funid, (typarams, strid, s, strexp))) =
+          "FunDec(" ^ print_FunId funid ^ ",("
+          ^
+          Syntax.print_list
+            (fn {tyname, arity, admitsEquality} =>
+               "(" ^ print_TyName tyname ^ "," ^ Int.toString arity ^ ","
+               ^ Bool.toString admitsEquality ^ ")") typarams ^ ","
+          ^ print_Signature s ^ "," ^ print_StrExp strexp ^ "))"
   end (* structure PrettyPrint *)
   open PrettyPrint
 

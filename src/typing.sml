@@ -5793,6 +5793,64 @@ struct
       in
         goSig
       end
+    fun refreshTyNameInPackedSig (ctx: Context, {s, bound}: T.PackedSignature) :
+      T.PackedSignature =
+      let
+        val subst =
+          List.foldl
+            (fn ({tyname, ...}, acc) =>
+               T.TyNameMap.insert (acc, tyname, renewTyName (ctx, tyname)))
+            T.TyNameMap.empty bound
+      in
+        { s = refreshTyNameInSig (ctx, subst) s
+        , bound =
+            List.map
+              (fn {tyname, arity, admitsEquality} =>
+                 { tyname = T.TyNameMap.lookup (subst, tyname)
+                 , arity = arity
+                 , admitsEquality = admitsEquality
+                 }) bound
+        }
+      end
+    fun refreshTyNameInFunSig
+      ( ctx: Context
+      , {bound, paramSig, resultSig = {s, bound = boundE}}: T.FunSig
+      ) : T.FunSig =
+      let
+        val substA =
+          List.foldl
+            (fn ({tyname, ...}, acc) =>
+               T.TyNameMap.insert (acc, tyname, renewTyName (ctx, tyname)))
+            T.TyNameMap.empty bound
+        val substE =
+          List.foldl
+            (fn ({tyname, ...}, acc) =>
+               T.TyNameMap.insert (acc, tyname, renewTyName (ctx, tyname)))
+            T.TyNameMap.empty boundE
+      in
+        { bound =
+            List.map
+              (fn {tyname, arity, admitsEquality, longtycon} =>
+                 { tyname = T.TyNameMap.lookup (substA, tyname)
+                 , arity = arity
+                 , admitsEquality = admitsEquality
+                 , longtycon = longtycon
+                 }) bound
+        , paramSig = refreshTyNameInSig (ctx, substA) paramSig
+        , resultSig =
+            { s =
+                refreshTyNameInSig
+                  (ctx, T.TyNameMap.unionWith #2 (substA, substE)) s
+            , bound =
+                List.map
+                  (fn {tyname, arity, admitsEquality} =>
+                     { tyname = T.TyNameMap.lookup (substE, tyname)
+                     , arity = arity
+                     , admitsEquality = admitsEquality
+                     }) boundE
+            }
+        }
+      end
 
     fun checkEquality
       (ctx: Context, env: ('val, 'str) Env', tyvars: T.TyVarSet.set) : T.Ty
@@ -7056,26 +7114,7 @@ struct
            | SOME (funsig, funid) =>
                let
                  val {bound, paramSig, resultSig} =
-                   funsig (* TODO: refresh bound tynames? *)
-                 val resultSig =
-                   let
-                     val subst =
-                       List.foldl
-                         (fn ({tyname, ...}, map) =>
-                            T.TyNameMap.insert
-                              (map, tyname, renewTyName (ctx, tyname)))
-                         T.TyNameMap.empty (#bound resultSig)
-                   in
-                     { s = refreshTyNameInSig (ctx, subst) (#s resultSig)
-                     , bound =
-                         List.map
-                           (fn {tyname, arity, admitsEquality} =>
-                              { tyname = T.TyNameMap.lookup (subst, tyname)
-                              , arity = arity
-                              , admitsEquality = admitsEquality
-                              }) (#bound resultSig)
-                     }
-                   end
+                   refreshTyNameInFunSig (ctx, funsig)
                  val (sA, tyNameMap, decs, strexp) =
                    typeCheckStrExp (ctx, env, strexp)
                  val strid = newStrId (ctx, Syntax.MkStrId "tmp")
@@ -7217,14 +7256,17 @@ struct
               List.foldr
                 (fn ((strid, strexp), (strMap, tyNameMap, binds)) =>
                    let
-                     val (ps, tc, strdecs, strexp) =
+                     val (packedSignature, tc, strdecs, strexp) =
                        typeCheckStrExp (ctx, env, strexp)
                      val strid' = newStrId (ctx, strid)
                    in
                      ( S.StrIdMap.insert
-                         (strMap, strid, (#s ps, T.MkLongStrId (strid', [])))
+                         ( strMap
+                         , strid
+                         , (#s packedSignature, T.MkLongStrId (strid', []))
+                         )
                      , TypedSyntax.TyNameMap.unionWith #2 (tyNameMap, tc)
-                     , (strid', strdecs, strexp, ps) :: binds
+                     , (strid', strdecs, strexp, packedSignature) :: binds
                      )
                    end) (Syntax.StrIdMap.empty, TypedSyntax.TyNameMap.empty, [])
                 binds
@@ -7240,9 +7282,11 @@ struct
           in
             ( env'
             , List.foldr
-                (fn ((strid, strdecs, strexp, s), strdecs') =>
-                   strdecs @ [T.StrBindDec (span, strid, strexp, s)] @ strdecs')
-                [] binds
+                (fn ((strid, strdecs, strexp, packedSignature), strdecs') =>
+                   strdecs
+                   @
+                   T.StrBindDec (span, strid, strexp, packedSignature)
+                   :: strdecs') [] binds
             )
           end
       | typeCheckStrDec (ctx, env, S.LocalStrDec (_, decs1, decs2)) =
@@ -7295,10 +7339,11 @@ struct
                  , arity = arity
                  , admitsEquality = admitsEquality
                  } :: xs) [] bodyTyNameMap
-        val resultSig =
+        val actualSignature' =
           { s = #s actualSignature
           , bound = #bound actualSignature @ additionalTyNames
           }
+        val resultSig = refreshTyNameInPackedSig (ctx, actualSignature')
         val payloadTypes =
           List.map
             (fn {tyname, arity, admitsEquality = _} =>
@@ -7308,7 +7353,7 @@ struct
                in
                  T.TypeFunction (tyvars, T.TyCon
                    (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tyname))
-               end) (#bound resultSig)
+               end) (#bound actualSignature')
         val funsig =
           { bound =
               List.map
