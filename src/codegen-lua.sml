@@ -367,12 +367,15 @@ struct
         end
     | doValue _ (C.CharConst c) =
         L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
-    | doValue _ (C.Char16Const _) =
-        raise CodeGenError "Char16Const is not supported by Lua backend"
+    | doValue _ (C.Char16Const i) =
+        L.ConstExp (L.Numeral (Int.toString i))
     | doValue _ (C.StringConst s) =
         L.ConstExp (L.LiteralString s)
-    | doValue _ (C.String16Const _) =
-        raise CodeGenError "String16Const is not supported by Lua backend"
+    | doValue _ (C.String16Const s) =
+        L.ConstExp (L.LiteralString (String.implode
+          (Vector.foldr
+             (fn (i, acc) => Char.chr (i div 256) :: Char.chr (i mod 256) :: acc)
+             [] s))) (* big endian *)
 
   (*:
   val doExp : Context * Env * N.Exp -> L.Exp
@@ -1451,6 +1454,67 @@ struct
                            (L.VarExp (L.PredefinedId "string_char"), vector [a])
                      , PURE
                      )
+               | Primitives.Char16_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.Char16_LT => doBinaryOp (L.LT, PURE)
+               | Primitives.Char16_GT => doBinaryOp (L.GT, PURE)
+               | Primitives.Char16_LE => doBinaryOp (L.LE, PURE)
+               | Primitives.Char16_GE => doBinaryOp (L.GE, PURE)
+               | Primitives.Char16_ord w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
+               | Primitives.Char16_chr_unchecked w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
+               | Primitives.String16_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.String16_LT =>
+                   doBinaryOp (L.LT, PURE) (* big endian *)
+               | Primitives.String16_GT =>
+                   doBinaryOp (L.GT, PURE) (* big endian *)
+               | Primitives.String16_LE =>
+                   doBinaryOp (L.LE, PURE) (* big endian *)
+               | Primitives.String16_GE =>
+                   doBinaryOp (L.GE, PURE) (* big endian *)
+               | Primitives.String16_HAT => doBinaryOp (L.CONCAT, PURE)
+               | Primitives.String16_size _ =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doUnaryExp
+                          ( fn a =>
+                              L.BinExp
+                                ( L.INTDIV
+                                , L.UnaryExp (L.LENGTH, a)
+                                , L.ConstExp (L.Numeral "2")
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        doUnaryExp
+                          ( fn a =>
+                              L.BinExp
+                                ( L.DIV
+                                , L.UnaryExp (L.LENGTH, a)
+                                , L.ConstExp (L.Numeral "2")
+                                )
+                          , PURE
+                          ))
                | Primitives.Vector_length _ =>
                    doUnaryExp
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))

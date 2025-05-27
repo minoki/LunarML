@@ -1,32 +1,11 @@
-structure WideTextImpl :> sig
-              include TEXT
-              structure UnsafeCharVector : UNSAFE_MONO_VECTOR where type elem = Char.char where type vector = CharVector.vector
-              structure UnsafeCharArray : UNSAFE_MONO_ARRAY where type elem = Char.char where type array = CharArray.array
-          end = struct
-structure UnsafeCharVector = Unsafe.CharVector
-structure UnsafeCharArray = Unsafe.CharArray
-open Text
-end;
-structure WideText : TEXT = WideTextImpl;
-structure WideChar = WideText.Char;
-structure WideString = WideText.String;
-structure WideSubstring = WideText.Substring;
-structure WideCharVector = WideText.CharVector;
-structure WideCharArray = WideText.CharArray;
-structure WideCharVectorSlice = WideText.CharVectorSlice;
-structure WideCharArraySlice = WideText.CharArraySlice;
-_overload "Char" [WideChar.char] { < = WideChar.<
-                                 , <= = WideChar.<=
-                                 , > = WideChar.>
-                                 , >= = WideChar.>=
-                                 , maxOrd = 0xff
-                                 };
-_overload "String" [WideString.string] { < = WideString.<
-                                       , <= = WideString.<=
-                                       , > = WideString.>
-                                       , >= = WideString.>=
-                                       , maxOrd = 0xff
-                                       };
+structure WideText : TEXT = Text16;
+structure WideChar = Text16.Char;
+structure WideString = Text16.String;
+structure WideSubstring = Text16.Substring;
+structure WideCharVector = Text16.CharVector;
+structure WideCharArray = Text16.CharArray;
+structure WideCharVectorSlice = Text16.CharVectorSlice;
+structure WideCharArraySlice = Text16.CharArraySlice;
 structure Unsafe : sig
               structure Vector : sig
                             val sub : 'a vector * int -> 'a
@@ -67,7 +46,7 @@ structure Unsafe : sig
               structure RealArray : UNSAFE_MONO_ARRAY where type elem = Real.real where type array = RealArray.array
               val cast : 'a -> 'b
           end = struct
-structure WideCharVector = WideTextImpl.UnsafeCharVector
-structure WideCharArray = WideTextImpl.UnsafeCharArray
+structure WideCharVector = Unsafe.Char16Vector
+structure WideCharArray = Unsafe.Char16Array
 open Unsafe
 end;

@@ -26,6 +26,7 @@ lua/word-prim.sml
 lua/real-prim.sml
 char-prim.sml
 string-prim.sml
+text16-prim.sml
 lunarml.sml
 lua/lua.sml
 string-cvt-0.sml
@@ -63,6 +64,7 @@ byte.sml
 pack-word.sml
 string.sml
 text.sml
+lua/text16.sml
 widetext-8.sml
 lua/time.sml
 lua/timer.sml
@@ -123,6 +125,14 @@ signature WORD
 structure Unsafe (* extension *)
 structure Lua (* extension *)
 structure LunarML (* extension *)
+structure Char16 (* extension *)
+structure Char16Array (* extension *)
+structure Char16ArraySlice (* extension *)
+structure Char16Vector (* extension *)
+structure Char16VectorSlice (* extension *)
+structure String16 (* extension *)
+structure Substring16 (* extension *)
+structure Text16 (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO

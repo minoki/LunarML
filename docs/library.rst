@@ -458,6 +458,8 @@ Lua backend: ``WideChar.maxOrd`` is 255 and ``WideChar`` is an opaque alias of `
 
 JavaScript backend: ``WideChar.maxOrd`` is 65535.
 
+See also :ref:`text16`.
+
 signature STRING
 ^^^^^^^^^^^^^^^^
 
@@ -1672,6 +1674,40 @@ functor ImperativeIO
                          sharing type StreamIO.vector = Vector.vector = Array.vector
                         ) : IMPERATIVE_IO
 
+.. _text16:
+
+16-bit string
+-------------
+
+A 16-bit string consists of 16-bit code units, typically encoded in UTF-16.
+Structures for 16-bit characters and strings are defined in ``$(SML_LIB)/basis/text16.mlb``.
+
+It is unspecified if predicates like ``Char16.isAlpha`` are aware of non-ASCII code units.
+
+.. code-block:: sml
+   
+   structure Char16 :> CHAR
+   structure String16 :> STRING where type char = Char16.char
+   structure Substring16 :> SUBSTRING where type string = String16.string
+                                      where type char = Char16.char
+   structure Char16Vector :> MONO_VECTOR where type vector = String16.string
+                                         where type elem = Char16.char
+   structure Char16VectorSlice :> MONO_VECTOR_SLICE where type vector = Char16Vector.vector
+                                                    where type elem = Char16.char
+                                                    where type slice = Substring16.substring
+   structure Char16Array :> MONO_ARRAY where type vector = Char16Vector.vector
+                                       where type elem = Char16.char
+   structure Char16ArraySlice :> MONO_ARRAY_SLICE where type vector = Char16Vector.vector
+                                                  where type vector_slice = Char16VectorSlice.slice
+                                                  where type array = Char16Array.array
+                                                  where type elem = Char16.char
+   structure Text16 :> TEXT where type Char.char = Char16.char
+                            where type String.string = String16.string
+                            where type Substring.substring = Substring16.substring
+                            where type CharArray.array = Char16Array.array
+                            where type CharVectorSlice.slice = Char16VectorSlice.slice
+                            where type CharArraySlice.slice = Char16ArraySlice.slice
+
 .. _lua-structure:
 
 ``Lua`` structure
@@ -1973,20 +2009,21 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val undefined : value
      val null : value
      val sub : value * value -> value
-     val field : value * WideString.string -> value
+     val field : value * String16.string -> value
      val set : value * value * value -> unit
-     val setField : value * WideString.string * value -> unit
-     val global : WideString.string -> value
-     val setGlobal : WideString.string * value -> unit
+     val setField : value * String16.string * value -> unit
+     val global : String16.string -> value
+     val setGlobal : String16.string * value -> unit
      val call : value -> value vector -> value
      val new : value -> value vector -> value
-     val method : value * WideString.string -> value vector -> value
+     val method : value * String16.string -> value vector -> value
      val function : (value vector -> value) -> value
      val callback : (value vector -> unit) -> value
      val fromBool : bool -> value
      val fromInt : int -> value
      val fromWord : word -> value
      val fromReal : real -> value
+     val fromString16 : String16.string -> value
      val fromWideString : WideString.string -> value
      val unsafeToValue : 'a -> value
      val unsafeFromValue : value -> 'a
@@ -2012,10 +2049,10 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val ** : value * value -> value
      val isFalsy : value -> bool
      val isTruthy : value -> bool
-     val typeof : value -> WideString.string
+     val typeof : value -> String16.string
      val newObject : unit -> value
-     val encodeUtf8 : WideString.string -> string
-     val decodeUtf8 : string -> WideString.string
+     val encodeUtf8 : String16.string -> string
+     val decodeUtf8 : string -> String16.string
      val toInt32 : value -> Int32.int
      val toUint32 : value -> Word32.word
    end
@@ -2067,6 +2104,8 @@ Unsafe functions are exposed via ``$(SML_LIB)/basis/unsafe.mlb``:
      structure BoolArray : UNSAFE_MONO_ARRAY where type elem = bool where type array = BoolArray.array
      structure CharVector : UNSAFE_MONO_VECTOR where type elem = Char.char where type vector = CharVector.vector
      structure CharArray : UNSAFE_MONO_ARRAY where type elem = Char.char where type array = CharArray.array
+     structure Char16Vector : UNSAFE_MONO_VECTOR where type elem = Char16.char where type vector = Char16Vector.vector
+     structure Char16Array : UNSAFE_MONO_ARRAY where type elem = Char16.char where type array = Char16Array.array
      structure IntVector : UNSAFE_MONO_VECTOR where type elem = Int.int where type vector = IntVector.vector
      structure IntArray : UNSAFE_MONO_ARRAY where type elem = Int.int where type array = IntArray.array
      structure Int8Vector : UNSAFE_MONO_VECTOR where type elem = Int8.int where type vector = Int8Vector.vector

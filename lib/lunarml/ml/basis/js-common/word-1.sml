@@ -92,8 +92,8 @@ fun fmt StringCvt.BIN x = let val s = JavaScript.unsafeFromValue (JavaScript.met
                           in JavaScript.encodeUtf8 s
                           end
   | fmt StringCvt.HEX x = let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 16])
-                              val s = JavaScript.method (JavaScript.fromWideString s, "toUpperCase") #[]
-                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : WideString.string)
+                              val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
+                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
                           end
 fun toString (x : word) : string = fmt StringCvt.HEX x
 (* scan, fromString *)

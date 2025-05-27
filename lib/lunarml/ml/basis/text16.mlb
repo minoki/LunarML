@@ -1,0 +1,12 @@
+local
+sources.mlb
+in
+structure Char16
+structure Char16Array
+structure Char16ArraySlice
+structure Char16Vector
+structure Char16VectorSlice
+structure String16
+structure Substring16
+structure Text16
+end

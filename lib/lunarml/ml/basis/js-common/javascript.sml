@@ -3,20 +3,21 @@ structure JavaScript : sig
               val undefined : value
               val null : value
               val sub : value * value -> value
-              val field : value * WideString.string -> value
+              val field : value * String16.string -> value
               val set : value * value * value -> unit
-              val setField : value * WideString.string * value -> unit
-              val global : WideString.string -> value
-              val setGlobal : WideString.string * value -> unit
+              val setField : value * String16.string * value -> unit
+              val global : String16.string -> value
+              val setGlobal : String16.string * value -> unit
               val call : value -> value vector -> value
               val new : value -> value vector -> value
-              val method : value * WideString.string -> value vector -> value
+              val method : value * String16.string -> value vector -> value
               val function : (value vector -> value) -> value
               val fromBool : bool -> value
               val fromInt : int -> value
               val fromWord : word -> value
               val fromReal : real -> value
-              val fromWideString : WideString.string -> value
+              val fromString16 : String16.string -> value
+              val fromWideString : String16.string -> value
               val unsafeToValue : 'a -> value
               val unsafeFromValue : value -> 'a
               val === : value * value -> bool
@@ -41,10 +42,10 @@ structure JavaScript : sig
               val ** : value * value -> value
               val isFalsy : value -> bool
               val isTruthy : value -> bool
-              val typeof : value -> WideString.string
+              val typeof : value -> String16.string
               val newObject : unit -> value
-              val encodeUtf8 : WideString.string -> string
-              val decodeUtf8 : string -> WideString.string
+              val encodeUtf8 : String16.string -> string
+              val decodeUtf8 : string -> String16.string
               val toInt32 : value -> _Prim.Int32.int
               val toUint32 : value -> _Prim.Word32.word
               structure Lib : sig
@@ -137,11 +138,12 @@ val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
-val fromWideString : WideString.string -> value = unsafeToValue
+val fromString16 : String16.string -> value = unsafeToValue
+val fromWideString = fromString16
 fun sub (obj, key) = _primCall "JavaScript.sub" (obj, key)
-fun field (obj, key : WideString.string) = _primCall "JavaScript.sub" (obj, fromWideString key)
+fun field (obj, key : String16.string) = _primCall "JavaScript.sub" (obj, fromString16 key)
 fun set (obj, key, value) = _primCall "JavaScript.set" (obj, key, value)
-fun setField (obj, key, value) = _primCall "JavaScript.set" (obj, fromWideString key, value)
+fun setField (obj, key, value) = _primCall "JavaScript.set" (obj, fromString16 key, value)
 fun global name = _primCall "JavaScript.global" (name)
 fun setGlobal (name, value) = _primCall "JavaScript.setGlobal" (name, value)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)

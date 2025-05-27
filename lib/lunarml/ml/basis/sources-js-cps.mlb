@@ -62,6 +62,14 @@ signature WORD
 structure Unsafe (* extension *)
 structure JavaScript (* extension *)
 structure LunarML (* extension *)
+structure Char16 (* extension *)
+structure Char16Array (* extension *)
+structure Char16ArraySlice (* extension *)
+structure Char16Vector (* extension *)
+structure Char16VectorSlice (* extension *)
+structure String16 (* extension *)
+structure Substring16 (* extension *)
+structure Text16 (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO
@@ -80,7 +88,6 @@ structure CommandLine
 structure Date
 structure General
 structure IEEEReal
-structure IO
 structure Int
 structure Int16
 structure Int16Array
@@ -105,17 +112,18 @@ structure Int8Vector
 structure Int8VectorSlice
 structure IntArray
 structure IntArraySlice
+structure IntInf
 structure IntVector
 structure IntVectorSlice
-structure IntInf
+structure IO
 structure LargeInt
 structure LargeReal
 structure LargeWord
 structure List
 structure ListPair
 structure Math
-structure OS
 structure Option
+structure OS
 structure PackWord16Big
 structure PackWord16Little
 structure PackWord32Big
@@ -165,10 +173,10 @@ structure Word64ArraySlice
 structure Word64Vector
 structure Word64VectorSlice
 structure Word8
-structure Word8Vector
-structure Word8VectorSlice
 structure Word8Array
 structure Word8ArraySlice
+structure Word8Vector
+structure Word8VectorSlice
 structure WordArray
 structure WordArraySlice
 structure WordVector

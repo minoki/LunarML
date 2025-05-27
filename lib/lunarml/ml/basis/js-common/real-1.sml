@@ -252,8 +252,8 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                         "~inf"
                                     else
                                         let val result = JavaScript.method (JavaScript.fromReal r, "toExponential") #[JavaScript.fromInt prec] (* TODO: Is this OK? *)
-                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromWideString "-", JavaScript.fromWideString "~"]
-                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : WideString.string)
+                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromString16 "-", JavaScript.fromString16 "~"]
+                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : String16.string)
                                         end
                                  end
   | fmt (StringCvt.FIX prec) r = let val prec = Option.getOpt (prec, 6)
@@ -269,8 +269,8 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                         "~inf"
                                     else
                                         let val result = JavaScript.method (JavaScript.fromReal r, "toFixed") #[JavaScript.fromInt prec] (* TODO: Is this OK? *)
-                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromWideString "-", JavaScript.fromWideString "~"]
-                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : WideString.string)
+                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromString16 "-", JavaScript.fromString16 "~"]
+                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : String16.string)
                                         end
                                  end
   | fmt (StringCvt.GEN prec) r = let val prec = Option.getOpt (prec, 12)
@@ -286,9 +286,9 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                         "~inf"
                                     else
                                         let val result = JavaScript.method (JavaScript.fromReal r, "toPrecision") #[JavaScript.fromInt prec] (* TODO: Is this OK? *)
-                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromWideString "-", JavaScript.fromWideString "~"]
+                                            val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromString16 "-", JavaScript.fromString16 "~"]
                                             val result = JavaScript.method (result, "toUpperCase") #[]
-                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : WideString.string)
+                                        in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : String16.string)
                                         end
                                  end
   | fmt StringCvt.EXACT r = raise Fail "Real.fmt StringCvt.EXACT: not implemented yet"

@@ -148,27 +148,27 @@ fun sameSign (x, y) = sign x = sign y
 fun fmt StringCvt.BIN (x : int) = let val s = if GE (x, 0) then
                                                   JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 2])
                                               else
-                                                  WideString.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 2]))
+                                                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 2]))
                                   in JavaScript.encodeUtf8 s
                                   end
   | fmt StringCvt.OCT x = let val s = if GE (x, 0) then
                                           JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 8])
                                       else
-                                          WideString.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 8]))
+                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 8]))
                           in JavaScript.encodeUtf8 s
                           end
   | fmt StringCvt.DEC x = let val s = if GE (x, 0) then
                                           JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[])
                                       else
-                                          WideString.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[]))
+                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[]))
                           in JavaScript.encodeUtf8 s
                           end
   | fmt StringCvt.HEX x = let val s = if GE (x, 0) then
                                           JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 16])
                                       else
-                                          WideString.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 16]))
-                              val s = JavaScript.method (JavaScript.fromWideString s, "toUpperCase") #[]
-                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : WideString.string)
+                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 16]))
+                              val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
+                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
                           end
 fun toString (x : int) : string = fmt StringCvt.DEC x
 

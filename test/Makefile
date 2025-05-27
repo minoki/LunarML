@@ -187,12 +187,17 @@ should_run += $(addprefix mlbasis/should_run/,\
   real-intinf.sml \
   substring.sml \
   char.sml \
+  char16.mlb \
   scan-word.sml \
   string-issubstring.sml \
   widestring-issubstring.sml \
   widestring-sub.sml \
   os-path-unix.mlb \
   os-path-windows.mlb \
+  string16.mlb \
+  string16_fields.mlb \
+  string16-issubstring.mlb \
+  substring16.mlb \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)

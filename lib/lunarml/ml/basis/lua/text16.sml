@@ -1,6 +1,6 @@
-structure WideChar = struct
-type char = WideChar.char
-type string = WideString.string
+structure Char16 = struct
+type char = Char16.char
+type string = String16.string
 val minChar : char = #"\000"
 val maxChar : char = #"\uFFFF"
 val maxOrd = 0xFFFF
@@ -37,11 +37,18 @@ fun toUpper (c : char) = if isLower c then
                              chr (ord c - (ord #"a" - ord #"A"))
                          else
                              c
-open WideChar
+open Char16
 end
 
-structure WideString = struct
-open WideString
+structure String16 = struct
+open String16
+fun str (c : Char16.char) : String16.string
+  = let val i = Char16.ord c
+        (* big endian *)
+        val a = Int.div (i, 256)
+        val b = Int.mod (i, 256)
+    in Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.char #[Lua.fromInt a, Lua.fromInt b])
+    end
 fun compare (s, t) = if s = t then
                          EQUAL
                      else if s < t then
@@ -52,7 +59,7 @@ end
 
 local
     open ScanTextUtils
-    fun scanChar (getc, strm : 'strm) : ('strm, WideChar.char) ScanCharResult
+    fun scanChar (getc, strm : 'strm) : ('strm, Char16.char) ScanCharResult
         = case getc strm of
               SOME (#"\\", strm') => (case getc strm' of
                                           SOME (#"a", strm'') => Parsed (#"\a", strm'')
@@ -67,23 +74,23 @@ local
                                         | SOME (#"^", strm'') => (case getc strm'' of
                                                                       SOME (c, strm''') => let val r = Char.ord c
                                                                                            in if 64 <= r andalso r <= 95 then
-                                                                                                  Parsed (WideChar.chr (r - 64), strm''')
+                                                                                                  Parsed (Char16.chr (r - 64), strm''')
                                                                                               else
                                                                                                   Error
                                                                                            end
                                                                     | NONE => Error
                                                                  )
                                         | SOME (#"u", strm'') => (case scanHexadecimalDigits (getc, strm'', 4, 0) of
-                                                                      SOME (value, strm''') => if value <= WideChar.maxOrd then
-                                                                                                   Parsed (WideChar.chr value, strm''')
+                                                                      SOME (value, strm''') => if value <= Char16.maxOrd then
+                                                                                                   Parsed (Char16.chr value, strm''')
                                                                                                else
                                                                                                    Error
                                                                     | NONE => Error
                                                                  )
                                         | SOME (c, strm'') => if Char.isDigit c then
                                                                   case scanDecimalDigits (getc, strm'', 2, digitToInt c) of
-                                                                      SOME (value, strm''') => if value <= WideChar.maxOrd then
-                                                                                                   Parsed (WideChar.chr value, strm''')
+                                                                      SOME (value, strm''') => if value <= Char16.maxOrd then
+                                                                                                   Parsed (Char16.chr value, strm''')
                                                                                                else
                                                                                                    Error
                                                                     | NONE => Error
@@ -96,11 +103,11 @@ local
                                         | NONE => Error
                                      )
             | SOME (c, strm') => if Char.isPrint c then
-                                     Parsed (WideChar.chr (Char.ord c), strm')
+                                     Parsed (Char16.chr (Char.ord c), strm')
                                  else
                                      Error
             | NONE => Empty
-    fun scanCChar (getc, strm) : ('strm, WideChar.char) ScanCharResult
+    fun scanCChar (getc, strm) : ('strm, Char16.char) ScanCharResult
         = case getc strm of
               SOME (#"\\", strm') => (case getc strm' of
                                           SOME (#"a", strm'') => Parsed (#"\a", strm'')
@@ -117,7 +124,7 @@ local
                                         | SOME (#"^", strm'') => (case getc strm'' of
                                                                       SOME (c, strm''') => let val r = Char.ord c
                                                                                            in if 64 <= r andalso r <= 95 then
-                                                                                                  Parsed (WideChar.chr (r - 64), strm''')
+                                                                                                  Parsed (Char16.chr (r - 64), strm''')
                                                                                               else
                                                                                                   Error
                                                                                            end
@@ -126,7 +133,7 @@ local
                                         | SOME (#"x", strm'') => (case getc strm'' of
                                                                       SOME (c, strm''') => (case scanHexadecimalDigits' (getc, strm''', digitToInt c) of
                                                                                                 SOME (value, strm'''') => if value <= Char.maxOrd then
-                                                                                                                              Parsed (WideChar.chr value, strm'''')
+                                                                                                                              Parsed (Char16.chr value, strm'''')
                                                                                                                           else
                                                                                                                               Error
                                                                                               | NONE => Error
@@ -134,16 +141,16 @@ local
                                                                     | NONE => Error
                                                                  )
                                         | SOME (#"u", strm'') => (case scanHexadecimalDigits (getc, strm'', 4, 0) of
-                                                                      SOME (value, strm''') => if value <= WideChar.maxOrd then
-                                                                                                   Parsed (WideChar.chr value, strm''')
+                                                                      SOME (value, strm''') => if value <= Char16.maxOrd then
+                                                                                                   Parsed (Char16.chr value, strm''')
                                                                                                else
                                                                                                    Error
                                                                     | NONE => Error
                                                                  )
                                         | SOME (c, strm'') => if isOctDigit c then
                                                                   case scanOctalDigits (getc, strm'', 2, digitToInt c) of
-                                                                      (value, strm''') => if value <= WideChar.maxOrd then
-                                                                                              Parsed (WideChar.chr value, strm''')
+                                                                      (value, strm''') => if value <= Char16.maxOrd then
+                                                                                              Parsed (Char16.chr value, strm''')
                                                                                           else
                                                                                               Error
                                                               else
@@ -152,21 +159,38 @@ local
                                      )
             | SOME (#"\"", strm') => Error
             | SOME (c, strm') => if Char.isPrint c then
-                                     Parsed (WideChar.chr (Char.ord c), strm')
+                                     Parsed (Char16.chr (Char.ord c), strm')
                                  else
                                      Error
             | NONE => Empty
 in
-structure WideChar :> CHAR where type char = WideChar.char
-                           where type string = WideString.string
+structure UnsafeString16 = struct
+fun sub (s : String16.string, i : int) : Char16.char
+  = let val op + = Lua.+
+        val op * = Lua.*
+        val ii = Lua.fromInt 2 * Lua.fromInt i
+        val (a, b) = Lua.call2 Lua.Lib.string.byte #[Lua.unsafeToValue s, ii + Lua.fromInt 1, ii + Lua.fromInt 2]
+    in Lua.unsafeFromValue (Lua.fromInt 256 * a + b) (* big endian *)
+    end
+end;
+
+structure Char16 :> CHAR where type char = Char16.char
+                         where type string = String16.string
   = struct
-fun contains (s : WideString.string) (c : WideChar.char) : bool
-    = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString s, "includes") #[JavaScript.fromWideString (WideString.str c)])
+fun contains (s : String16.string) (c : Char16.char) : bool
+    = let fun go i = if i >= String16.size s then
+                         false
+                     else if UnsafeString16.sub (s, i) = c then
+                         true
+                     else
+                         go (i + 1)
+      in go 0
+      end
 fun notContains s c = not (contains s c)
 fun toString #"\\" = "\\\\"
   | toString #"\"" = "\\\""
-  | toString c = if WideChar.isPrint c then
-                     String.str (Char.chr (WideChar.ord c)) (* the character must be ASCII *)
+  | toString c = if Char16.isPrint c then
+                     String.str (Char.chr (Char16.ord c)) (* the character must be ASCII *)
                  else
                      case c of
                          #"\a" => "\\a"
@@ -176,24 +200,20 @@ fun toString #"\\" = "\\\\"
                        | #"\v" => "\\v"
                        | #"\f" => "\\f"
                        | #"\r" => "\\r"
-                       | _ => let val x = WideChar.ord c
+                       | _ => let val x = Char16.ord c
                               in if x < 32 then
                                      "\\^" ^ String.str (Char.chr (x + 64))
-                                 else if x < 100 then
-                                     "\\0" ^ Int.toString x
                                  else if x < 1000 then
-                                     "\\" ^ Int.toString x
-                                 else if x < 0x1000 (* 4096 *) then
-                                     "\\u0" ^ Int.fmt StringCvt.HEX x
+                                     Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "\\%03d", Lua.fromInt x])
                                  else
-                                     "\\u" ^ Int.fmt StringCvt.HEX x
+                                     Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "\\u%04X", Lua.fromInt x])
                               end
 fun toCString #"\\" = "\\\\"
   | toCString #"\"" = "\\\""
   | toCString #"?" = "\\?"
   | toCString #"'" = "\\'"
-  | toCString c = if WideChar.isPrint c then
-                      String.str (Char.chr (WideChar.ord c)) (* the character must be ASCII *)
+  | toCString c = if Char16.isPrint c then
+                      String.str (Char.chr (Char16.ord c)) (* the character must be ASCII *)
                   else
                       case c of
                           #"\a" => "\\a"
@@ -203,17 +223,11 @@ fun toCString #"\\" = "\\\\"
                         | #"\v" => "\\v"
                         | #"\f" => "\\f"
                         | #"\r" => "\\r"
-                        | _ => let val x = WideChar.ord c
-                               in if x < 8 then
-                                      "\\00" ^ Int.fmt StringCvt.OCT x
-                                  else if x < 64 then
-                                      "\\0" ^ Int.fmt StringCvt.OCT x
-                                  else if x < 512 then
-                                      "\\" ^ Int.fmt StringCvt.OCT x
-                                  else if x < 0x1000 (* 4096 *) then
-                                      "\\u0" ^ Int.fmt StringCvt.HEX x
+                        | _ => let val x = Char16.ord c
+                               in if x < 512 then
+                                      Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "\\%03o", Lua.fromInt x])
                                   else
-                                      "\\u" ^ Int.fmt StringCvt.HEX x
+                                      Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "\\u%04X", Lua.fromInt x])
                                end
 fun scan getc strm = case scanChar (getc, strm) of
                          Parsed (c, strm') => SOME (c, strm')
@@ -227,65 +241,64 @@ fun scanC getc strm = case scanCChar (getc, strm) of
                         | Error => NONE
                         | Empty => NONE
 fun fromCString s = StringCvt.scanString scanC s
-open WideChar (* type char, type string, minChar, maxChar, maxOrd, ord, chr, succ, pred, <, <=, >, >=, compare, isAscii, isUpper, isLower, isDigit, isAlpha, isAlphaNum, isHexDigit, isGraph, isPrint, isPunct, isCntrl, isSpace, toLower, toUpper *)
+open Char16 (* type char, type string, minChar, maxChar, maxOrd, ord, chr, succ, pred, <, <=, >, >=, compare, isAscii, isUpper, isLower, isDigit, isAlpha, isAlphaNum, isHexDigit, isGraph, isPrint, isPunct, isCntrl, isSpace, toLower, toUpper *)
 end;
 
-structure UnsafeWideString = struct
-fun sub (s : WideString.string, i : int) : WideChar.char = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString s, "charCodeAt") #[JavaScript.fromInt i])
-end;
-
-structure WideString = struct
+structure String16 = struct
 val maxSize = 0x7fffffff
-fun sub (s : WideString.string, i : int) : WideChar.char
-    = if 0 <= i andalso i < WideString.size s then
-          UnsafeWideString.sub (s, i)
+fun sub (s : String16.string, i : int) : Char16.char
+    = if 0 <= i andalso i < String16.size s then
+          UnsafeString16.sub (s, i)
       else
           raise Subscript
-fun substring (s : WideString.string, i : int, j : int) : WideString.string
-    = if i < 0 orelse j < 0 orelse WideString.size s < i + j then
+fun substring (s : String16.string, i : int, j : int) : String16.string
+    = if i < 0 orelse j < 0 orelse String16.size s < i + j then
           raise Subscript
       else
-          JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString s, "substring") #[JavaScript.fromInt i, JavaScript.fromInt (i + j)])
-fun extract (s : WideString.string, i : int, NONE : int option) : WideString.string
-    = if i < 0 orelse WideString.size s < i then
+          let val result = Lua.call1 Lua.Lib.string.sub #[Lua.unsafeToValue s, Lua.fromInt (i + i + 1), Lua.fromInt (2 * (i + j))]
+          in Lua.unsafeFromValue result
+          end
+fun extract (s : String16.string, i : int, NONE : int option) : String16.string
+    = if i < 0 orelse String16.size s < i then
           raise Subscript
       else
-          JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString s, "substring") #[JavaScript.fromInt i])
+          let val result = Lua.call1 Lua.Lib.string.sub #[Lua.unsafeToValue s, Lua.fromInt (i + i + 1)]
+          in Lua.unsafeFromValue result
+          end
   | extract (s, i, SOME j) = substring (s, i, j)
-fun concat (l : WideString.string list) : WideString.string
-    = let val v = Vector.fromList l
-      in JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue v, "join") #[JavaScript.fromWideString ""])
+fun concat (l : String16.string list) : String16.string
+    = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+      in Lua.unsafeFromValue result
       end
-fun concatWith (s : WideString.string) (l : WideString.string list) : WideString.string
-    = let val v = Vector.fromList l
-      in JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue v, "join") #[JavaScript.fromWideString s])
+fun concatWith (s : String16.string) (l : String16.string list) : String16.string
+    = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.unsafeToValue s]
+      in Lua.unsafeFromValue result
       end
-fun implodeRev (l : WideChar.char list) : WideString.string
+fun implodeRev (l : Char16.char list) : String16.string
     = let val v = _primCall "Vector.unsafeFromListRevN" (List.length l, l)
-          val v = Vector.map WideString.str v
-      in JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue v, "join") #[JavaScript.fromWideString ""])
+          val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.map String16.str v)]
+      in Lua.unsafeFromValue result
       end
-fun implode (l : WideChar.char list) : WideString.string
-    = let val v = Vector.fromList l
-          val v = Vector.map WideString.str v
-      in JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue v, "join") #[JavaScript.fromWideString ""])
+fun implode (l : Char16.char list) : String16.string
+    = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.map String16.str (Vector.fromList l))]
+      in Lua.unsafeFromValue result
       end
-fun explode (s : WideString.string) : WideChar.char list
-    = Vector.foldr (op ::) [] (Vector.tabulate (WideString.size s, fn i => sub (s, i)))
-fun translate (f : WideChar.char -> WideString.string) (s : WideString.string) : WideString.string
-    = let val n = WideString.size s
+fun explode (s : String16.string) : Char16.char list
+    = Vector.foldr (op ::) [] (Vector.tabulate (String16.size s, fn i => sub (s, i)))
+fun translate (f : Char16.char -> String16.string) (s : String16.string) : String16.string
+    = let val n = String16.size s
           fun go i = if i >= n then
                          []
                      else
                          f (sub (s, i)) :: go (i + 1)
       in concat (go 0)
       end
-fun map (f : WideChar.char -> WideChar.char) (s : WideString.string) : WideString.string
-    = let val n = WideString.size s
+fun map (f : Char16.char -> Char16.char) (s : String16.string) : String16.string
+    = let val n = String16.size s
           fun go i = if i >= n then
                          []
                      else
-                         WideString.str (f (sub (s, i))) :: go (i + 1)
+                         String16.str (f (sub (s, i))) :: go (i + 1)
       in concat (go 0)
       end
 fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
@@ -302,22 +315,32 @@ fun fields f s = let fun go (revFields, acc, []) = List.rev (implodeRev acc :: r
                                                             go (revFields, x :: acc, xs)
                  in go ([], [], explode s)
                  end
-fun isPrefix prefix s = let val n = WideString.size prefix
-                        in if n > WideString.size s then
+fun isPrefix prefix s = let val n = String16.size prefix
+                        in if n > String16.size s then
                                false
                            else
                                substring (s, 0, n) = prefix
                         end
-fun isSubstring needle haystack : bool = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString haystack, "includes") #[JavaScript.fromWideString needle])
-fun isSuffix suffix s = let val n = WideString.size suffix
-                            val m = WideString.size s
+fun isSubstring needle haystack : bool
+  = let val m = String16.size needle
+        val n = String16.size haystack - m
+        fun go i = if i > n then
+                       false
+                   else if substring (haystack, i, m) = needle then
+                       true
+                   else
+                       go (i + 1)
+    in go 0
+    end
+fun isSuffix suffix s = let val n = String16.size suffix
+                            val m = String16.size s
                         in if n > m then
                                false
                            else
                                substring (s, m - n, n) = suffix
                         end
-fun toString s = String.concat (List.map WideChar.toString (explode s))
-fun toCString s = String.concat (List.map WideChar.toCString (explode s))
+fun toString s = String.concat (List.map Char16.toString (explode s))
+fun toCString s = String.concat (List.map Char16.toCString (explode s))
 fun scan getc strm = let fun go (strm, revAcc) = case scanChar (getc, strm) of
                                                      Parsed (c, strm') => go (strm', c :: revAcc)
                                                    | Skipped strm' => go (strm', revAcc)
@@ -342,38 +365,38 @@ fun scanC getc strm = let fun go (strm, revAcc) = case scanCChar (getc, strm) of
                            | Empty => SOME ("", strm)
                       end
 fun fromCString s = StringCvt.scanString scanC s
-open WideString (* type string, type char, <, <=, >, >=, ^, size, str, compare *)
-end (* structure WideString *)
+open String16 (* type string, type char, <, <=, >, >=, ^, size, str, compare *)
+end (* structure String16 *)
 end; (* local *)
 
-structure WideTextImpl :> sig
+structure Text16Impl :> sig
               include TEXT
               structure UnsafeCharVector : UNSAFE_MONO_VECTOR where type elem = Char.char where type vector = CharVector.vector
               structure UnsafeCharArray : UNSAFE_MONO_ARRAY where type elem = Char.char where type array = CharArray.array
-          end where type Char.char = WideChar.char
-              where type String.string = WideString.string
+          end where type Char.char = Char16.char
+              where type String.string = String16.string
   = struct
 local
     structure Prim : MONO_SEQUENCE_PRIM = struct
-    type elem = WideChar.char
-    type vector = WideString.string
-    type array = WideChar.char Array.array (* TODO: Use Uint16Array *)
+    type elem = Char16.char
+    type vector = String16.string
+    type array = Char16.char Array.array (* TODO: Use Uint16Array *)
     structure MonoVector = struct
-    val maxLen = WideString.maxSize
-    val length = WideString.size
-    val unsafeSub = UnsafeWideString.sub
-    val fromList = WideString.implode
-    fun unsafeFromListN (n, xs) = WideString.implode xs (* TODO *)
-    fun unsafeFromListRevN (n, xs) = WideString.implodeRev xs (* TODO *)
-    val concat = WideString.concat
-    fun sliceToVector { base, start, length } = WideString.substring (base, start, length)
+    val maxLen = String16.maxSize
+    val length = String16.size
+    val unsafeSub = UnsafeString16.sub
+    val fromList = String16.implode
+    fun unsafeFromListN (n, xs) = String16.implode xs (* TODO *)
+    fun unsafeFromListRevN (n, xs) = String16.implodeRev xs (* TODO *)
+    val concat = String16.concat
+    fun sliceToVector { base, start, length } = String16.substring (base, start, length)
     val shallowSliceToVector = sliceToVector
     end
     structure MonoArray = struct
     val maxLen = Array.maxLen
     val eq = op = : array * array -> bool
     val length = Array.length
-    fun unsafeCreateWithZero n = Array.array (n, #"\000" : WideChar.char) (* TODO *)
+    fun unsafeCreateWithZero n = Array.array (n, #"\000" : Char16.char) (* TODO *)
     val unsafeCreate = Array.array (* TODO *)
     val fromList = Array.fromList
     fun unsafeFromListN (n, xs) = fromList xs (* TODO *)
@@ -391,17 +414,17 @@ structure UnsafeCharVector = Base.UnsafeMonoVector
 structure UnsafeCharArray = Base.UnsafeMonoArray
 structure String = struct
 val collate = CharVector.collate
-open WideString
+open String16
 end
 structure Substring = struct
-type char = WideChar.char
-type string = WideString.string
+type char = Char16.char
+type string = String16.string
 type substring = CharVectorSlice.slice
 val sub = CharVectorSlice.sub
 val size = CharVectorSlice.length
 val base = CharVectorSlice.base
 val extract = CharVectorSlice.slice
-fun substring (base, start, length) = if 0 <= start andalso 0 <= length andalso start + length <= WideString.size base then
+fun substring (base, start, length) = if 0 <= start andalso 0 <= length andalso start + length <= String16.size base then
                                           { base = base, start = start, length = length }
                                       else
                                           raise Subscript
@@ -412,7 +435,7 @@ val getc = CharVectorSlice.getItem
 fun first { base, start, length } = if length = 0 then
                                         NONE
                                     else
-                                        SOME (WideString.sub (base, start))
+                                        SOME (String16.sub (base, start))
 fun triml k = if k < 0 then
                   raise Subscript
               else
@@ -429,16 +452,16 @@ fun trimr k = if k < 0 then
                                                     { base = base, start = start, length = 0 }
 val slice = CharVectorSlice.subslice
 val concat = CharVectorSlice.concat
-fun concatWith s xs = WideString.concatWith s (List.map string xs)
+fun concatWith s xs = String16.concatWith s (List.map string xs)
 fun explode { base, start, length } = let fun loop (i, acc) = if i < start then
                                                                   acc
                                                               else
-                                                                  loop (i - 1, WideString.sub (base, i) :: acc)
+                                                                  loop (i - 1, String16.sub (base, i) :: acc)
                                       in loop (start + length - 1, [])
                                       end
-fun isPrefix s ss = WideString.isPrefix s (string ss)
-fun isSuffix s ss = WideString.isSuffix s (string ss)
-fun compare (s, t) = WideString.compare (string s, string t)
+fun isPrefix s ss = String16.isPrefix s (string ss)
+fun isSuffix s ss = String16.isSuffix s (string ss)
+fun compare (s, t) = String16.compare (string s, string t)
 val collate = CharVectorSlice.collate
 fun splitl f (s as { base, start, length }) = let fun loop j = if j >= length then
                                                                    (s, { base = base, start = start + j, length = 0 })
@@ -466,12 +489,12 @@ fun dropl p s = #2 (splitl p s)
 fun dropr p s = #1 (splitr p s)
 fun takel p s = #1 (splitl p s)
 fun taker p s = #2 (splitr p s)
-fun translate f s = WideString.concat (List.map f (explode s))
+fun translate f s = String16.concat (List.map f (explode s))
 fun tokens f { base, start, length }
     = let val n = start + length
           fun loop (revTokens, s, i) = if i >= n then
                                            List.rev (if s = i then revTokens else { base = base, start = s, length = i - s } :: revTokens)
-                                       else if f (WideString.sub (base, i)) then
+                                       else if f (String16.sub (base, i)) then
                                            let val ip1 = i + 1
                                            in loop (if s = i then revTokens else { base = base, start = s, length = i - s } :: revTokens, ip1, ip1)
                                            end
@@ -483,7 +506,7 @@ fun fields f { base, start, length }
     = let val n = start + length
           fun loop (revFields, s, i) = if i >= n then
                                            List.rev ({ base = base, start = s, length = i - s } :: revFields)
-                                       else if f (WideString.sub (base, i)) then
+                                       else if f (String16.sub (base, i)) then
                                            let val ip1 = i + 1
                                            in loop ({base = base, start = s, length = i - s} :: revFields, ip1, ip1)
                                            end
@@ -496,15 +519,15 @@ val foldl = CharVectorSlice.foldl
 val foldr = CharVectorSlice.foldr
 end (* structure Substring *)
 end (* local *)
-structure Char = WideChar
-end; (* structure WideTextImpl *)
-structure WideText : TEXT = WideTextImpl;
-structure WideString = WideText.String;
-structure WideSubstring = WideText.Substring;
-structure WideCharVector = WideText.CharVector;
-structure WideCharArray = WideText.CharArray;
-structure WideCharVectorSlice = WideText.CharVectorSlice;
-structure WideCharArraySlice = WideText.CharArraySlice;
+structure Char = Char16
+end; (* structure Text16Impl *)
+structure Text16 : TEXT = Text16Impl;
+structure String16 = Text16.String;
+structure Substring16 = Text16.Substring;
+structure Char16Vector = Text16.CharVector;
+structure Char16Array = Text16.CharArray;
+structure Char16VectorSlice = Text16.CharVectorSlice;
+structure Char16ArraySlice = Text16.CharArraySlice;
 structure Unsafe : sig
               structure Vector : sig
                             val sub : 'a vector * int -> 'a
@@ -517,8 +540,8 @@ structure Unsafe : sig
               structure BoolArray : UNSAFE_MONO_ARRAY where type elem = bool where type array = BoolArray.array
               structure CharVector : UNSAFE_MONO_VECTOR where type elem = Char.char where type vector = CharVector.vector
               structure CharArray : UNSAFE_MONO_ARRAY where type elem = Char.char where type array = CharArray.array
-              structure WideCharVector : UNSAFE_MONO_VECTOR where type elem = WideChar.char where type vector = WideCharVector.vector
-              structure WideCharArray : UNSAFE_MONO_ARRAY where type elem = WideChar.char where type array = WideCharArray.array
+              structure Char16Vector : UNSAFE_MONO_VECTOR where type elem = Char16.char where type vector = Char16Vector.vector
+              structure Char16Array : UNSAFE_MONO_ARRAY where type elem = Char16.char where type array = Char16Array.array
               structure IntVector : UNSAFE_MONO_VECTOR where type elem = Int.int where type vector = IntVector.vector
               structure IntArray : UNSAFE_MONO_ARRAY where type elem = Int.int where type array = IntArray.array
               structure Int8Vector : UNSAFE_MONO_VECTOR where type elem = Int8.int where type vector = Int8Vector.vector
@@ -543,7 +566,7 @@ structure Unsafe : sig
               structure RealArray : UNSAFE_MONO_ARRAY where type elem = Real.real where type array = RealArray.array
               val cast : 'a -> 'b
           end = struct
-structure WideCharVector = WideTextImpl.UnsafeCharVector
-structure WideCharArray = WideTextImpl.UnsafeCharArray
+structure Char16Vector = Text16Impl.UnsafeCharVector
+structure Char16Array = Text16Impl.UnsafeCharArray
 open Unsafe
 end;

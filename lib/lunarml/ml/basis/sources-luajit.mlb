@@ -14,6 +14,7 @@ general.sml
 option.sml (* depends on unit (general.sml) *)
 lunarml.sml
 string-prim.sml
+text16-prim.sml
 bool.sml
 luajit/lua.sml
 luajit/int-prim.sml
@@ -63,6 +64,7 @@ byte.sml
 pack-word.sml
 string.sml
 text.sml
+lua/text16.sml
 widetext-8.sml
 luajit/time.sml
 lua/timer.sml
@@ -122,6 +124,14 @@ signature WORD
 structure Unsafe (* extension *)
 structure Lua (* extension *)
 structure LunarML (* extension *)
+structure Char16 (* extension *)
+structure Char16Array (* extension *)
+structure Char16ArraySlice (* extension *)
+structure Char16Vector (* extension *)
+structure Char16VectorSlice (* extension *)
+structure String16 (* extension *)
+structure Substring16 (* extension *)
+structure Text16 (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO
