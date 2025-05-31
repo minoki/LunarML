@@ -135,12 +135,19 @@ struct
         (F.ValConPat {sourceSpan = _, info, payload = SOME (_, payloadPat)}) =
         showParen (prec >= 1)
           (P.Fragment (#tag info) :: P.Fragment " " :: doPat 1 payloadPat)
-    | doPat prec (F.ExnConPat {sourceSpan = _, tagPath, payload = NONE}) =
-        showParen (prec >= 1) (doExp 0 tagPath)
+    | doPat prec (F.ExnConPat {sourceSpan = _, predicate, payload = NONE}) =
+        showParen (prec >= 1) (doExp 0 predicate)
     | doPat prec
-        (F.ExnConPat {sourceSpan = _, tagPath, payload = SOME (_, payloadPat)}) =
+        (F.ExnConPat
+           { sourceSpan = _
+           , predicate
+           , payload = SOME (_, getPayload, payloadPat)
+           }) =
         showParen (prec >= 1)
-          (doExp 0 tagPath @ P.Fragment " " :: doPat 1 payloadPat)
+          (doExp 0 predicate
+           @
+           P.Fragment " "
+           :: doExp 0 getPayload @ P.Fragment " " :: doPat 1 payloadPat)
     | doPat prec (F.LayeredPat (_, vid, ty, pat)) =
         showParen (prec >= 1)
           (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : "

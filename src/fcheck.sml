@@ -381,14 +381,27 @@ struct
                checkPat (env, payloadTy, payloadPat)
            | NONE => emptyValEnv)
       | checkPat
-          (env, expectedTy, F.ExnConPat {sourceSpan = _, tagPath, payload}) =
+          (env, expectedTy, F.ExnConPat {sourceSpan = _, predicate, payload}) =
           ( checkSame (#aliasEnv env, "ExnConPat", expectedTy)
               (F.TyVar Typing.primTyName_exn)
-          ; checkExp (env, F.TyVar Typing.primTyName_exntag, tagPath)
+          ; checkExp
+              ( env
+              , F.FnType
+                  ( F.TyVar Typing.primTyName_exn
+                  , F.TyVar Typing.primTyName_bool
+                  )
+              , predicate
+              )
           (* TODO: check if the constructor has a payload *)
           ; case payload of
-              SOME (payloadTy, payloadPat) =>
-                checkPat (env, payloadTy, payloadPat)
+              SOME (payloadTy, getPayloadExp, payloadPat) =>
+                ( checkExp
+                    ( env
+                    , F.FnType (F.TyVar Typing.primTyName_exn, payloadTy)
+                    , getPayloadExp
+                    )
+                ; checkPat (env, payloadTy, payloadPat)
+                )
             | NONE => emptyValEnv
           )
       | checkPat (env, expectedTy, F.LayeredPat (_, vid, ty, pat)) =

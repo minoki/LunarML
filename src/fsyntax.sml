@@ -80,7 +80,10 @@ sig
       , payload: (Ty * Pat) option
       }
   | ExnConPat of
-      {sourceSpan: SourcePos.span, tagPath: Exp, payload: (Ty * Pat) option}
+      { sourceSpan: SourcePos.span
+      , predicate: Exp
+      , payload: (Ty * Exp * Pat) option
+      }
   | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
   | VectorPat of SourcePos.span * Pat vector * bool * Ty
   and Exp =
@@ -137,7 +140,8 @@ sig
       }
   val ValueLabel: Syntax.VId -> Syntax.Label
   val StructLabel: Syntax.StrId -> Syntax.Label
-  val ExnTagLabel: Syntax.VId -> Syntax.Label
+  val ExnPredicateLabel: Syntax.VId -> Syntax.Label
+  val ExnPayloadLabel: Syntax.VId -> Syntax.Label
   val IntConstExp: IntInf.int * Ty -> Exp
   val WordConstExp: IntInf.int * Ty -> Exp
   val RaiseExp: SourcePos.span * Ty * Exp -> Exp
@@ -250,7 +254,10 @@ struct
       , payload: (Ty * Pat) option
       }
   | ExnConPat of
-      {sourceSpan: SourcePos.span, tagPath: Exp, payload: (Ty * Pat) option}
+      { sourceSpan: SourcePos.span
+      , predicate: Exp
+      , payload: (Ty * Exp * Pat) option
+      }
   | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
   | VectorPat of SourcePos.span * Pat vector * bool * Ty
   and Exp =
@@ -308,8 +315,10 @@ struct
     Syntax.IdentifierLabel (Syntax.getVIdName vid)
   fun StructLabel (Syntax.MkStrId name) =
     Syntax.IdentifierLabel ("_" ^ name)
-  fun ExnTagLabel vid =
-    Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag")
+  fun ExnPredicateLabel vid =
+    Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".p")
+  fun ExnPayloadLabel vid =
+    Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".a")
   fun IntConstExp (value, ty) =
     PrimExp (IntConstOp value, [ty], [])
   fun WordConstExp (value, ty) =
@@ -373,7 +382,7 @@ struct
            ))
   fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
   fun AndalsoExp (a, b) =
-    IfThenElseExp (a, b, VarExp (InitialEnv.VId_false))
+    IfThenElseExp (a, b, VarExp InitialEnv.VId_false)
   fun SimplifyingAndalsoExp (a as VarExp vid, b) =
         if TypedSyntax.eqVId (vid, InitialEnv.VId_true) then b
         else if TypedSyntax.eqVId (vid, InitialEnv.VId_false) then a
@@ -541,12 +550,14 @@ struct
               , payload =
                   Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload
               }
-        | doPat (ExnConPat {sourceSpan, tagPath, payload}) =
+        | doPat (ExnConPat {sourceSpan, predicate, payload}) =
             ExnConPat
               { sourceSpan = sourceSpan
-              , tagPath = doExp tagPath
+              , predicate = doExp predicate
               , payload =
-                  Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload
+                  Option.map
+                    (fn (ty, get, pat) => (doTy ty, doExp get, doPat pat))
+                    payload
               }
         | doPat (LayeredPat (span, vid, ty, pat)) =
             LayeredPat (span, vid, doTy ty, doPat pat)
@@ -702,15 +713,20 @@ struct
         freeTyVarsInTy (bound, payloadTy)
           (freeTyVarsInPat (bound, payloadPat) acc)
     | freeTyVarsInPat
-        (bound, ExnConPat {sourceSpan = _, tagPath, payload = NONE}) acc =
-        freeTyVarsInExp (bound, tagPath) acc
+        (bound, ExnConPat {sourceSpan = _, predicate, payload = NONE}) acc =
+        freeTyVarsInExp (bound, predicate) acc
     | freeTyVarsInPat
         ( bound
         , ExnConPat
-            {sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat)}
+            { sourceSpan = _
+            , predicate
+            , payload = SOME (payloadTy, getPayload, payloadPat)
+            }
         ) acc =
-        freeTyVarsInTy (bound, payloadTy) (freeTyVarsInPat (bound, payloadPat)
-          (freeTyVarsInExp (bound, tagPath) acc))
+        freeTyVarsInTy (bound, payloadTy)
+          (freeTyVarsInExp (bound, getPayload)
+             (freeTyVarsInPat (bound, payloadPat)
+                (freeTyVarsInExp (bound, predicate) acc)))
     | freeTyVarsInPat (bound, LayeredPat (_, _, ty, innerPat)) acc =
         freeTyVarsInTy (bound, ty) (freeTyVarsInPat (bound, innerPat) acc)
     | freeTyVarsInPat (bound, VectorPat (_, pats, _, elemTy)) acc =
@@ -861,9 +877,10 @@ struct
         acc = varsInPat payloadPat acc
     | varsInPat (ValConPat {sourceSpan = _, info = _, payload = NONE}) acc = acc
     | varsInPat
-        (ExnConPat {sourceSpan = _, tagPath = _, payload = SOME (_, payloadPat)})
+        (ExnConPat
+           {sourceSpan = _, predicate = _, payload = SOME (_, _, payloadPat)})
         acc = varsInPat payloadPat acc
-    | varsInPat (ExnConPat {sourceSpan = _, tagPath = _, payload = NONE}) acc =
+    | varsInPat (ExnConPat {sourceSpan = _, predicate = _, payload = NONE}) acc =
         acc
     | varsInPat (LayeredPat (_, vid, _, innerPat)) acc =
         varsInPat innerPat (TypedSyntax.VIdSet.add (acc, vid))
@@ -895,14 +912,19 @@ struct
         , ValConPat {sourceSpan = _, info = _, payload = SOME (_, payloadPat)}
         ) acc =
         freeVarsInPat (bound, payloadPat) acc
-    | freeVarsInPat (bound, ExnConPat {sourceSpan = _, tagPath, payload = NONE})
-        acc =
-        freeVarsInExp (bound, tagPath) acc
+    | freeVarsInPat
+        (bound, ExnConPat {sourceSpan = _, predicate, payload = NONE}) acc =
+        freeVarsInExp (bound, predicate) acc
     | freeVarsInPat
         ( bound
-        , ExnConPat {sourceSpan = _, tagPath, payload = SOME (_, payloadPat)}
+        , ExnConPat
+            { sourceSpan = _
+            , predicate
+            , payload = SOME (_, getPayload, payloadPat)
+            }
         ) acc =
-        freeVarsInExp (bound, tagPath) (freeVarsInPat (bound, payloadPat) acc)
+        freeVarsInExp (bound, predicate) (freeVarsInExp (bound, getPayload)
+          (freeVarsInPat (bound, payloadPat) acc))
     | freeVarsInPat (bound, LayeredPat (_, _, _, innerPat)) acc =
         freeVarsInPat (bound, innerPat) acc
     | freeVarsInPat (bound, VectorPat (_, pats, _, _)) acc =
@@ -1139,11 +1161,14 @@ struct
           ^
           Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload
           ^ ")"
-      | print_Pat (ExnConPat {sourceSpan = _, tagPath, payload}) =
-          "ExnConPat(" ^ print_Exp tagPath ^ ","
+      | print_Pat (ExnConPat {sourceSpan = _, predicate, payload}) =
+          "ExnConPat(" ^ print_Exp predicate ^ ","
           ^
-          Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload
-          ^ ")"
+          Syntax.print_option
+            (fn (ty, get, pat) =>
+               Syntax.print_pair
+                 (print_Ty, Syntax.print_pair (print_Exp, print_Pat))
+                 (ty, (get, pat))) payload ^ ")"
       | print_Pat
           (RecordPat {sourceSpan = _, fields, ellipsis = NONE, allFields = _}) =
           (case Syntax.extractTuple (1, fields) of
@@ -1265,7 +1290,7 @@ struct
   type Env =
     { equalityForTyVarMap: TypedSyntax.VId TypedSyntax.TyVarMap.map
     , equalityForTyNameMap: TypedSyntax.LongVId TypedSyntax.TyNameMap.map
-    , exnTagMap: FSyntax.Exp TypedSyntax.VIdMap.map
+    , exnMap: {predicate: FSyntax.Exp, getPayload: FSyntax.Exp option} TypedSyntax.VIdMap.map
     , overloadMap: (FSyntax.Exp Syntax.OverloadKeyMap.map) TypedSyntax.TyNameMap.map
     , valMap: FSyntax.Ty TypedSyntax.VIdMap.map
     }
@@ -1373,9 +1398,23 @@ struct
     in
       go (strids, FSyntax.VarExp strid0, ty0)
     end
-  fun LongVIdToExnTagExp (_, env: Env, _, TypedSyntax.MkShortVId vid) =
-        TypedSyntax.VIdMap.find (#exnTagMap env, vid)
-    | LongVIdToExnTagExp
+  fun LongVIdToExnExp (_, env: Env, _, TypedSyntax.MkShortVId vid) =
+        (case
+           ( TypedSyntax.VIdMap.find (#exnMap env, vid)
+           , TypedSyntax.VIdMap.find (#valMap env, vid)
+           )
+         of
+           ( SOME {predicate, getPayload = SOME getPayload}
+           , SOME (FSyntax.FnType (payloadTy, _))
+           ) =>
+             SOME
+               { predicate = predicate
+               , payload = SOME {get = getPayload, ty = payloadTy}
+               }
+         | (SOME {predicate, getPayload = NONE}, SOME _) =>
+             SOME {predicate = predicate, payload = NONE}
+         | _ => NONE)
+    | LongVIdToExnExp
         (ctx, env, spans, TypedSyntax.MkLongVId (strid0, strids, vid)) =
         let
           val strid0 = FSyntax.strIdToVId strid0
@@ -1390,19 +1429,36 @@ struct
                     ^ ")"
                   )
           fun go ([], exp, ty) =
-                let
-                  val label = FSyntax.ExnTagLabel vid
-                in
-                  case ty of
-                    FSyntax.RecordType fieldTypes =>
-                      SOME
-                        (FSyntax.ProjectionExp
-                           { label = label
-                           , record = exp
-                           , fieldTypes = fieldTypes
-                           })
-                  | _ => emitFatalError (ctx, spans, "not a record")
-                end
+                (case ty of
+                   FSyntax.RecordType fieldTypes =>
+                     SOME
+                       { predicate =
+                           FSyntax.ProjectionExp
+                             { label = FSyntax.ExnPredicateLabel vid
+                             , record = exp
+                             , fieldTypes = fieldTypes
+                             }
+                       , payload =
+                           case
+                             Syntax.LabelMap.find
+                               (fieldTypes, FSyntax.ValueLabel vid)
+                           of
+                             SOME (FSyntax.FnType (payloadTy, _)) =>
+                               SOME
+                                 { get =
+                                     FSyntax.ProjectionExp
+                                       { label = FSyntax.ExnPayloadLabel vid
+                                       , record = exp
+                                       , fieldTypes = fieldTypes
+                                       }
+                                 , ty = payloadTy
+                                 }
+                           | SOME _ => NONE
+                           | NONE =>
+                               emitFatalError
+                                 (ctx, spans, "exception payload not found")
+                       }
+                 | _ => emitFatalError (ctx, spans, "not a record"))
             | go (strid :: strids, exp, ty) =
                 let
                   val label = FSyntax.StructLabel strid
@@ -1432,7 +1488,7 @@ struct
   fun updateEqualityForTyVarMap (f, env: Env) : Env =
     { equalityForTyVarMap = f (#equalityForTyVarMap env)
     , equalityForTyNameMap = #equalityForTyNameMap env
-    , exnTagMap = #exnTagMap env
+    , exnMap = #exnMap env
     , overloadMap = #overloadMap env
     , valMap = #valMap env
     }
@@ -1440,15 +1496,15 @@ struct
   fun updateEqualityForTyNameMap (f, env: Env) : Env =
     { equalityForTyVarMap = #equalityForTyVarMap env
     , equalityForTyNameMap = f (#equalityForTyNameMap env)
-    , exnTagMap = #exnTagMap env
+    , exnMap = #exnMap env
     , overloadMap = #overloadMap env
     , valMap = #valMap env
     }
 
-  fun updateExnTagMap (f, env: Env) : Env =
+  fun updateExnMap (f, env: Env) : Env =
     { equalityForTyVarMap = #equalityForTyVarMap env
     , equalityForTyNameMap = #equalityForTyNameMap env
-    , exnTagMap = f (#exnTagMap env)
+    , exnMap = f (#exnMap env)
     , overloadMap = #overloadMap env
     , valMap = #valMap env
     }
@@ -1456,7 +1512,7 @@ struct
   fun updateOverloadMap (f, env: Env) : Env =
     { equalityForTyVarMap = #equalityForTyVarMap env
     , equalityForTyNameMap = #equalityForTyNameMap env
-    , exnTagMap = #exnTagMap env
+    , exnMap = #exnMap env
     , overloadMap = f (#overloadMap env)
     , valMap = #valMap env
     }
@@ -1464,7 +1520,7 @@ struct
   fun updateValMap (f, env: Env) : Env =
     { equalityForTyVarMap = #equalityForTyVarMap env
     , equalityForTyNameMap = #equalityForTyNameMap env
-    , exnTagMap = #exnTagMap env
+    , exnMap = #exnMap env
     , overloadMap = #overloadMap env
     , valMap = f (#valMap env)
     }
@@ -2199,12 +2255,24 @@ struct
                   F.ValConPat
                     {sourceSpan = span, info = info, payload = payload}
               | NONE =>
-                  (case LongVIdToExnTagExp (ctx, env, [span], longvid) of
-                     SOME tagExp =>
+                  (case LongVIdToExnExp (ctx, env, [span], longvid) of
+                     SOME {predicate, payload = payload'} =>
                        F.ExnConPat
                          { sourceSpan = span
-                         , tagPath = tagExp
-                         , payload = payload
+                         , predicate = predicate
+                         , payload =
+                             case (payload, payload') of
+                               (SOME (ty, pat), SOME {get, ty = _}) =>
+                                 SOME (ty, get, pat)
+                             | (NONE, NONE) => NONE
+                             | _ =>
+                                 ( emitError
+                                     ( ctx
+                                     , [span]
+                                     , "invalid constructor pattern: payload"
+                                     )
+                                 ; NONE
+                                 )
                          }
                    | NONE =>
                        ( emitError (ctx, [span], "invalid constructor pattern")
@@ -2880,31 +2948,35 @@ struct
               (if List.null valbinds then decs else F.RecValDec valbinds :: decs)
             )
           end
-      | toFDecs
-          (ctx, env as {exnTagMap, ...}, T.ExceptionDec (_, exbinds) :: decs) =
+      | toFDecs (ctx, env as {exnMap, ...}, T.ExceptionDec (_, exbinds) :: decs) =
           let
             val exnTy = FSyntax.TyCon ([], Typing.primTyName_exn)
-            val (env, exnTagMap, revExbinds) =
+            val (env, exnMap, revExbinds) =
               List.foldl
                 (fn ( T.ExBind
                         (_, vid as TypedSyntax.MkVId (name, _), optPayloadTy)
-                    , (env, exnTagMap, revExbinds)
+                    , (env, exnMap, revExbinds)
                     ) =>
                    let
                      val tag = freshVId (ctx, name ^ "_tag")
                      val optPayloadTy =
                        Option.map (fn ty => toFTyPure (ctx, env, ty))
                          optPayloadTy
-                     val (ty, exp) =
+                     val (ty, exp, getPayloadExp, getPayloadDec) =
                        case optPayloadTy of
                          NONE =>
                            ( exnTy
                            , F.PrimExp (F.ConstructExnOp, [], [F.VarExp tag])
+                           , NONE
+                           , []
                            )
                        | SOME payloadTy =>
                            let
                              val payloadId = freshVId (ctx, "payload")
                              val ty = F.FnType (payloadTy, exnTy)
+                             val getPayloadId =
+                               freshVId (ctx, name ^ "_payload")
+                             val exnId = freshVId (ctx, "e")
                            in
                              ( ty
                              , F.FnExp (payloadId, payloadTy, F.PrimExp
@@ -2912,15 +2984,51 @@ struct
                                  , [payloadTy]
                                  , [F.VarExp tag, F.VarExp payloadId]
                                  ))
+                             , SOME (F.VarExp getPayloadId)
+                             , [F.ValDec
+                                  ( getPayloadId
+                                  , SOME (F.FnType (exnTy, payloadTy))
+                                  , F.FnExp (exnId, exnTy, F.PrimExp
+                                      ( F.ExnPayloadOp
+                                      , [payloadTy]
+                                      , [F.VarExp exnId]
+                                      ))
+                                  )]
                              )
                            end
                      val env = updateValMap
                        (fn m => T.VIdMap.insert (m, vid, ty), env)
                      val conDec = F.ValDec (vid, SOME ty, exp)
+                     val predicateId = freshVId (ctx, name ^ "_pred")
+                     val predicateDec =
+                       let
+                         val exnId = freshVId (ctx, "exn")
+                       in
+                         F.ValDec
+                           ( predicateId
+                           , SOME
+                               (F.FnType (exnTy, F.TyVar Typing.primTyName_bool))
+                           , F.FnExp (exnId, exnTy, F.PrimExp
+                               ( F.PrimCall Primitives.Exception_instanceof
+                               , []
+                               , [F.VarExp exnId, F.VarExp tag]
+                               ))
+                           )
+                       end
                    in
                      ( env
-                     , TypedSyntax.VIdMap.insert (exnTagMap, vid, F.VarExp tag)
+                     , TypedSyntax.VIdMap.insert
+                         ( exnMap
+                         , vid
+                         , { predicate = F.VarExp predicateId
+                           , getPayload = getPayloadExp
+                           }
+                         )
                      , conDec
+                       ::
+                       getPayloadDec
+                       @
+                       predicateDec
                        ::
                        F.ExceptionDec
                          {name = name, tagName = tag, payloadTy = optPayloadTy}
@@ -2928,10 +3036,10 @@ struct
                      )
                    end
                   | ( T.ExReplication (span, vid, longvid, optTy)
-                    , (env, exnTagMap, revExbinds)
+                    , (env, exnMap, revExbinds)
                     ) =>
-                   (case LongVIdToExnTagExp (ctx, env, [span], longvid) of
-                      SOME tagExp =>
+                   (case LongVIdToExnExp (ctx, env, [span], longvid) of
+                      SOME {predicate, payload} =>
                         let
                           val conTy =
                             case optTy of
@@ -2945,7 +3053,13 @@ struct
                             (LongVarExp (ctx, env, [span], longvid)))
                         in
                           ( env
-                          , TypedSyntax.VIdMap.insert (exnTagMap, vid, tagExp)
+                          , TypedSyntax.VIdMap.insert
+                              ( exnMap
+                              , vid
+                              , { predicate = predicate
+                                , getPayload = Option.map #get payload
+                                }
+                              )
                           , dec :: revExbinds
                           )
                         end
@@ -2955,8 +3069,8 @@ struct
                           , [span]
                           , "exception not found: "
                             ^ TypedSyntax.print_LongVId longvid
-                          ))) (env, exnTagMap, []) exbinds
-            val env = updateExnTagMap (fn _ => exnTagMap, env)
+                          ))) (env, exnMap, []) exbinds
+            val env = updateExnMap (fn _ => exnMap, env)
             val (env, decs) = toFDecs (ctx, env, decs)
           in
             (env, List.rev revExbinds @ decs)
@@ -3033,7 +3147,7 @@ struct
             val env =
               { equalityForTyVarMap = #equalityForTyVarMap env
               , equalityForTyNameMap = #equalityForTyNameMap env
-              , exnTagMap = #exnTagMap env
+              , exnMap = #exnMap env
               , overloadMap = #overloadMap env
               , valMap = valMap
               }
@@ -3203,12 +3317,26 @@ struct
       let
         val fields =
           Syntax.VIdMap.foldli
-            (fn (vid, (_, Syntax.ExceptionConstructor), fields) =>
-               Syntax.LabelMap.insert
-                 ( fields
-                 , F.ExnTagLabel vid
-                 , toFTy (ctx, env, Typing.primTy_exntag)
-                 )
+            (fn (vid, (tysc, Syntax.ExceptionConstructor), fields) =>
+               let
+                 val fields = Syntax.LabelMap.insert
+                   ( fields
+                   , F.ExnPredicateLabel vid
+                   , F.FnType
+                       ( F.TyVar Typing.primTyName_exn
+                       , F.TyVar Typing.primTyName_bool
+                       )
+                   )
+               in
+                 case typeSchemeToTy (ctx, env, tysc) of
+                   F.FnType (payloadTy, _) =>
+                     Syntax.LabelMap.insert
+                       ( fields
+                       , F.ExnPayloadLabel vid
+                       , F.FnType (F.TyVar Typing.primTyName_exn, payloadTy)
+                       )
+                 | _ => fields
+               end
               | (_, (_, _), fields) => fields) Syntax.LabelMap.empty valMap
         val fields =
           Syntax.VIdMap.foldli
@@ -3263,27 +3391,43 @@ struct
                     , (fieldTypes, fields)
                     ) =>
                    let
-                     val label = F.ExnTagLabel vid
+                     val label = F.ExnPredicateLabel vid
                    in
-                     ( Syntax.LabelMap.insert
-                         ( fieldTypes
-                         , label
-                         , F.TyCon ([], Typing.primTyName_exntag)
-                         )
-                     , ( label
-                       , case
-                           LongVIdToExnTagExp (ctx, env, [sourceSpan], longvid)
-                         of
-                           SOME exp => exp
-                         | NONE =>
-                             emitFatalError
-                               ( ctx
-                               , [sourceSpan]
-                               , "exception tag not found for "
-                                 ^ TypedSyntax.print_LongVId longvid
-                               )
-                       ) :: fields
-                     )
+                     case LongVIdToExnExp (ctx, env, [sourceSpan], longvid) of
+                       SOME {predicate, payload} =>
+                         let
+                           val fieldTypes = Syntax.LabelMap.insert
+                             ( fieldTypes
+                             , label
+                             , F.FnType
+                                 ( F.TyVar Typing.primTyName_exn
+                                 , F.TyVar Typing.primTyName_bool
+                                 )
+                             )
+                           val fields = (label, predicate) :: fields
+                         in
+                           case payload of
+                             NONE => (fieldTypes, fields)
+                           | SOME {get, ty} =>
+                               let
+                                 val alabel = F.ExnPayloadLabel vid
+                                 val fieldTypes = Syntax.LabelMap.insert
+                                   ( fieldTypes
+                                   , alabel
+                                   , F.FnType
+                                       (F.TyVar Typing.primTyName_exn, ty)
+                                   )
+                               in
+                                 (fieldTypes, (alabel, get) :: fields)
+                               end
+                         end
+                     | NONE =>
+                         emitFatalError
+                           ( ctx
+                           , [sourceSpan]
+                           , "exception info not found for "
+                             ^ TypedSyntax.print_LongVId longvid
+                           )
                    end
                   | (_, (_, _), acc) => acc) (Syntax.LabelMap.empty, []) valMap
             val acc =
@@ -3797,22 +3941,31 @@ struct
     val initialEnv: Env =
       { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
       , equalityForTyNameMap = TypedSyntax.TyNameMap.empty
-      , exnTagMap =
+      , exnMap =
           let
             open InitialEnv
           in
             List.foldl
-              (fn ((con, tag), m) =>
-                 TypedSyntax.VIdMap.insert (m, con, FSyntax.VarExp tag))
-              TypedSyntax.VIdMap.empty
-              [ (VId_Match, VId_Match_tag)
-              , (VId_Bind, VId_Bind_tag)
-              , (VId_Div, VId_Div_tag)
-              , (VId_Overflow, VId_Overflow_tag)
-              , (VId_Size, VId_Size_tag)
-              , (VId_Subscript, VId_Subscript_tag)
-              , (VId_Fail, VId_Fail_tag)
-              , (VId_Lua_Error, VId_Lua_Error_tag)
+              (fn ((con, pred, getPayload), m) =>
+                 TypedSyntax.VIdMap.insert
+                   ( m
+                   , con
+                   , {predicate = FSyntax.VarExp pred, getPayload = getPayload}
+                   )) TypedSyntax.VIdMap.empty
+              [ (VId_Match, VId_Match_predicate, NONE)
+              , (VId_Bind, VId_Bind_predicate, NONE)
+              , (VId_Div, VId_Div_predicate, NONE)
+              , (VId_Overflow, VId_Overflow_predicate, NONE)
+              , (VId_Size, VId_Size_predicate, NONE)
+              , (VId_Subscript, VId_Subscript_predicate, NONE)
+              , ( VId_Fail
+                , VId_Fail_predicate
+                , SOME (FSyntax.VarExp VId_Fail_payload)
+                )
+              , ( VId_Lua_Error
+                , VId_Lua_Error_predicate
+                , SOME (FSyntax.VarExp VId_Lua_Error_payload)
+                )
               ]
           end
       , overloadMap = TypedSyntax.TyNameMap.empty
@@ -3846,19 +3999,36 @@ struct
                 (fn ((tysc, _, vid), m) =>
                    TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
                 TypedSyntax.VIdMap.empty initialValEnv
+            val exnTagTy = FSyntax.TyVar Typing.primTyName_exntag
+            val exnPredicateTy =
+              FSyntax.FnType
+                ( FSyntax.TyVar Typing.primTyName_exn
+                , FSyntax.TyVar Typing.primTyName_bool
+                )
+            fun exnPayloadTy payloadTy =
+              FSyntax.FnType (FSyntax.TyVar Typing.primTyName_exn, payloadTy)
           in
             List.foldl TypedSyntax.VIdMap.insert' initialValMap
-              [ (VId_Match_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , (VId_Bind_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , (VId_Div_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , (VId_Overflow_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , (VId_Size_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , ( VId_Subscript_tag
-                , FSyntax.TyCon ([], Typing.primTyName_exntag)
+              [ (VId_Match_tag, exnTagTy)
+              , (VId_Bind_tag, exnTagTy)
+              , (VId_Div_tag, exnTagTy)
+              , (VId_Overflow_tag, exnTagTy)
+              , (VId_Size_tag, exnTagTy)
+              , (VId_Subscript_tag, exnTagTy)
+              , (VId_Fail_tag, exnTagTy)
+              , (VId_Match_predicate, exnPredicateTy)
+              , (VId_Bind_predicate, exnPredicateTy)
+              , (VId_Div_predicate, exnPredicateTy)
+              , (VId_Overflow_predicate, exnPredicateTy)
+              , (VId_Size_predicate, exnPredicateTy)
+              , (VId_Subscript_predicate, exnPredicateTy)
+              , (VId_Fail_predicate, exnPredicateTy)
+              , (VId_Lua_Error_predicate, exnPredicateTy)
+              , ( VId_Fail_payload
+                , exnPayloadTy (FSyntax.TyVar Typing.primTyName_string)
                 )
-              , (VId_Fail_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-              , ( VId_Lua_Error_tag
-                , FSyntax.TyCon ([], Typing.primTyName_exntag)
+              , ( VId_Lua_Error_payload
+                , exnPayloadTy (FSyntax.TyVar Typing.primTyName_Lua_value)
                 )
               ]
           end

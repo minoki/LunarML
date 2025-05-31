@@ -91,11 +91,21 @@ local _Match_tag = { "Match" }
 --BEGIN _Match: setmetatable _Match_tag _exn_meta
 local _Match = setmetatable({ tag = _Match_tag }, _exn_meta)
 --END
+--BEGIN _isMatch: getmetatable _Match_tag _exn_meta
+local function _isMatch(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Match_tag
+end
+--END
 --BEGIN _Bind_tag
 local _Bind_tag = { "Bind" }
 --END
 --BEGIN _Bind: setmetatable _Bind_tag _exn_meta
 local _Bind = setmetatable({ tag = _Bind_tag }, _exn_meta)
+--END
+--BEGIN _isBind: getmetatable _Bind_tag _exn_meta
+local function _isBind(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Bind_tag
+end
 --END
 --BEGIN _Overflow_tag
 local _Overflow_tag = { "Overflow" }
@@ -103,11 +113,21 @@ local _Overflow_tag = { "Overflow" }
 --BEGIN _Overflow: setmetatable _Overflow_tag _exn_meta
 local _Overflow = setmetatable({ tag = _Overflow_tag }, _exn_meta)
 --END
+--BEGIN _isOverflow: getmetatable _Overflow_tag _exn_meta
+local function _isOverflow(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Overflow_tag
+end
+--END
 --BEGIN _Div_tag
 local _Div_tag = { "Div" }
 --END
 --BEGIN _Div: setmetatable _Div_tag _exn_meta
 local _Div = setmetatable({ tag = _Div_tag }, _exn_meta)
+--END
+--BEGIN _isDiv: getmetatable _Div_tag _exn_meta
+local function _isDiv(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Div_tag
+end
 --END
 --BEGIN _Size_tag
 local _Size_tag = { "Size" }
@@ -115,11 +135,21 @@ local _Size_tag = { "Size" }
 --BEGIN _Size: setmetatable _Size_tag _exn_meta
 local _Size = setmetatable({ tag = _Size_tag }, _exn_meta)
 --END
+--BEGIN _isSize: getmetatable _Size_tag _exn_meta
+local function _isSize(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Size_tag
+end
+--END
 --BEGIN _Subscript_tag
 local _Subscript_tag = { "Subscript" }
 --END
 --BEGIN _Subscript: setmetatable _Subscript_tag _exn_meta
 local _Subscript = setmetatable({ tag = _Subscript_tag }, _exn_meta)
+--END
+--BEGIN _isSubscript: getmetatable _Subscript_tag _exn_meta
+local function _isSubscript(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Subscript_tag
+end
 --END
 --BEGIN _Fail_tag
 local _Fail_tag = { "Fail" }
@@ -129,43 +159,42 @@ local function _Fail(message)
   return setmetatable({ tag = _Fail_tag, payload = message }, _exn_meta)
 end
 --END
---BEGIN _Error_tag
-local _Error_tag = { "Error" }
+--BEGIN _isFail: getmetatable _Fail_tag _exn_meta
+local function _isFail(e)
+  return getmetatable(e) == _exn_meta and e.tag == _Fail_tag
+end
 --END
---BEGIN _Error: setmetatable _Error_tag _exn_meta
-local function _Error(x)
-  return setmetatable({ tag = _Error_tag, payload = x }, _exn_meta)
+--BEGIN _Fail_payload
+local function _Fail_payload(e)
+  return e.payload
+end
+--END
+--BEGIN _isError: getmetatable _exn_meta
+local function _isError(e)
+  return getmetatable(e) ~= _exn_meta
 end
 --END
 
---BEGIN _handle: pcall getmetatable _exn_meta _Error
-local function _handle(f)
-  local success, result = pcall(f)
-  if not success and getmetatable(result) ~= _exn_meta then
-    result = _Error(result)
-  end
-  return success, result
-end
---END
-
---BEGIN _exnName
+--BEGIN _exnName: getmetatable _exn_meta
 local function _exnName(e)
-  return e.tag[1]
+  if getmetatable(e) == _exn_meta then
+    return e.tag[1]
+  else
+    return "Error"
+  end
 end
 --END
 
---BEGIN __exn_instanceof
+--BEGIN __exn_instanceof: getmetatable _exn_meta
 local function __exn_instanceof(e, tag)
-  return e.tag == tag
+  return getmetatable(e) == _exn_meta and e.tag == tag
 end
 --END
 
---BEGIN _raise: _Error_tag setmetatable _exn_meta error
+--BEGIN _raise: getmetatable setmetatable _exn_meta error
 local function _raise(x, location)
   local e
-  if x.tag == _Error_tag then
-    e = x.payload
-  elseif location ~= nil then
+  if getmetatable(x) == _exn_meta and location ~= nil then
     local traceback = debug.traceback(nil, 2)
     e = setmetatable({ tag = x.tag, payload = x.payload, location = location, traceback = traceback }, _exn_meta)
   else

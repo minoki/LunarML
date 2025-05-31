@@ -48,6 +48,14 @@ struct
         , (VId_Size_tag, "_Size_tag")
         , (VId_Subscript_tag, "_Subscript_tag")
         , (VId_Fail_tag, "_Fail_tag")
+        , (VId_Match_predicate, "_isMatch")
+        , (VId_Bind_predicate, "_isBind")
+        , (VId_Div_predicate, "_isDiv")
+        , (VId_Overflow_predicate, "_isOverflow")
+        , (VId_Size_predicate, "_isSize")
+        , (VId_Subscript_predicate, "_isSubscript")
+        , (VId_Fail_predicate, "_isFail")
+        , (VId_Fail_payload, "_Fail_payload")
         , (VId_exnName, "_exnName")
         (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
         (* int *)
@@ -66,8 +74,9 @@ struct
         , (VId_DelimCont_withSubCont, "_withSubCont")
         , (VId_DelimCont_pushSubCont, "_pushSubCont")
         (* Lua interface *)
-        , (VId_Lua_Error, "_Error")
-        , (VId_Lua_Error_tag, "_Error_tag")
+        , (VId_Lua_Error, "_id")
+        , (VId_Lua_Error_predicate, "_isError")
+        , (VId_Lua_Error_payload, "_id")
         , (VId_Lua_NIL, "nil") (* literal *)
         , (VId_Lua_function, "_Lua_function")
         , (VId_Lua_Lib_assert, "assert")
@@ -112,6 +121,14 @@ struct
         , (VId_Size_tag, "_Size_tag")
         , (VId_Subscript_tag, "_Subscript_tag")
         , (VId_Fail_tag, "_Fail_tag")
+        , (VId_Match_predicate, "_isMatch")
+        , (VId_Bind_predicate, "_isBind")
+        , (VId_Div_predicate, "_isDiv")
+        , (VId_Overflow_predicate, "_isOverflow")
+        , (VId_Size_predicate, "_isSize")
+        , (VId_Subscript_predicate, "_isSubscript")
+        , (VId_Fail_predicate, "_isFail")
+        , (VId_Fail_payload, "_Fail_payload")
         , (VId_exnName, "_exnName")
         (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
         (* int *)
@@ -126,8 +143,9 @@ struct
         , (VId_Array_fromList, "_VectorOrArray_fromList")
         , (VId_Array_tabulate, "_VectorOrArray_tabulate")
         (* Lua interface *)
-        , (VId_Lua_Error, "_Error")
-        , (VId_Lua_Error_tag, "_Error_tag")
+        , (VId_Lua_Error, "_id")
+        , (VId_Lua_Error_predicate, "_isError")
+        , (VId_Lua_Error_payload, "_id")
         , (VId_Lua_NIL, "nil") (* literal *)
         , (VId_Lua_function, "_Lua_function")
         , (VId_Lua_Lib_assert, "assert")
@@ -478,16 +496,26 @@ struct
                      "unexpected datatype representation for ConstructValWithPayloadOp"
              end
          | (F.ConstructExnOp, [tag]) =>
-             let val tag = doExp (ctx, env, tag)
-             in L.TableExp (vector [(L.StringKey "tag", tag)])
+             let
+               val tag = doExp (ctx, env, tag)
+             in
+               L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector
+                 [ L.TableExp (vector [(L.StringKey "tag", tag)])
+                 , L.VarExp (L.PredefinedId "_exn_meta")
+                 ])
              end
          | (F.ConstructExnWithPayloadOp, [tag, payload]) =>
              let
                val tag = doExp (ctx, env, tag)
                val payload = doExp (ctx, env, payload)
              in
-               L.TableExp (vector
-                 [(L.StringKey "tag", tag), (L.StringKey "payload", payload)])
+               L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector
+                 [ L.TableExp (vector
+                     [ (L.StringKey "tag", tag)
+                     , (L.StringKey "payload", payload)
+                     ])
+                 , L.VarExp (L.PredefinedId "_exn_meta")
+                 ])
              end
          | (F.RaiseOp _, _) => raise CodeGenError "unexpected RaiseOp"
          | (F.PrimCall prim, args) =>
@@ -2625,7 +2653,7 @@ struct
           [ L.LocalStat
               ( [(status, L.CONST), (resultOrError, L.CONST)]
               , [L.CallExp
-                   (L.VarExp (L.PredefinedId "_handle"), vector [functionExp])]
+                   (L.VarExp (L.PredefinedId "pcall"), vector [functionExp])]
               )
           , L.IfStat
               ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))

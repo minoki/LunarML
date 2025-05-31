@@ -199,7 +199,7 @@ struct
     | collectConstructors (F.ValConPat {sourceSpan = _, info, payload}, acc) =
         ConstructorSet.addValCon (acc, info, Option.isSome payload)
     | collectConstructors
-        (F.ExnConPat {sourceSpan = _, tagPath = _, payload = _}, acc) =
+        (F.ExnConPat {sourceSpan = _, predicate = _, payload = _}, acc) =
         ConstructorSet.addExnCon acc
     | collectConstructors (F.LayeredPat (_, _, _, innerPat), acc) =
         collectConstructors (innerPat, acc)
@@ -242,7 +242,7 @@ struct
         ) =
         label = label' andalso sameExp (record, record')
     | sameExp _ = false
-  fun specializeExnCon (tag, hasPayload) =
+  fun specializeExnCon (predicate, hasPayload) =
     let
       fun goPat (F.WildcardPat span, ps) =
             if hasPayload then [F.WildcardPat span :: ps] else [ps]
@@ -251,11 +251,15 @@ struct
             if hasPayload then [F.WildcardPat span :: ps] else [ps]
         | goPat (F.RecordPat _, _) = [] (* should not occur *)
         | goPat (F.ValConPat _, _) = [] (* should not occur *)
-        | goPat (F.ExnConPat {sourceSpan = _, tagPath, payload = NONE}, ps) =
-            if sameExp (tag, tagPath) andalso not hasPayload then [ps] else []
         | goPat
-            (F.ExnConPat {sourceSpan = _, tagPath, payload = SOME (_, pat)}, ps) =
-            if sameExp (tag, tagPath) andalso hasPayload then [pat :: ps]
+            (F.ExnConPat {sourceSpan = _, predicate = p, payload = NONE}, ps) =
+            if sameExp (predicate, p) andalso not hasPayload then [ps] else []
+        | goPat
+            ( F.ExnConPat
+                {sourceSpan = _, predicate = p, payload = SOME (_, _, pat)}
+            , ps
+            ) =
+            if sameExp (predicate, p) andalso hasPayload then [pat :: ps]
             else []
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
@@ -585,12 +589,13 @@ struct
                   ( specializeValCon (Syntax.MkVId tag, true) matrix
                   , innerPat :: qs
                   )
-            | goPat (F.ExnConPat {sourceSpan = _, tagPath, payload = NONE}) =
-                useful (specializeExnCon (tagPath, false) matrix, qs)
+            | goPat (F.ExnConPat {sourceSpan = _, predicate, payload = NONE}) =
+                useful (specializeExnCon (predicate, false) matrix, qs)
             | goPat
                 (F.ExnConPat
-                   {sourceSpan = _, tagPath, payload = SOME (_, innerPat)}) =
-                useful (specializeExnCon (tagPath, true) matrix, innerPat :: qs)
+                   {sourceSpan = _, predicate, payload = SOME (_, _, innerPat)}) =
+                useful
+                  (specializeExnCon (predicate, true) matrix, innerPat :: qs)
             | goPat (F.LayeredPat (_, _, _, pat)) = goPat pat
             | goPat (F.VectorPat (_, pats, _, _)) =
                 useful

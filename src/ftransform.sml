@@ -351,24 +351,18 @@ struct
         | genMatcher exp _
             (F.ExnConPat
                { sourceSpan = _
-               , tagPath = tag
-               , payload = SOME (payloadTy, payloadPat)
+               , predicate
+               , payload = SOME (payloadTy, getPayload, payloadPat)
                }) =
             let
               val payload =
-                genMatcher (F.PrimExp (F.ExnPayloadOp, [payloadTy], [exp]))
-                  payloadTy payloadPat
+                genMatcher (F.AppExp (getPayload, exp)) payloadTy payloadPat
             in
-              F.SimplifyingAndalsoExp
-                ( F.PrimExp
-                    (F.PrimCall Primitives.Exception_instanceof, [], [exp, tag])
-                , payload
-                )
+              F.SimplifyingAndalsoExp (F.AppExp (predicate, exp), payload)
             end
         | genMatcher exp _
-            (F.ExnConPat {sourceSpan = _, tagPath = tag, payload = NONE}) =
-            F.PrimExp
-              (F.PrimCall Primitives.Exception_instanceof, [], [exp, tag])
+            (F.ExnConPat {sourceSpan = _, predicate, payload = NONE}) =
+            F.AppExp (predicate, exp)
         | genMatcher exp ty0 (F.LayeredPat (_, _, _ (* ty1 *), innerPat)) =
             genMatcher exp ty0 innerPat
         | genMatcher exp _ (F.VectorPat (_, pats, ellipsis, elemTy)) =
@@ -498,13 +492,12 @@ struct
         | genBinders exp _
             (F.ExnConPat
                { sourceSpan = _
-               , tagPath = _
-               , payload = SOME (payloadTy, payloadPat)
+               , predicate = _
+               , payload = SOME (payloadTy, getPayload, payloadPat)
                }) =
-            genBinders (F.PrimExp (F.ExnPayloadOp, [payloadTy], [exp]))
-              payloadTy payloadPat
+            genBinders (F.AppExp (getPayload, exp)) payloadTy payloadPat
         | genBinders _ _
-            (F.ExnConPat {sourceSpan = _, tagPath = _, payload = NONE}) = []
+            (F.ExnConPat {sourceSpan = _, predicate = _, payload = NONE}) = []
         | genBinders exp _ (F.LayeredPat (_, vid, ty, pat)) =
             (vid, SOME ty, exp) :: genBinders exp ty pat
         | genBinders exp _ (F.VectorPat (_, pats, _, elemTy)) =
@@ -740,12 +733,15 @@ struct
     | doPat
         (F.ValConPat {sourceSpan = _, info = _, payload = SOME (_, payloadPat)})
         acc = doPat payloadPat acc
-    | doPat (F.ExnConPat {sourceSpan = _, tagPath, payload = NONE}) acc =
-        #1 (doExp tagPath acc)
+    | doPat (F.ExnConPat {sourceSpan = _, predicate, payload = NONE}) acc =
+        #1 (doExp predicate acc)
     | doPat
-        (F.ExnConPat {sourceSpan = _, tagPath, payload = SOME (_, payloadPat)})
-        acc =
-        doPat payloadPat (#1 (doExp tagPath acc))
+        (F.ExnConPat
+           { sourceSpan = _
+           , predicate
+           , payload = SOME (_, getPayload, payloadPat)
+           }) acc =
+        doPat payloadPat (#1 (doExp getPayload (#1 (doExp predicate acc))))
     | doPat (F.LayeredPat (_, _, _, innerPat)) acc = doPat innerPat acc
     | doPat (F.VectorPat (_, pats, _, _)) acc =
         Vector.foldl (fn (pat, acc) => doPat pat acc) acc pats

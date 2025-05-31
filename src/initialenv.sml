@@ -22,6 +22,14 @@ sig
   val VId_Size_tag: TypedSyntax.VId
   val VId_Subscript_tag: TypedSyntax.VId
   val VId_Fail_tag: TypedSyntax.VId
+  val VId_Match_predicate: TypedSyntax.VId
+  val VId_Bind_predicate: TypedSyntax.VId
+  val VId_Div_predicate: TypedSyntax.VId
+  val VId_Overflow_predicate: TypedSyntax.VId
+  val VId_Size_predicate: TypedSyntax.VId
+  val VId_Subscript_predicate: TypedSyntax.VId
+  val VId_Fail_predicate: TypedSyntax.VId
+  val VId_Fail_payload: TypedSyntax.VId
   val VId_exnName: TypedSyntax.VId
   val VId_abs: TypedSyntax.VId
   val VId_TILDE: TypedSyntax.VId
@@ -72,7 +80,8 @@ sig
   val VId_Lua_Lib_bit_lshift: TypedSyntax.VId
   val VId_Lua_Lib_bit_rshift: TypedSyntax.VId
   val VId_Lua_Error: TypedSyntax.VId
-  val VId_Lua_Error_tag: TypedSyntax.VId
+  val VId_Lua_Error_predicate: TypedSyntax.VId
+  val VId_Lua_Error_payload: TypedSyntax.VId
   val VId_JavaScript_undefined: TypedSyntax.VId
   val VId_JavaScript_null: TypedSyntax.VId
   val VId_JavaScript_function: TypedSyntax.VId
@@ -174,6 +183,14 @@ struct
   val VId_Size_tag = newVId "Size"
   val VId_Subscript_tag = newVId "Subscript"
   val VId_Fail_tag = newVId "Fail"
+  val VId_Match_predicate = newVId "isMatch"
+  val VId_Bind_predicate = newVId "isBind"
+  val VId_Div_predicate = newVId "isDiv"
+  val VId_Overflow_predicate = newVId "isOverflow"
+  val VId_Size_predicate = newVId "isSize"
+  val VId_Subscript_predicate = newVId "isSubscript"
+  val VId_Fail_predicate = newVId "isFail"
+  val VId_Fail_payload = newVId "Fail.payload"
   val VId_exnName = newVId "_Prim.General.exnName"
 
   (* Overloaded *)
@@ -236,7 +253,8 @@ struct
   val VId_Lua_Lib_bit_lshift = newVId "_Prim.Lua.Lib.bit.lshift" (* LuaJIT *)
   val VId_Lua_Lib_bit_rshift = newVId "_Prim.Lua.Lib.bit.rshift" (* LuaJIT *)
   val VId_Lua_Error = newVId "_Prim.Lua.Error"
-  val VId_Lua_Error_tag = newVId "_Prim.Lua.Error.tag"
+  val VId_Lua_Error_predicate = newVId "_Prim.Lua.isError"
+  val VId_Lua_Error_payload = newVId "_Prim.Lua.Error.payload"
 
   (* JavaScript interface *)
   val VId_JavaScript_undefined = newVId "_Prim.JavaScript.undefined"
@@ -411,9 +429,45 @@ struct
               , TypeScheme ([], primTy_exntag)
               )
             , ("_Prim.Fail.tag", VId_Fail_tag, TypeScheme ([], primTy_exntag))
-            , ( "_Prim.Lua.Error.tag"
-              , VId_Lua_Error_tag
-              , TypeScheme ([], primTy_exntag)
+            , ( "_Prim.isMatch"
+              , VId_Match_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isBind"
+              , VId_Bind_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isDiv"
+              , VId_Div_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isOverflow"
+              , VId_Overflow_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isSize"
+              , VId_Size_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isSubscript"
+              , VId_Subscript_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.isFail"
+              , VId_Fail_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.Lua.isError"
+              , VId_Lua_Error_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
+            , ( "_Prim.Fail.payload"
+              , VId_Fail_payload
+              , TypeScheme ([], primTy_exn --> primTy_string)
+              )
+            , ( "_Prim.Lua.Error.payload"
+              , VId_Lua_Error_payload
+              , TypeScheme ([], primTy_exn --> primTy_Lua_value)
               )
             , ( "_Prim.General.exnName"
               , VId_exnName
