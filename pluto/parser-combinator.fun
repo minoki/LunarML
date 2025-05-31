@@ -176,12 +176,16 @@ struct
       | Err (true, e) => Err (true, e)
   (* fun many p = (p >>= (fn x => many p >>= (fn xs => pure (x :: xs)))) <|> pure [] *)
   fun many1 p =
-    p >>= (fn x => many p >>= (fn xs => pure (x :: xs)))
+    p >>= (fn x =>
+    many p >>= (fn xs =>
+    pure (x :: xs)))
   fun skipMany p =
     fix (fn skipMany_p => (p >> skipMany_p) <|> pure ())
   fun skipMany1 p = p >> skipMany p
   fun sepBy1 (p, sep) =
-    p >>= (fn x => many (sep >> p) >>= (fn xs => pure (x :: xs)))
+    p >>= (fn x =>
+    many (sep >> p) >>= (fn xs =>
+    pure (x :: xs)))
   fun sepBy (p, sep) =
     sepBy1 (p, sep) <|> pure []
   val anyToken = token SOME

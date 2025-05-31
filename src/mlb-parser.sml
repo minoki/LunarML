@@ -72,37 +72,25 @@ struct
     lexeme (P.try (CP.string s >> P.notFollowedBy pathchar))
   val identifier: string P.parser =
     lexeme (P.try
-      (CP.letter
-       >>=
-       (fn c0 =>
-          P.many (CP.alphaNum <|> CP.oneOf [#"'", #"_"])
-          >>=
-          (fn cs =>
-             P.notFollowedBy pathchar
-             >>
-             let
-               val name = String.implode (c0 :: cs)
-             in
-               if StringSet.member (reservedNames, name) then
-                 P.fail "reserved name"
-               else
-                 P.pure name
-             end)))) <?> "identifier"
+      (CP.letter >>= (fn c0 =>
+       P.many (CP.alphaNum <|> CP.oneOf [#"'", #"_"]) >>= (fn cs =>
+       P.notFollowedBy pathchar
+       >>
+       let
+         val name = String.implode (c0 :: cs)
+       in
+         if StringSet.member (reservedNames, name) then P.fail "reserved name"
+         else P.pure name
+       end)))) <?> "identifier"
   val pathvar: string P.parser =
-    CP.string "$(" >> (CP.upper <|> CP.char #"_")
-    >>=
-    (fn c0 =>
-       P.many (CP.upper <|> CP.digit <|> CP.char #"_")
-       >>=
-       (fn cs => CP.char #")" >> P.pure ("$(" ^ String.implode (c0 :: cs) ^ ")")))
+    CP.string "$(" >> (CP.upper <|> CP.char #"_") >>= (fn c0 =>
+    P.many (CP.upper <|> CP.digit <|> CP.char #"_") >>= (fn cs =>
+    CP.char #")" >> P.pure ("$(" ^ String.implode (c0 :: cs) ^ ")")))
   val filename: string P.parser =
-    (pathvar <|> String.str <$> (CP.alphaNum <|> CP.oneOf [#"_", #"."]))
-    >>=
-    (fn x =>
-       P.many
-         (pathvar
-          <|> String.str <$> (CP.alphaNum <|> CP.oneOf [#"_", #".", #"-"]))
-       >>= (fn xs => P.pure (String.concat (x :: xs))))
+    (pathvar <|> String.str <$> (CP.alphaNum <|> CP.oneOf [#"_", #"."])) >>= (fn x =>
+    P.many
+      (pathvar <|> String.str <$> (CP.alphaNum <|> CP.oneOf [#"_", #".", #"-"])) >>= (fn xs =>
+    P.pure (String.concat (x :: xs))))
   val arc = filename (* {pathvar}|{filename}|"."|".." *)
   val relpath =
     String.concat
@@ -121,24 +109,16 @@ struct
            if StringSet.member (reservedNames, file) then P.fail "reserved name"
            else P.pure file)) <?> "file")
   val threeDigits: int P.parser =
-    CP.digitValue
-    >>=
-    (fn d1 =>
-       CP.digitValue
-       >>=
-       (fn d2 => CP.digitValue >>= (fn d3 => P.pure ((d1 * 10 + d2) * 10 + d3))))
+    CP.digitValue >>= (fn d1 =>
+    CP.digitValue >>= (fn d2 =>
+    CP.digitValue >>= (fn d3 =>
+    P.pure ((d1 * 10 + d2) * 10 + d3))))
   val fourHexDigits: int P.parser =
-    CP.hexDigitValue
-    >>=
-    (fn x1 =>
-       CP.hexDigitValue
-       >>=
-       (fn x2 =>
-          CP.hexDigitValue
-          >>=
-          (fn x3 =>
-             CP.hexDigitValue
-             >>= (fn x4 => P.pure (((x1 * 16 + x2) * 16 + x3) * 16 + x4)))))
+    CP.hexDigitValue >>= (fn x1 =>
+    CP.hexDigitValue >>= (fn x2 =>
+    CP.hexDigitValue >>= (fn x3 =>
+    CP.hexDigitValue >>= (fn x4 =>
+    P.pure (((x1 * 16 + x2) * 16 + x3) * 16 + x4)))))
   val stringLiteral =
     let
       val elem =
