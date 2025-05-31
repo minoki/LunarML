@@ -90,6 +90,8 @@ sig
   val VId_JavaScript_Error: TypedSyntax.VId
   val VId_JavaScript_Error_predicate: TypedSyntax.VId
   val VId_JavaScript_Error_payload: TypedSyntax.VId
+  val VId_JavaScript_wrapThenable: TypedSyntax.VId
+  val VId_JavaScript_unwrapThenable: TypedSyntax.VId
   val VId_String_concat: TypedSyntax.VId
   val VId_String_concatWith: TypedSyntax.VId
   val VId_String_implode: TypedSyntax.VId
@@ -268,6 +270,8 @@ struct
   val VId_JavaScript_Error = newVId "_Prim.JavaScript.Error"
   val VId_JavaScript_Error_predicate = newVId "_Prim.JavaScript.isError"
   val VId_JavaScript_Error_payload = newVId "_Prim.JavaScript.Error.payload"
+  val VId_JavaScript_wrapThenable = newVId "_Prim.JavaScript.wrapThenable"
+  val VId_JavaScript_unwrapThenable = newVId "_Prim.JavaScript.unwrapThenable"
 
   (* Other primitives *)
   val VId_String_concat = newVId "_Prim.String.concat"
@@ -693,6 +697,14 @@ struct
             , ( "_Prim.JavaScript.decodeUtf8"
               , VId_JavaScript_decodeUtf8
               , TypeScheme ([], primTy_string --> primTy_string16)
+              )
+            , ( "_Prim.JavaScript.wrapThenable"
+              , VId_JavaScript_wrapThenable
+              , TypeScheme ([], primTy_JavaScript_value)
+              )
+            , ( "_Prim.JavaScript.unwrapThenable"
+              , VId_JavaScript_unwrapThenable
+              , TypeScheme ([], primTy_JavaScript_value)
               )
             , ( "_Prim.DelimCont.topLevel"
               , VId_DelimCont_topLevel

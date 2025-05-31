@@ -112,6 +112,8 @@ struct
         , (VId_JavaScript_Error, "_id")
         , (VId_JavaScript_Error_predicate, "_isError")
         , (VId_JavaScript_Error_payload, "_id")
+        , (VId_JavaScript_wrapThenable, "_wrapThenable")
+        , (VId_JavaScript_unwrapThenable, "_unwrapThenable")
         ]
     end
   val builtinsCPS =
@@ -151,6 +153,8 @@ struct
         , (VId_JavaScript_Error, "_id")
         , (VId_JavaScript_Error_predicate, "_isError")
         , (VId_JavaScript_Error_payload, "_id")
+        , (VId_JavaScript_wrapThenable, "_wrapThenable")
+        , (VId_JavaScript_unwrapThenable, "_unwrapThenable")
         (* extra *)
         , (VId_DelimCont_pushPrompt, "_pushPrompt")
         , (VId_DelimCont_withSubCont, "_withSubCont")

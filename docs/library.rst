@@ -2056,6 +2056,41 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val decodeUtf8 : string -> String16.string
      val toInt32 : value -> Int32.int
      val toUint32 : value -> Word32.word
+     structure Promise : sig
+       type 'a promise
+       datatype 'a result = FULFILLED of 'a | REJECTED of exn
+       val new : ({ resolve : 'a -> unit, reject : exn -> unit } -> unit) -> 'a promise
+       val newNested : ({ resolve : 'a -> unit, resolveTo : 'a promise -> unit, reject : exn -> unit } -> unit) -> 'a promise
+       val reject : exn -> 'a promise
+       val resolve : 'a -> 'a promise
+       val withResolvers : unit -> { promise : 'a promise, resolve : 'a -> unit, reject : exn -> unit }
+       val withResolversNested : unit -> { promise : 'a promise, resolve : 'a -> unit, resolveTo : 'a promise -> unit, reject : exn -> unit }
+       val andThen : ('a -> 'b promise) -> 'a promise -> 'b promise
+       val andThenWithCatch : ('a -> 'b promise) * (exn -> 'b promise) -> 'a promise -> 'b promise
+       val map : ('a -> 'b) -> 'a promise -> 'b promise
+       val catch : (exn -> 'a) -> 'a promise -> 'a promise
+       val finally : (unit -> unit) -> 'a promise -> 'a promise
+       val all2 : 'a promise * 'b promise -> ('a * 'b) promise
+       val all3 : 'a promise * 'b promise * 'c promise -> ('a * 'b * 'c) promise
+       val all4 : 'a promise * 'b promise * 'c promise * 'd promise -> ('a * 'b * 'c * 'd) promise
+       val all5 : 'a promise * 'b promise * 'c promise * 'd promise * 'e promise -> ('a * 'b * 'c * 'd * 'e) promise
+       val allSettled2 : 'a promise * 'b promise -> ('a result * 'b result) promise
+       val allSettled3 : 'a promise * 'b promise * 'c promise -> ('a result * 'b result * 'c result) promise
+       val allSettled4 : 'a promise * 'b promise * 'c promise * 'd promise -> ('a result * 'b result * 'c result * 'd result) promise
+       val allSettled5 : 'a promise * 'b promise * 'c promise * 'd promise * 'e promise -> ('a result * 'b result * 'c result * 'd result * 'e result) promise
+       structure List : sig
+         val all : ('a promise) list -> ('a list) promise
+         val allSettled : ('a promise) list -> (('a result) list) promise
+         val any : ('a promise) list -> 'a promise
+         val race : ('a promise) list -> 'a promise
+       end
+       structure Vector : sig
+         val all : ('a promise) vector -> ('a vector) promise
+         val allSettled : ('a promise) vector -> (('a result) vector) promise
+         val any : ('a promise) vector -> 'a promise
+         val race : ('a promise) vector -> 'a promise
+       end
+     end
    end
 
 .. _pipe-operator:
