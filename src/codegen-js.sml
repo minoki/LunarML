@@ -109,6 +109,9 @@ struct
         , (VId_JavaScript_function, "_function")
         , (VId_JavaScript_encodeUtf8, "_encodeUtf8")
         , (VId_JavaScript_decodeUtf8, "_decodeUtf8")
+        , (VId_JavaScript_Error, "_id")
+        , (VId_JavaScript_Error_predicate, "_isError")
+        , (VId_JavaScript_Error_payload, "_id")
         ]
     end
   val builtinsCPS =
@@ -145,6 +148,9 @@ struct
         (* JS interface *)
         , (VId_JavaScript_undefined, "undefined")
         , (VId_JavaScript_null, "null")
+        , (VId_JavaScript_Error, "_id")
+        , (VId_JavaScript_Error_predicate, "_isError")
+        , (VId_JavaScript_Error_payload, "_id")
         (* extra *)
         , (VId_DelimCont_pushPrompt, "_pushPrompt")
         , (VId_DelimCont_withSubCont, "_withSubCont")
@@ -1215,6 +1221,17 @@ struct
                                     , J.ConstExp
                                         (J.asciiStringAsWide "prototype")
                                     )
+                                , J.ConstExp (J.asciiStringAsWide "__isMLExn")
+                                )
+                            , J.ConstExp J.True
+                            )
+                        , J.AssignStat
+                            ( J.IndexExp
+                                ( J.IndexExp
+                                    ( J.VarExp (J.UserDefinedId result)
+                                    , J.ConstExp
+                                        (J.asciiStringAsWide "prototype")
+                                    )
                                 , J.ConstExp (J.asciiStringAsWide "name")
                                 )
                             , J.ConstExp (J.asciiStringAsWide name)
@@ -1451,6 +1468,17 @@ struct
                           in
                             ConstStat (result, value)
                           end
+                        , J.AssignStat
+                            ( J.IndexExp
+                                ( J.IndexExp
+                                    ( J.VarExp (J.UserDefinedId result)
+                                    , J.ConstExp
+                                        (J.asciiStringAsWide "prototype")
+                                    )
+                                , J.ConstExp (J.asciiStringAsWide "__isMLExn")
+                                )
+                            , J.ConstExp J.True
+                            )
                         , J.AssignStat
                             ( J.IndexExp
                                 ( J.IndexExp

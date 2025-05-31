@@ -87,6 +87,9 @@ sig
   val VId_JavaScript_function: TypedSyntax.VId
   val VId_JavaScript_encodeUtf8: TypedSyntax.VId
   val VId_JavaScript_decodeUtf8: TypedSyntax.VId
+  val VId_JavaScript_Error: TypedSyntax.VId
+  val VId_JavaScript_Error_predicate: TypedSyntax.VId
+  val VId_JavaScript_Error_payload: TypedSyntax.VId
   val VId_String_concat: TypedSyntax.VId
   val VId_String_concatWith: TypedSyntax.VId
   val VId_String_implode: TypedSyntax.VId
@@ -262,6 +265,9 @@ struct
   val VId_JavaScript_function = newVId "_Prim.JavaScript.function"
   val VId_JavaScript_encodeUtf8 = newVId "_Prim.JavaScript.encodeUtf8"
   val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
+  val VId_JavaScript_Error = newVId "_Prim.JavaScript.Error"
+  val VId_JavaScript_Error_predicate = newVId "_Prim.JavaScript.isError"
+  val VId_JavaScript_Error_payload = newVId "_Prim.JavaScript.Error.payload"
 
   (* Other primitives *)
   val VId_String_concat = newVId "_Prim.String.concat"
@@ -410,6 +416,10 @@ struct
               , VId_Lua_Error
               , TypeScheme ([], primTy_Lua_value --> primTy_exn)
               )
+            , ( "_Prim.JavaScript.Error"
+              , VId_JavaScript_Error
+              , TypeScheme ([], primTy_JavaScript_value --> primTy_exn)
+              )
             ]
         , List.foldl
             (fn ((name, vid, tysc), m) =>
@@ -461,6 +471,10 @@ struct
               , VId_Lua_Error_predicate
               , TypeScheme ([], primTy_exn --> primTy_bool)
               )
+            , ( "_Prim.JavaScript.isError"
+              , VId_JavaScript_Error_predicate
+              , TypeScheme ([], primTy_exn --> primTy_bool)
+              )
             , ( "_Prim.Fail.payload"
               , VId_Fail_payload
               , TypeScheme ([], primTy_exn --> primTy_string)
@@ -468,6 +482,10 @@ struct
             , ( "_Prim.Lua.Error.payload"
               , VId_Lua_Error_payload
               , TypeScheme ([], primTy_exn --> primTy_Lua_value)
+              )
+            , ( "_Prim.JavaScript.Error.payload"
+              , VId_JavaScript_Error_payload
+              , TypeScheme ([], primTy_exn --> primTy_JavaScript_value)
               )
             , ( "_Prim.General.exnName"
               , VId_exnName

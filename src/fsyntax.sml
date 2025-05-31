@@ -3966,6 +3966,10 @@ struct
                 , VId_Lua_Error_predicate
                 , SOME (FSyntax.VarExp VId_Lua_Error_payload)
                 )
+              , ( VId_JavaScript_Error
+                , VId_JavaScript_Error_predicate
+                , SOME (FSyntax.VarExp VId_JavaScript_Error_payload)
+                )
               ]
           end
       , overloadMap = TypedSyntax.TyNameMap.empty
@@ -4024,11 +4028,16 @@ struct
               , (VId_Subscript_predicate, exnPredicateTy)
               , (VId_Fail_predicate, exnPredicateTy)
               , (VId_Lua_Error_predicate, exnPredicateTy)
+              , (VId_JavaScript_Error_predicate, exnPredicateTy)
               , ( VId_Fail_payload
                 , exnPayloadTy (FSyntax.TyVar Typing.primTyName_string)
                 )
               , ( VId_Lua_Error_payload
                 , exnPayloadTy (FSyntax.TyVar Typing.primTyName_Lua_value)
+                )
+              , ( VId_JavaScript_Error_payload
+                , exnPayloadTy (FSyntax.TyVar
+                    Typing.primTyName_JavaScript_value)
                 )
               ]
           end

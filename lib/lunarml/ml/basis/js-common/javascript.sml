@@ -1,5 +1,6 @@
 structure JavaScript : sig
               type value
+              exception Error of value
               val undefined : value
               val null : value
               val sub : value * value -> value
@@ -127,6 +128,7 @@ structure JavaScript : sig
           end = struct
 open JavaScript (* function, encodeUtf8, decodeUtf8 *)
 type value = _Prim.JavaScript.value
+exception Error = _Prim.JavaScript.Error
 val undefined = _Prim.JavaScript.undefined
 val null = _Prim.JavaScript.null
 fun call f args = _primCall "JavaScript.call" (f, args)

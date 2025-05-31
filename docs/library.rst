@@ -2006,6 +2006,7 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
 
    structure JavaScript : sig
      type value
+     exception Error of value
      val undefined : value
      val null : value
      val sub : value * value -> value
