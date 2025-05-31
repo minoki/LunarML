@@ -1139,11 +1139,22 @@ struct
             }
       | C.Raise (span, x) => C.Raise (span, CpsSimplify.substValue subst x)
       | C.Unreachable => e
+    local val nextCont = ref ~1 val nextVId = ref ~1000
+    in
+      fun newCont () =
+        let val i = !nextCont
+        in nextCont := i - 1; C.CVar.fromInt i
+        end
+      fun newVId name =
+        let val i = !nextVId
+        in nextVId := i - 1; TypedSyntax.MkVId (name, i)
+        end
+    end
     val General_exnName =
       let
-        val k = C.CVar.fromInt ~1
-        val e = TypedSyntax.MkVId ("e", ~1000)
-        val result = TypedSyntax.MkVId ("a", ~1001)
+        val k = newCont ()
+        val e = newVId "e"
+        val result = newVId "a"
       in
         C.Abs
           { contParam = k
@@ -1165,9 +1176,9 @@ struct
       end
     val Real_abs =
       let
-        val k = C.CVar.fromInt ~2
-        val x = TypedSyntax.MkVId ("x", ~1002)
-        val result = TypedSyntax.MkVId ("a", ~1003)
+        val k = newCont ()
+        val x = newVId "x"
+        val result = newVId "a"
       in
         C.Abs
           { contParam = k
@@ -1189,9 +1200,9 @@ struct
       end
     val String_concat =
       let
-        val k = C.CVar.fromInt ~3
-        val xs = TypedSyntax.MkVId ("xs", ~1004)
-        val result = TypedSyntax.MkVId ("a", ~1005)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
       in
         C.Abs
           { contParam = k
@@ -1213,9 +1224,9 @@ struct
       end
     val String_implode =
       let
-        val k = C.CVar.fromInt ~4
-        val xs = TypedSyntax.MkVId ("xs", ~1006)
-        val result = TypedSyntax.MkVId ("a", ~1007)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
       in
         C.Abs
           { contParam = k
@@ -1237,9 +1248,9 @@ struct
       end
     val Vector_fromList =
       let
-        val k = C.CVar.fromInt ~5
-        val xs = TypedSyntax.MkVId ("xs", ~1008)
-        val result = TypedSyntax.MkVId ("v", ~1009)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "v"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1262,9 +1273,9 @@ struct
       end
     val Vector_concat =
       let
-        val k = C.CVar.fromInt ~6
-        val xs = TypedSyntax.MkVId ("xs", ~1010)
-        val result = TypedSyntax.MkVId ("v", ~1011)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "v"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1287,9 +1298,9 @@ struct
       end
     val Array_fromList =
       let
-        val k = C.CVar.fromInt ~7
-        val xs = TypedSyntax.MkVId ("xs", ~1012)
-        val result = TypedSyntax.MkVId ("a", ~1013)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1310,11 +1321,84 @@ struct
           , attr = {alwaysInline = true}
           }
       end
+    fun Exception_predicate tag =
+      let
+        val k = newCont ()
+        val e = newVId "e"
+        val result = newVId "b"
+      in
+        C.Abs
+          { contParam = k
+          , params = [e]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall
+                             Primitives.Exception_instanceof
+                         , tyargs = []
+                         , args = [C.Var e, C.Var tag]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val Fail_construct =
+      let
+        val k = newCont ()
+        val message = newVId "message"
+        val result = newVId "e"
+      in
+        C.Abs
+          { contParam = k
+          , params = [message]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.ConstructExnWithPayloadOp
+                         , tyargs = [FSyntax.TyVar Typing.primTyName_string]
+                         , args = [C.Var InitialEnv.VId_Fail_tag, C.Var message]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
+    val Fail_payload =
+      let
+        val k = newCont ()
+        val e = newVId "e"
+        val result = newVId "message"
+      in
+        C.Abs
+          { contParam = k
+          , params = [e]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.ExnPayloadOp
+                         , tyargs = [FSyntax.TyVar Typing.primTyName_string]
+                         , args = [C.Var e]
+                         }
+                     , results = [SOME result]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , attr = {alwaysInline = true}
+          }
+      end
     val JavaScript_function =
       let
-        val k = C.CVar.fromInt ~8
-        val xs = TypedSyntax.MkVId ("xs", ~1014)
-        val result = TypedSyntax.MkVId ("a", ~1015)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1338,9 +1422,9 @@ struct
       end
     val JavaScript_encodeUtf8 =
       let
-        val k = C.CVar.fromInt ~9
-        val xs = TypedSyntax.MkVId ("xs", ~1016)
-        val result = TypedSyntax.MkVId ("a", ~1017)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1364,9 +1448,9 @@ struct
       end
     val JavaScript_decodeUtf8 =
       let
-        val k = C.CVar.fromInt ~10
-        val xs = TypedSyntax.MkVId ("xs", ~1018)
-        val result = TypedSyntax.MkVId ("a", ~1019)
+        val k = newCont ()
+        val xs = newVId "xs"
+        val result = newVId "a"
         val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
@@ -1397,6 +1481,29 @@ struct
         , (InitialEnv.VId_Vector_fromList, {exp = SOME Vector_fromList})
         , (InitialEnv.VId_Vector_concat, {exp = SOME Vector_concat})
         , (InitialEnv.VId_Array_fromList, {exp = SOME Array_fromList})
+        , ( InitialEnv.VId_Match_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Match_tag)}
+          )
+        , ( InitialEnv.VId_Bind_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Bind_tag)}
+          )
+        , ( InitialEnv.VId_Div_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Div_tag)}
+          )
+        , ( InitialEnv.VId_Overflow_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Overflow_tag)}
+          )
+        , ( InitialEnv.VId_Size_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Size_tag)}
+          )
+        , ( InitialEnv.VId_Subscript_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Subscript_tag)}
+          )
+        , ( InitialEnv.VId_Fail_predicate
+          , {exp = SOME (Exception_predicate InitialEnv.VId_Fail_tag)}
+          )
+        , (InitialEnv.VId_Fail_payload, {exp = SOME Fail_payload})
+        , (InitialEnv.VId_Fail, {exp = SOME Fail_construct})
         , (InitialEnv.VId_JavaScript_function, {exp = SOME JavaScript_function})
         , ( InitialEnv.VId_JavaScript_encodeUtf8
           , {exp = SOME JavaScript_encodeUtf8}
