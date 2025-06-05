@@ -6,6 +6,7 @@ ann "sequenceNonUnit ignore"
     "allowOverload true" in
 delim-cont.sml
 js-cps/javascript-callback.sml
+js-cps/javascript-promise.sml
 timer.sig
 nodejs/timer.sml
 os-path-sig.sml

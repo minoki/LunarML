@@ -2066,7 +2066,9 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
        val withResolvers : unit -> { promise : 'a promise, resolve : 'a -> unit, reject : exn -> unit }
        val withResolversNested : unit -> { promise : 'a promise, resolve : 'a -> unit, resolveTo : 'a promise -> unit, reject : exn -> unit }
        val andThen : ('a -> 'b promise) -> 'a promise -> 'b promise
+       val andThen_ : ('a -> unit) -> 'a promise -> unit
        val andThenWithCatch : ('a -> 'b promise) * (exn -> 'b promise) -> 'a promise -> 'b promise
+       val andThenWithCatch_ : ('a -> unit) * (exn -> unit) -> 'a promise -> unit
        val map : ('a -> 'b) -> 'a promise -> 'b promise
        val catch : (exn -> 'a) -> 'a promise -> 'a promise
        val finally : (unit -> unit) -> 'a promise -> 'a promise
@@ -2091,6 +2093,8 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
          val race : ('a promise) vector -> 'a promise
        end
      end
+     val async : ('a -> 'b) -> 'a -> 'b Promise.promise (* JS-CPS backend only *)
+     val await : 'a Promise.promise -> 'a (* JS-CPS backend only *)
    end
 
 .. _pipe-operator:

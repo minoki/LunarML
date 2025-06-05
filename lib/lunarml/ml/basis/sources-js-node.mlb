@@ -5,6 +5,7 @@ ann "sequenceNonUnit ignore"
     "allowPrim true"
     "allowOverload true" in
 js/javascript-callback.sml
+js/javascript-promise.sml
 timer.sig
 nodejs/timer.sml
 nodejs/text-io.sml
