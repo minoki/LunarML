@@ -1,87 +1,26 @@
-lunarml-prim.mlb
+sources-js-common.mlb
 local
-ann "nonexhaustiveRaise ignore"
-    "sequenceNonUnit ignore"
-    "valDescInComments warn"
-    "allowExtendedNumConsts true"
+ann "sequenceNonUnit ignore"
     "allowVectorExps true"
-    "allowHexFloatConsts true"
-    "allowInfixingDot true"
     "allowPrim true"
     "allowOverload true" in
-lua/general-prim.sml
-general.sml
-option.sml (* depends on unit (general.sml) *)
-lunarml.sml
-string-prim.sml
-text16-prim.sml
-bool.sml
-luajit/lua.sml
-luajit/int-prim.sml
-list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
-unsafe.sml
-lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
-vector.sml (* depends on vector-prim, option *)
-luajit/array-prim.sml
-math-sig.sml
-string-cvt-sig.sml
-ieee-real-0.sml
-luajit/word-prim.sml
-lua/real-prim.sml
-char-prim.sml
-string-cvt-0.sml
-luajit/int-1.sml
-luajit/word-1.sml
-luajit/real-1.sml
-luajit/math.sml
-luajit/string-1.sml
-luajit/char-1.sml
-string-cvt-1.sml
-luajit/string-2.sml
-luajit/vector-1.sml
-ieee-real-1.sml
-vector-sig.sml
-array.sml
-luajit/word.sml
-mono-sequence.sml
-substring.sml
-scan-bool.sml
-scan-num-utils.sml
-lua/scan-num.sml
-scan-text.sml
-io.sml
-vector-slice.sml
-array-slice.sml
-list-pair.sml
-int-inf.sml
-large-int-is-int-inf.sml
-luajit/int.sml
-real.sml
-lua/word-sequence.sml
-luajit/mono-sequence.sml
-unsafe-mono-sequence.sml
-byte.sml
-pack-word.sml
-string.sml
-text.sml
-lua/text16.sml
-widetext-8.sml
-luajit/time.sml
+delim-cont.sml
+js-cps/javascript-callback.sml
 timer.sig
-lua/timer.sml
+nodejs/timer.sml
 os-path-sig.sml
 os-path-unix.sml
 os-path-windows.sml
-lua/iodesc.sml
-lua/os.sml
+nodejs/iodesc.sml
+nodejs/os-async.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
 text-io.sml
-lua/text-io.sml
+nodejs/text-io-async.sml
 bin-io.sml
-lua/bin-io.sml
-lua/command-line.sml
+nodejs/bin-io-async.sml
+nodejs/command-line.sml
 end
 in
 signature ARRAY
@@ -91,7 +30,6 @@ signature BOOL
 signature BYTE
 signature CHAR
 signature DATE
-signature IEEE_REAL
 signature IMPERATIVE_IO
 signature INTEGER
 signature INT_INF
@@ -123,7 +61,7 @@ signature VECTOR
 signature VECTOR_SLICE
 signature WORD
 structure Unsafe (* extension *)
-structure Lua (* extension *)
+structure JavaScript (* extension *)
 structure LunarML (* extension *)
 structure Char16 (* extension *)
 structure Char16Array (* extension *)
@@ -147,12 +85,10 @@ structure Char
 structure CharArray
 structure CharArraySlice
 structure CharVector
-structure CharVectorSlice
 structure CommandLine
 structure Date
 structure General
 structure IEEEReal
-structure IO
 structure Int
 structure Int16
 structure Int16Array
@@ -180,14 +116,15 @@ structure IntArraySlice
 structure IntInf
 structure IntVector
 structure IntVectorSlice
+structure IO
 structure LargeInt
-structure LargeReal = Real
+structure LargeReal
 structure LargeWord
 structure List
 structure ListPair
 structure Math
-structure OS
 structure Option
+structure OS
 structure PackWord16Big
 structure PackWord16Little
 structure PackWord32Big

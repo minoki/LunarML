@@ -37,6 +37,8 @@ struct
         \  --luajit              Produce Lua code (targets LuaJIT).\n\
         \  --nodejs              Produce JavaScript code for Node.js.\n\
         \  --nodejs-cps          Produce JavaScript code for Node.js (CPS mode).\n\
+        \  --webjs               Produce JavaScript code for Web.\n\
+        \  --webjs-cps           Produce JavaScript code for Web (CPS mode).\n\
         \  -h,--help             Show this message.\n\
         \  -v,--version          Show version information.\n\
         \  --dump                Dump intermediate code.\n\
@@ -254,8 +256,8 @@ struct
         in
           ()
         end
-    | emit (opts as {backend as BACKEND_JS style, ...}) _ fileName cont nextId
-        cexp export =
+    | emit (opts as {backend as BACKEND_JS {style, default_ext, ...}, ...}) _
+        fileName cont nextId cexp export =
         let
           val timer = Timer.startCPUTimer ()
           val contEscapeMap = CpsAnalyze.contEscape (cont, cexp)
@@ -316,7 +318,7 @@ struct
           val js = #doProgram (JsWriter.mkWriter (nameMap, labelMap)) js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val outs = TextIO.openOut
-            (Option.getOpt (#output opts, base ^ ".mjs")) (* may raise Io *)
+            (Option.getOpt (#output opts, base ^ default_ext)) (* may raise Io *)
           val () = TextIO.output (outs, imports)
           val () =
             if hasImports then () else TextIO.output (outs, "\"use strict\";\n")
@@ -354,13 +356,19 @@ struct
           , case #backend opts of
               BACKEND_LUA _ => "lua"
             | BACKEND_LUAJIT => "luajit"
-            | BACKEND_JS Backend.DIRECT_STYLE => "js"
-            | BACKEND_JS Backend.CPS => "js-cps"
+            | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => "js"
+            | BACKEND_JS {style = Backend.CPS, ...} => "js-cps"
+          )
+        , ( "TARGET_OS"
+          , case #backend opts of
+              BACKEND_LUA _ => "lua"
+            | BACKEND_LUAJIT => "lua"
+            | BACKEND_JS {os, ...} => os
           )
         , ( "DELIMITED_CONTINUATIONS"
           , case #backend opts of
               BACKEND_LUA LUA_CONTINUATIONS => "oneshot"
-            | BACKEND_JS Backend.CPS => "multishot"
+            | BACKEND_JS {style = Backend.CPS, ...} => "multishot"
             | _ => "none"
           )
         ]
@@ -596,8 +604,8 @@ struct
         case #backend opts of
           BACKEND_LUA _ => true
         | BACKEND_LUAJIT => true
-        | BACKEND_JS Backend.DIRECT_STYLE => false
-        | BACKEND_JS Backend.CPS => true
+        | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => false
+        | BACKEND_JS {style = Backend.CPS, ...} => true
       val cexp =
         CpsTransform.transformT
           ( { targetInfo = targetInfo
@@ -739,6 +747,8 @@ struct
   | OPT_TARGET_LUAJIT (* --luajit *)
   | OPT_TARGET_NODEJS (* --nodejs *)
   | OPT_TARGET_NODEJS_CPS (* --nodejs-cps *)
+  | OPT_TARGET_WEBJS (* --webjs *)
+  | OPT_TARGET_WEBJS_CPS (* --webjs-cps *)
   | OPT_HELP (* -h,--help *)
   | OPT_VERSION (* -v,--version *)
   | OPT_STOP (* -- *)
@@ -761,6 +771,8 @@ struct
     , (LONG "--luajit", SIMPLE OPT_TARGET_LUAJIT)
     , (LONG "--nodejs", SIMPLE OPT_TARGET_NODEJS)
     , (LONG "--nodejs-cps", SIMPLE OPT_TARGET_NODEJS_CPS)
+    , (LONG "--webjs", SIMPLE OPT_TARGET_WEBJS)
+    , (LONG "--webjs-cps", SIMPLE OPT_TARGET_WEBJS_CPS)
     , (SHORT "-h", SIMPLE OPT_HELP)
     , (LONG "--help", SIMPLE OPT_HELP)
     , (SHORT "-v", SIMPLE OPT_VERSION)
@@ -806,9 +818,30 @@ struct
     | SOME (OPT_TARGET_LUAJIT, args) =>
         parseArgs (S.set.backend BACKEND_LUAJIT opts) args
     | SOME (OPT_TARGET_NODEJS, args) =>
-        parseArgs (S.set.backend (BACKEND_JS Backend.DIRECT_STYLE) opts) args
+        parseArgs
+          (S.set.backend
+             (BACKEND_JS
+                { style = Backend.DIRECT_STYLE
+                , os = "node"
+                , default_ext = ".mjs"
+                }) opts) args
     | SOME (OPT_TARGET_NODEJS_CPS, args) =>
-        parseArgs (S.set.backend (BACKEND_JS Backend.CPS) opts) args
+        parseArgs
+          (S.set.backend
+             (BACKEND_JS
+                {style = Backend.CPS, os = "node", default_ext = ".mjs"}) opts)
+          args
+    | SOME (OPT_TARGET_WEBJS, args) =>
+        parseArgs
+          (S.set.backend
+             (BACKEND_JS
+                {style = Backend.DIRECT_STYLE, os = "web", default_ext = ".js"})
+             opts) args
+    | SOME (OPT_TARGET_WEBJS_CPS, args) =>
+        parseArgs
+          (S.set.backend
+             (BACKEND_JS {style = Backend.CPS, os = "web", default_ext = ".js"})
+             opts) args
     | SOME (OPT_HELP, _) => (showHelp (); OS.Process.exit OS.Process.success)
     | SOME (OPT_VERSION, _) =>
         (showVersion (); OS.Process.exit OS.Process.success)

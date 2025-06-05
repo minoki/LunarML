@@ -47,6 +47,17 @@ Target options are:
   This mode supports delimited continuations.
   The default extension for output is ``.mjs``.
 
+``--webjs``
+  Produces JavaScript program for Web.
+  The produced JavaScript code is for ES2020 or later.
+  The default extension for output is ``.js``.
+
+``--webjs-cps``
+  Produces JavaScript program for Web.
+  The produced JavaScript code is for ES2020 or later.
+  This mode supports delimited continuations.
+  The default extension for output is ``.js``.
+
 Output type is one of:
 
 ``--exe`` (default)

@@ -88,6 +88,8 @@ Targets:
 * JavaScript (ES2020+)
     * `--nodejs`: Produces a JavaScript program for Node.js. The default extension is `.mjs`.
     * `--nodejs-cps`: Produces a JavaScript program for Node.js (CPS mode; supports delimited continuations). The default extension is `.mjs`.
+    * `--webjs`: Produces a JavaScript program for Web. The default extension is `.js`.
+    * `--webjs-cps`: Produces a JavaScript program for Web (CPS mode; supports delimited continuations). The default extension is `.js`.
 
 Output type:
 

@@ -67,6 +67,7 @@ text.sml
 lua/text16.sml
 widetext-8.sml
 lua/time.sml
+timer.sig
 lua/timer.sml
 os-path-sig.sml
 os-path-unix.sml
