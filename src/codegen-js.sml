@@ -1106,7 +1106,8 @@ struct
                | Primitives.JavaScript_isFalsy =>
                    doUnaryExp (fn a => J.UnaryExp (J.NOT, a), DISCARDABLE)
                | Primitives.JavaScript_isNullOrUndefined =>
-                   doUnaryExp (fn a => J.BinExp (J.LAXEQUAL, a, J.ConstExp J.Null), PURE)
+                   doUnaryExp
+                     (fn a => J.BinExp (J.LAXEQUAL, a, J.ConstExp J.Null), PURE)
                | Primitives.JavaScript_typeof =>
                    doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), PURE)
                | Primitives.JavaScript_global =>
@@ -2208,44 +2209,57 @@ struct
              (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')
          ])
     end
+  fun doProgramCPS' ctx cont retVar cexp =
+    if N.containsApp cexp then
+      let
+        val env =
+          { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
+          , subst = TypedSyntax.VIdMap.empty
+          }
+        val callExp = J.CallExp (J.VarExp (J.PredefinedId "_run"), vector
+          [ J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp))
+          , J.ConstExp J.True
+          ])
+      in
+        case retVar of
+          NONE => [J.ExpStat callExp]
+        | SOME v => [J.ConstStat (vector [(v, callExp)])]
+      end
+    else
+      let
+        val dec =
+          case retVar of
+            NONE => []
+          | SOME v => [J.LetStat (vector [(v, NONE)])]
+        val env =
+          { continuations = C.CVarMap.singleton (cont, BREAK_TO
+              { label = CVarToJs cont
+              , which = NONE
+              , params =
+                  case retVar of
+                    NONE => []
+                  | SOME v => [SOME (VIdToJs ctx v)]
+              })
+          , subst = TypedSyntax.VIdMap.empty
+          }
+      in
+        dec @ [J.BlockStat (SOME (CVarToJs cont), vector (doCExp ctx env cexp))]
+      end
   fun doProgramCPS ctx cont cexp =
-    let
-      val env =
-        { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
-        , subst = TypedSyntax.VIdMap.empty
-        }
-    in
-      vector
-        [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector
-           [ J.FunctionExp (vector [CVarToJs cont], vector
-               (doCExp ctx env cexp))
-           , J.ConstExp J.True
-           ]))]
-    end
+    vector (doProgramCPS' ctx cont NONE cexp)
   fun doProgramCPSDefaultExport ctx cont cexp =
     let
-      val env =
-        { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
-        , subst = TypedSyntax.VIdMap.empty
-        }
+      val varName = genSymNamed (ctx, "export")
     in
       vector
-        [J.DefaultExportStat
-           (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector
-              [ J.FunctionExp (vector [CVarToJs cont], vector
-                  (doCExp ctx env cexp))
-              , J.ConstExp J.False
-              ]))]
+        (doProgramCPS' ctx cont (SOME varName) cexp
+         @ [J.DefaultExportStat (J.VarExp (J.UserDefinedId varName))])
     end
   fun doProgramCPSNamedExport ctx cont cexp entities =
     let
       val varName = genSymNamed (ctx, "export")
       val entities' =
         Vector.map (fn name => (genSymNamed (ctx, name), name)) entities
-      val env =
-        { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
-        , subst = TypedSyntax.VIdMap.empty
-        }
       val unpack =
         if Vector.length entities' > 0 then
           [J.ConstStat
@@ -2261,16 +2275,7 @@ struct
           []
     in
       vector
-        (J.ConstStat (vector
-           [( varName
-            , J.CallExp (J.VarExp (J.PredefinedId "_run"), vector
-                [ J.FunctionExp (vector [CVarToJs cont], vector
-                    (doCExp ctx env cexp))
-                , J.ConstExp J.False
-                ])
-            )])
-         ::
-         unpack
+        (doProgramCPS' ctx cont (SOME varName) cexp @ unpack
          @
          [J.NamedExportStat
             (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')])
