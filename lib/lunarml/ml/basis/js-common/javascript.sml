@@ -43,6 +43,7 @@ structure JavaScript :> sig
               val ** : value * value -> value
               val isFalsy : value -> bool
               val isTruthy : value -> bool
+              val isNullOrUndefined : value -> bool
               val typeof : value -> String16.string
               val newObject : unit -> value
               val encodeUtf8 : String16.string -> string
@@ -161,6 +162,7 @@ fun global name = _primCall "JavaScript.global" (name)
 fun setGlobal (name, value) = _primCall "JavaScript.setGlobal" (name, value)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)
 fun isTruthy x = not (isFalsy x)
+fun isNullOrUndefined x = _primCall "JavaScript.isNullOrUndefined" (x)
 fun x + y = _primCall "JavaScript.+" (x, y)
 fun x - y = _primCall "JavaScript.-" (x, y)
 fun x * y = _primCall "JavaScript.*" (x, y)

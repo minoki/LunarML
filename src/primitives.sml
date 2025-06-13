@@ -197,6 +197,7 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_URSHIFT (* JavaScript.>>> *)
                 | JavaScript_EXP (* JavaScript.** *)
                 | JavaScript_isFalsy (* JavaScript.isFalsy *)
+                | JavaScript_isNullOrUndefined (* JavaScript.isNullOrUndefined *)
                 | JavaScript_typeof (* JavaScript.typeof *)
                 | JavaScript_global (* JavaScript.global *)
                 | JavaScript_setGlobal (* JavaScript.setGlobal *)
@@ -618,6 +619,7 @@ fun toString EQUAL = "="
   | toString JavaScript_URSHIFT = "JavaScript.>>>"
   | toString JavaScript_EXP = "JavaScript.**"
   | toString JavaScript_isFalsy = "JavaScript.isFalsy"
+  | toString JavaScript_isNullOrUndefined = "JavaScript.isNullOrUndefined"
   | toString JavaScript_typeof = "JavaScript.typeof"
   | toString JavaScript_global = "JavaScript.global"
   | toString JavaScript_setGlobal = "JavaScript.setGlobal"
@@ -1039,6 +1041,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.>>>" = SOME JavaScript_URSHIFT
   | fromString "JavaScript.**" = SOME JavaScript_EXP
   | fromString "JavaScript.isFalsy" = SOME JavaScript_isFalsy
+  | fromString "JavaScript.isNullOrUndefined" = SOME JavaScript_isNullOrUndefined
   | fromString "JavaScript.typeof" = SOME JavaScript_typeof
   | fromString "JavaScript.global" = SOME JavaScript_global
   | fromString "JavaScript.setGlobal" = SOME JavaScript_setGlobal
@@ -1248,6 +1251,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise JavaScript_URSHIFT = true
   | mayRaise JavaScript_EXP = true
   | mayRaise JavaScript_isFalsy = false
+  | mayRaise JavaScript_isNullOrUndefined = false
   | mayRaise JavaScript_typeof = false
   | mayRaise JavaScript_global = true
   | mayRaise JavaScript_setGlobal = true
@@ -1456,6 +1460,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_URSHIFT = false
   | isDiscardable JavaScript_EXP = false
   | isDiscardable JavaScript_isFalsy = true
+  | isDiscardable JavaScript_isNullOrUndefined = true
   | isDiscardable JavaScript_typeof = true
   | isDiscardable JavaScript_global = false
   | isDiscardable JavaScript_setGlobal = false
@@ -1722,6 +1727,7 @@ fun returnArity EQUAL = 1
   | returnArity JavaScript_URSHIFT = 1
   | returnArity JavaScript_EXP = 1
   | returnArity JavaScript_isFalsy = 1
+  | returnArity JavaScript_isNullOrUndefined = 1
   | returnArity JavaScript_typeof = 1
   | returnArity JavaScript_global = 1
   | returnArity JavaScript_setGlobal = 0
@@ -2193,6 +2199,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_isNullOrUndefined = { vars = [], args = vector [JavaScriptValue], results = [bool] }
   | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], results = [string16] }
   | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_setGlobal = { vars = [], args = vector [string16, JavaScriptValue], results = [] }

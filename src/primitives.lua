@@ -1431,6 +1431,13 @@ do
       discardable = true,
     },
     {
+      name = "JavaScript.isNullOrUndefined",
+      srcname = "JavaScript_isNullOrUndefined",
+      type = { vars = {}, args = {JSValue}, results = {bool} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "JavaScript.typeof",
       srcname = "JavaScript_typeof",
       type = { vars = {}, args = {JSValue}, results = {string16} },

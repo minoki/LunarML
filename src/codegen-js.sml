@@ -1105,6 +1105,8 @@ struct
                | Primitives.JavaScript_EXP => doBinaryOp (J.EXP, PURE)
                | Primitives.JavaScript_isFalsy =>
                    doUnaryExp (fn a => J.UnaryExp (J.NOT, a), DISCARDABLE)
+               | Primitives.JavaScript_isNullOrUndefined =>
+                   doUnaryExp (fn a => J.BinExp (J.LAXEQUAL, a, J.ConstExp J.Null), PURE)
                | Primitives.JavaScript_typeof =>
                    doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), PURE)
                | Primitives.JavaScript_global =>

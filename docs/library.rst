@@ -2050,6 +2050,7 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val ** : value * value -> value
      val isFalsy : value -> bool
      val isTruthy : value -> bool
+     val isNullOrUndefined : value -> bool
      val typeof : value -> String16.string
      val newObject : unit -> value
      val encodeUtf8 : String16.string -> string
