@@ -678,6 +678,232 @@ struct
     in #nextTyVar ctx := id + 1; TypedSyntax.MkTyName (name, id)
     end
 
+  local structure T = TypedSyntax
+  in
+    (*: val typePrinter : Env -> { ty : T.Ty -> string, tyName : T.TyName -> string, anonymousTyVar : T.AnonymousTyVar -> string } *)
+    fun typePrinter (env: Env) =
+      let
+        val anonymous: (T.AnonymousTyVar * int * string) list ref = ref []
+        fun freshName v =
+          let
+            val a = !anonymous
+            val i =
+              1 + List.foldl (fn ((_, j, _), acc) => Int.max (acc, j)) ~1 a
+            val name = "?" ^ Int.toString i
+          in
+            anonymous := (v, i, name) :: a;
+            name
+          end
+        fun nameOf v =
+          case List.find (fn (u, _, _) => v = u) (!anonymous) of
+            SOME (_, _, name) => name
+          | NONE => freshName v
+        fun lookupTyNameInTyConMap
+          (tyConMap: T.TypeStructure Syntax.TyConMap.map, tyname) =
+          let
+            val map =
+              Syntax.TyConMap.mapPartiali
+                (fn ( Syntax.MkTyCon tycon
+                    , { typeFunction =
+                          T.TypeFunction (params, T.TyCon (_, args, tyname'))
+                      , valEnv = _
+                      }
+                    ) =>
+                   if
+                     tyname = tyname'
+                     andalso
+                     ListPair.allEq
+                       (fn (tv, T.TyVar (_, tv')) => T.eqTyVar (tv, tv')
+                         | _ => false) (params, args)
+                   then SOME tycon
+                   else NONE
+                  | _ => NONE) tyConMap
+          in
+            Syntax.TyConMap.first map
+          end
+        (* Breadth-first search *)
+        fun lookupTyNameInSignatures
+          (ss: (T.Signature * string list) list, tyname) =
+          let
+            fun go [] =
+                  lookupTyNameInSignatures
+                    ( List.foldr
+                        (fn ((s, revPath), acc) =>
+                           Syntax.StrIdMap.foldri
+                             (fn (Syntax.MkStrId strid, T.MkSignature s', acc) =>
+                                (s', strid :: revPath) :: acc) acc (#strMap s))
+                        [] ss
+                    , tyname
+                    ) (* go deeper *)
+              | go ((s, revPath) :: ss) =
+                  case lookupTyNameInTyConMap (#tyConMap s, tyname) of
+                    SOME tycon =>
+                      SOME (String.concatWith "."
+                        (List.revAppend (revPath, [tycon])))
+                  | NONE => go ss
+          in
+            if List.null ss then NONE else go ss
+          end
+        val seenTyNames: (string T.TyNameMap.map) ref = ref T.TyNameMap.empty
+        fun lookupTyName tyname =
+          let
+            val seen = !seenTyNames
+          in
+            case T.TyNameMap.find (seen, tyname) of
+              SOME name => name
+            | NONE =>
+                let
+                  val named =
+                    case lookupTyNameInTyConMap (#tyConMap env, tyname) of
+                      n as SOME _ =>
+                        n (* TODO: Should avoid internal identifiers like _Prim.* *)
+                    | NONE =>
+                        lookupTyNameInSignatures
+                          ( Syntax.StrIdMap.foldri
+                              (fn (Syntax.MkStrId strid, (s, _), acc) =>
+                                 (s, [strid]) :: acc) [] (#strMap env)
+                          , tyname
+                          )
+                in
+                  case named of
+                    SOME name =>
+                      ( seenTyNames := T.TyNameMap.insert (seen, tyname, name)
+                      ; name
+                      )
+                  | NONE =>
+                      let
+                        val name =
+                          case tyname of
+                            T.MkTyVar (n, i) => "?" ^ n ^ "." ^ Int.toString i
+                      in
+                        seenTyNames := T.TyNameMap.insert (seen, tyname, name);
+                        name
+                      end
+                end
+          end
+        (*
+         * AtTy ::= TyVar
+         *         | LongTyCon
+         *        | '{' TyRow '}'
+         *        | '(' Ty ')'
+         * ConTy ::= AtTy
+         *         | ConTy LongTyCon
+         *         | '(' Ty ',' ... ')' LongTyCon
+         * TupTy ::= ConTy
+         *         | ConTy '*' TupTy
+         * Ty ::= TupTy
+         *      | TupTy '->' Ty
+         * prec = 0: only AtTy is allowed.
+         * prec = 1: ConTy is allowed.
+         * prec = 2: TupTy is allowed
+         * prec = 3: Ty is allowed.
+         *)
+        fun paren true s acc =
+              "(" :: s @ ")" :: acc
+          | paren false s acc = s @ acc
+        fun labelToString (Syntax.NumericLabel i) = Int.toString i
+          | labelToString (Syntax.IdentifierLabel x) = x
+        fun go (_, T.TyVar (_, T.MkTyVar (name, _))) acc = name :: acc
+          | go (prec, T.AnonymousTyVar (_, ref (T.Link t))) acc =
+              go (prec, t) acc
+          | go (_, T.AnonymousTyVar (_, a as ref (T.Unbound _))) acc =
+              nameOf a :: acc
+          | go (prec, T.RecordType (_, fields)) acc =
+              let
+                val l_fields = Syntax.LabelMap.listItemsi fields
+                val t = Syntax.extractTuple (1, l_fields)
+              in
+                if
+                  (case t of
+                     SOME u => List.null u
+                   | NONE => false)
+                then
+                  let
+                    val isUnit =
+                      case
+                        Syntax.TyConMap.find
+                          (#tyConMap env, Syntax.MkTyCon "unit")
+                      of
+                        SOME
+                          { typeFunction =
+                              T.TypeFunction ([], T.RecordType (_, fields'))
+                          , valEnv = _
+                          } => Syntax.LabelMap.numItems fields' = 0
+                      | _ => false
+                  in
+                    if isUnit then ["unit"] else ["{}"]
+                  end
+                else
+                  case t of
+                    SOME (ls as (_ :: _ :: _)) =>
+                      let
+                        fun makeTupleTy (ty, acc) =
+                          let
+                            val acc =
+                              if List.null acc then acc else " * " :: acc
+                          in
+                            go (1, ty) acc
+                          end
+                      in
+                        paren (prec < 2) (List.foldr makeTupleTy [] ls) acc
+                      end
+                  | _ =>
+                      let
+                        fun makeField ((label, ty), acc) =
+                          let
+                            val acc = if List.null acc then acc else ", " :: acc
+                          in
+                            labelToString label :: " : " :: go (3, ty) acc
+                          end
+                      in
+                        "{" :: List.foldr makeField [] l_fields @ "}" :: acc
+                      end
+              end
+          | go (_, T.RecordExtType (_, fields, base)) acc =
+              let
+                val l_fields = Syntax.LabelMap.listItemsi fields
+                val t = Syntax.extractTuple (1, l_fields)
+                fun makeField ((label, ty), acc) =
+                  labelToString label :: " : " :: go (3, ty) (", " :: acc)
+              in
+                "{"
+                ::
+                List.foldr makeField ("... : " :: go (3, base) []) l_fields
+                @ "}" :: acc
+              end
+          | go (prec, T.FnType (_, ty0, ty1)) acc =
+              paren (prec < 3) (go (2, ty0) (" -> " :: go (3, ty1) [])) acc
+          | go (prec, T.TyCon (_, args, tyname)) acc =
+              let
+                val tyname' = lookupTyName tyname
+              in
+                case args of
+                  [] => tyname' :: acc
+                | [ty] =>
+                    paren (prec < 1) (go (0, ty) [" ", tyname'])
+                      acc (* Use redundant parens for types like '(int option) list' *)
+                | _ =>
+                    "("
+                    ::
+                    #2
+                      (List.foldr
+                         (fn (ty, (last, acc)) =>
+                            ( false
+                            , go (3, ty) (if last then acc else ", " :: acc)
+                            )) (true, ") " :: tyname' :: acc) args)
+              end
+        fun print_Ty ty =
+          String.concat (go (3, ty) [])
+      in
+        { ty = print_Ty
+        , tyName = lookupTyName
+        , anonymousTyVar = fn ref (T.Link ty) => print_Ty ty | a => nameOf a
+        }
+      end
+    fun print_Ty env =
+      #ty (typePrinter env)
+  end
+
   local structure S = Syntax structure T = TypedSyntax
   in
     (*: val occurCheckAndAdjustLevel : T.AnonymousTyVar -> T.Ty -> bool (* returns true if the type variable occurs in the type *) *)
@@ -1028,47 +1254,57 @@ struct
           else
             (case ConstraintInfo.sort (ci, ty1, ty2) of
                ConstraintInfo.SUBSUMPTION {expected, actual} =>
-                 emitTypeError
-                   ( ctx
-                   , [span1]
-                   , "expected " ^ TypedSyntax.PrettyPrint.print_Ty expected
-                     ^ ", but got " ^ TypedSyntax.PrettyPrint.print_Ty actual
-                   )
+                 let
+                   val pTy = print_Ty env
+                 in
+                   emitTypeError
+                     ( ctx
+                     , [span1]
+                     , "expected " ^ pTy expected ^ ", but got " ^ pTy actual
+                     )
+                 end
              | ConstraintInfo.SEQUENCE_OR_BRANCH {previous, current, place = _} =>
-                 emitTypeError
-                   ( ctx
-                   , [span1]
-                   , "previous was " ^ TypedSyntax.PrettyPrint.print_Ty previous
-                     ^ ", but now is "
-                     ^ TypedSyntax.PrettyPrint.print_Ty current
-                   ))
+                 let
+                   val pTy = print_Ty env
+                 in
+                   emitTypeError
+                     ( ctx
+                     , [span1]
+                     , "previous was " ^ pTy previous ^ ", but now is "
+                       ^ pTy current
+                     )
+                 end)
       | unify (ctx, _, _, span1, T.TyVar (span2, T.MkTyVar (name, _)), _) =
           emitTypeError
             (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
       | unify (ctx, _, _, span1, _, T.TyVar (span2, T.MkTyVar (name, _))) =
           emitTypeError
             (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
-      | unify (ctx, _, ci, span, ty1, ty2) =
-          (case ConstraintInfo.sort (ci, ty1, ty2) of
-             ConstraintInfo.SUBSUMPTION {expected, actual} =>
-               emitTypeError
-                 ( ctx
-                 , [span]
-                 , "expected " ^ TypedSyntax.PrettyPrint.print_Ty expected
-                   ^ ", but got " ^ TypedSyntax.PrettyPrint.print_Ty actual
-                 )
-           | ConstraintInfo.SEQUENCE_OR_BRANCH {previous, current, place = _} =>
-               emitTypeError
-                 ( ctx
-                 , [span]
-                 , "previous was " ^ TypedSyntax.PrettyPrint.print_Ty previous
-                   ^ ", but now is " ^ TypedSyntax.PrettyPrint.print_Ty current
-                 ))
+      | unify (ctx, env, ci, span, ty1, ty2) =
+          let
+            val pTy = print_Ty env
+          in
+            case ConstraintInfo.sort (ci, ty1, ty2) of
+              ConstraintInfo.SUBSUMPTION {expected, actual} =>
+                emitTypeError
+                  ( ctx
+                  , [span]
+                  , "expected " ^ pTy expected ^ ", but got " ^ pTy actual
+                  )
+            | ConstraintInfo.SEQUENCE_OR_BRANCH {previous, current, place = _} =>
+                emitTypeError
+                  ( ctx
+                  , [span]
+                  , "previous was " ^ pTy previous ^ ", but now is "
+                    ^ pTy current
+                  )
+          end
     and solveUnary (ctx: InferenceContext, env: Env, ci, span1, ty, ct) =
       let
         fun mismatch () =
           let
-            val lhs =
+            val lhs = #ty (typePrinter env) ty
+            (*
               case ty of
                 T.RecordType (_, _) => "a record"
               | T.RecordExtType (_, _, _) => "a record"
@@ -1076,19 +1312,20 @@ struct
               | T.FnType (_, _, _) => "a function"
               | T.TyVar (_, T.MkTyVar (name, _)) => name
               | T.AnonymousTyVar _ => "<anonymous>" (* should not occur *)
+             *)
             val rhs =
               case ct of
-                T.IsRecord _ => "a record"
-              | T.IsEqType => "an equality type" (* should not occur *)
-              | T.IsIntegral => "int or word"
-              | T.IsSignedReal => "int or real"
-              | T.IsRing => "int, word or real"
-              | T.IsOrdered => "int, word, real, char or string"
-              | T.IsInt => "int"
-              | T.IsWord => "word"
-              | T.IsReal => "real"
-              | T.IsChar => "char"
-              | T.IsString => "string"
+                T.IsRecord _ => "(a record)"
+              | T.IsEqType => "(an equality type)" (* should not occur *)
+              | T.IsIntegral => "(int or word)"
+              | T.IsSignedReal => "(int or real)"
+              | T.IsRing => "(int, word or real)"
+              | T.IsOrdered => "(int, word, real, char or string)"
+              | T.IsInt => "(int)"
+              | T.IsWord => "(word)"
+              | T.IsReal => "(real)"
+              | T.IsChar => "(char)"
+              | T.IsString => "(string)"
           in
             case ConstraintInfo.sort (ci, lhs, rhs) of
               ConstraintInfo.SUBSUMPTION {expected, actual} =>
@@ -1187,7 +1424,7 @@ struct
                 emitTypeError
                   ( ctx
                   , [span1, span2]
-                  , TypedSyntax.PrettyPrint.print_TyName tyname
+                  , #tyName (typePrinter env) tyname
                     ^ " does not admit equality"
                   )
             end
@@ -1493,13 +1730,17 @@ struct
              else if
                occurCheckAndAdjustLevel tv ty
              then
-               emitTypeError
-                 ( ctx
-                 , [span, T.getSourceSpanOfTy ty]
-                 , "unification failed: occurrence check ("
-                   ^ TypedSyntax.print_AnonymousTyVar tv ^ " in "
-                   ^ TypedSyntax.print_Ty ty ^ ")"
-                 )
+               let
+                 val printer = typePrinter env
+               in
+                 emitTypeError
+                   ( ctx
+                   , [span, T.getSourceSpanOfTy ty]
+                   , "unification failed: occurrence check ("
+                     ^ #anonymousTyVar printer tv ^ " in " ^ #ty printer ty
+                     ^ ")"
+                   )
+               end
              else
                let
                  val ci' = ConstraintInfo.flip ci
