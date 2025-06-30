@@ -69,6 +69,62 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
 
+  bindist:
+    name: Build bindist
+    needs: [prepare-release]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm, macos-13, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache MLton
+        id: cache-mlton
+        uses: actions/cache@v4
+        with:
+          path: ~/mlton-dist
+          key: ${{ matrix.runner }}-mlton
+      - name: Install Lua (Linux)
+        run: |
+          sudo apt-get install lua5.3
+        if: ${{ runner.os == 'Linux' }}
+      - name: Install Lua (macOS)
+        run: |
+          brew install lua@5.4
+        if: ${{ runner.os == 'macOS' }}
+        # Maybe we can just run 'brew install mlton' to install the latest MLton on macOS
+      - name: Install MLton
+        run: |
+          case "$RUNNER_ARCH-$RUNNER_OS" in
+            X64-Linux)   MLTON_URL="https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.amd64-linux.ubuntu-22.04_glibc2.35.tgz" ;;
+            ARM64-Linux) MLTON_URL="https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.arm64-linux.ubuntu-22.04-arm_glibc2.35.tgz" ;;
+            X64-macOS)   MLTON_URL="https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.amd64-darwin.macos-13_gmp-homebrew.tgz" ;;
+            ARM64-macOS) MLTON_URL="https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.arm64-darwin.macos-14_gmp-homebrew.tgz" ;;
+          esac
+          curl -Lo mlton-release.tgz "$MLTON_URL"
+          mkdir -p "$HOME/mlton-dist"
+          tar -x --strip-components=1 -C "$HOME/mlton-dist" -f mlton-release.tgz
+        if: ${{ steps.cache-mlton.outputs.cache-hit != 'true' }}
+      - name: Setup MLton
+        run: |
+          echo "$HOME/mlton-dist/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: make
+      - name: Archive
+        run: make archive-bindist
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindist-${{ matrix.runner }}
+          path: |
+            lunarml-*.tar.gz
+      - name: Attach tarballs to the release
+        run: |
+          gh release upload "${{ github.ref_name }}" lunarml-*.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+
   build-docs:
     name: Build docs
     needs: [prepare-release]

@@ -232,4 +232,12 @@ archive: bin/lunarml.lua bin/lunarml.mjs src/syntax.grm.sml src/syntax.grm.sig
 	git archive -o "lunarml-$(VERSION).tar.gz" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml.lua --add-file=bin/lunarml.mjs --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
 	git archive -o "lunarml-$(VERSION).zip" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml.lua --add-file=bin/lunarml.mjs --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
 
-.PHONY: archive
+ARCH = $(shell uname -m)
+OS = $(shell uname -s | tr A-Z a-z)
+ARCH_OS = $(ARCH)-$(OS)
+
+archive-bindist: bin/lunarml src/syntax.grm.sml src/syntax.grm.sig
+	git archive -o "lunarml-$(VERSION)-$(ARCH_OS).tar.gz" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
+	git archive -o "lunarml-$(VERSION)-$(ARCH_OS).zip" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
+
+.PHONY: archive archive-bindist
