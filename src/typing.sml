@@ -753,17 +753,32 @@ struct
               SOME name => name
             | NONE =>
                 let
+                  val unqualified =
+                    lookupTyNameInTyConMap (#tyConMap env, tyname)
+                  val unqualifiedNoPrim =
+                    case unqualified of
+                      n as SOME name =>
+                        if String.isPrefix "_Prim." name then
+                          NONE (* Should avoid internal identifiers like _Prim.* *)
+                        else
+                          n
+                    | n => n
                   val named =
-                    case lookupTyNameInTyConMap (#tyConMap env, tyname) of
-                      n as SOME _ =>
-                        n (* TODO: Should avoid internal identifiers like _Prim.* *)
+                    case unqualifiedNoPrim of
+                      n as SOME _ => n
                     | NONE =>
-                        lookupTyNameInSignatures
-                          ( Syntax.StrIdMap.foldri
-                              (fn (Syntax.MkStrId strid, (s, _), acc) =>
-                                 (s, [strid]) :: acc) [] (#strMap env)
-                          , tyname
-                          )
+                        let
+                          val qualified = lookupTyNameInSignatures
+                            ( Syntax.StrIdMap.foldri
+                                (fn (Syntax.MkStrId strid, (s, _), acc) =>
+                                   (s, [strid]) :: acc) [] (#strMap env)
+                            , tyname
+                            )
+                        in
+                          case qualified of
+                            n as SOME _ => n
+                          | NONE => unqualified
+                        end
                 in
                   case named of
                     SOME name =>
