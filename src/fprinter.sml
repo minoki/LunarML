@@ -36,8 +36,13 @@ struct
         @ [P.Fragment "}"]
     | doTy prec (F.AppType {applied, arg}) =
         showParen (prec >= 2) (doTy 1 applied @ P.Fragment " " :: doTy 2 arg)
-    | doTy prec (F.FnType (ty1, ty2)) =
-        showParen (prec >= 1) (doTy 1 ty1 @ P.Fragment " -> " :: doTy 0 ty2)
+    | doTy prec (F.MultiFnType ([param], result)) =
+        showParen (prec >= 1)
+          (doTy 1 param @ P.Fragment " -> " :: doTy 0 result)
+    | doTy prec (F.MultiFnType (params, result)) =
+        showParen (prec >= 1)
+          (List.foldr (fn (param, acc) => doTy 1 param @ acc)
+             (P.Fragment " -> " :: doTy 0 result) params)
     | doTy prec (F.ForallType (tv, kind, ty)) =
         showParen (prec >= 1)
           (P.Fragment "forall "
@@ -207,8 +212,19 @@ struct
            ::
            doExp 0 exp
            @ [P.DecreaseIndent 2, P.LineTerminator, P.Indent, P.Fragment "end"])
-    | doExp prec (F.AppExp (applied, arg)) =
+    | doExp prec (F.MultiAppExp (applied, [arg])) =
         showParen (prec >= 2) (doExp 1 applied @ P.Fragment " " :: doExp 2 arg)
+    | doExp prec (F.MultiAppExp (applied, args)) =
+        showParen (prec >= 2)
+          (doExp 1 applied
+           @
+           P.Fragment " ("
+           ::
+           List.foldr
+             (fn (arg, acc) =>
+                doExp 2 arg
+                @ (if List.null acc then acc else P.Fragment " " :: acc)) []
+             args @ [P.Fragment ")"])
     | doExp prec (F.HandleExp {body, exnName, handler}) =
         showParen (prec >= 1)
           (P.Fragment "_try "
@@ -252,10 +268,17 @@ struct
                 doPat 0 pat
                 @ P.Fragment " => " :: doExp 0 exp @ P.LineTerminator :: rest)
              [P.DecreaseIndent 2, P.Indent] matches)
-    | doExp prec (F.FnExp (vid, ty, exp)) =
+    | doExp prec (F.MultiFnExp (params, exp)) =
         showParen (prec >= 1)
-          (P.Fragment "fn " :: P.Fragment (TypedSyntax.print_VId vid)
-           :: P.Fragment " : " :: doTy 0 ty @ P.Fragment " => " :: doExp 0 exp)
+          (P.Fragment "fn ("
+           ::
+           List.foldr
+             (fn ((vid, ty), acc) =>
+                P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : "
+                ::
+                doTy 0 ty
+                @ (if List.null acc then acc else P.Fragment ", " :: acc)) []
+             params @ P.Fragment ") => " :: doExp 0 exp)
     | doExp prec (F.ProjectionExp {label, record, fieldTypes = _}) =
         showParen (prec >= 2)
           (P.Fragment "#" :: doLabel label @ P.Fragment " " :: doExp 2 record)

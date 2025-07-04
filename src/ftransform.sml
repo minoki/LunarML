@@ -63,13 +63,14 @@ struct
          | F.RecordExp fields =>
              F.RecordExp (List.map (fn (label, e) => (label, doExp e)) fields)
          | F.LetExp (decs, exp) => F.LetExp (List.map doDec decs, doExp exp)
-         | F.AppExp (exp1, exp2) => F.AppExp (doExp exp1, doExp exp2)
+         | F.MultiAppExp (f, args) =>
+             F.MultiAppExp (doExp f, List.map doExp args)
          | F.HandleExp {body, exnName, handler} =>
              F.HandleExp
                {body = doExp body, exnName = exnName, handler = doExp handler}
          | F.IfThenElseExp (exp1, exp2, exp3) =>
              F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
-         | F.FnExp (vid, ty, exp) => F.FnExp (vid, ty, doExp exp)
+         | F.MultiFnExp (params, exp) => F.MultiFnExp (params, doExp exp)
          | F.ProjectionExp {label, record, fieldTypes} =>
              F.ProjectionExp
                {label = label, record = doExp record, fieldTypes = fieldTypes}
@@ -551,8 +552,8 @@ struct
         F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
     | doExp (F.LetExp (decs, exp)) =
         F.LetExp (List.concat (List.map doDec decs), doExp exp)
-    | doExp (F.AppExp (exp1, exp2)) =
-        F.AppExp (doExp exp1, doExp exp2)
+    | doExp (F.MultiAppExp (f, args)) =
+        F.MultiAppExp (doExp f, List.map doExp args)
     | doExp (F.HandleExp {body, exnName, handler}) =
         F.HandleExp
           {body = doExp body, exnName = exnName, handler = doExp handler}
@@ -569,8 +570,8 @@ struct
           , matchType = matchType
           , resultTy = resultTy
           }
-    | doExp (F.FnExp (vid, ty, exp)) =
-        F.FnExp (vid, ty, doExp exp)
+    | doExp (F.MultiFnExp (params, exp)) =
+        F.MultiFnExp (params, doExp exp)
     | doExp (F.ProjectionExp {label, record, fieldTypes}) =
         F.ProjectionExp
           {label = label, record = doExp record, fieldTypes = fieldTypes}
@@ -688,7 +689,7 @@ struct
     | isDiscardable (F.RecordExp fields) =
         List.all (fn (_, exp) => isDiscardable exp) fields
     | isDiscardable (F.LetExp (_, _)) = false (* TODO *)
-    | isDiscardable (F.AppExp (_, _)) = false (* TODO *)
+    | isDiscardable (F.MultiAppExp (_, _)) = false (* TODO *)
     | isDiscardable (F.HandleExp {body = _, exnName = _, handler = _}) =
         false (* TODO *)
     | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) =
@@ -702,7 +703,7 @@ struct
            , matchType = _
            , resultTy = _
            }) = false (* TODO *)
-    | isDiscardable (F.FnExp (_, _, _)) = true
+    | isDiscardable (F.MultiFnExp (_, _)) = true
     | isDiscardable (F.ProjectionExp {label = _, record, fieldTypes = _}) =
         isDiscardable record
     | isDiscardable (F.TyAbsExp (_, _, exp)) = isDiscardable exp
@@ -781,12 +782,16 @@ struct
         in
           (TypedSyntax.VIdSet.union (acc, used'), F.LetExp (decs, exp))
         end
-    | doExp (F.AppExp (exp1, exp2)) acc =
+    | doExp (F.MultiAppExp (f, args)) acc =
         let
-          val (used, exp1) = doExp exp1 acc
-          val (used', exp2) = doExp exp2 used
+          val (used, f) = doExp f acc
+          val (used', args) =
+            List.foldr
+              (fn (arg, (used, args)) =>
+                 case doExp arg used of (used', arg') => (used', arg' :: args))
+              (used, []) args
         in
-          (used', F.AppExp (exp1, exp2))
+          (used', F.MultiAppExp (f, args))
         end
     | doExp (F.HandleExp {body, exnName, handler}) acc =
         let
@@ -830,9 +835,9 @@ struct
               }
           )
         end
-    | doExp (F.FnExp (vid, ty, exp)) acc =
+    | doExp (F.MultiFnExp (params, exp)) acc =
         let val (used, exp) = doExp exp acc
-        in (used, F.FnExp (vid, ty, exp))
+        in (used, F.MultiFnExp (params, exp))
         end
     | doExp (F.ProjectionExp {label, record, fieldTypes}) acc =
         let
@@ -909,12 +914,16 @@ struct
             ([], F.RecordExp []) => (TypedSyntax.VIdSet.union (acc, used), [])
           | _ => (TypedSyntax.VIdSet.union (acc, used), [F.LetExp (decs, exp)])
         end
-    | doIgnoredExp (F.AppExp (exp1, exp2)) acc =
+    | doIgnoredExp (F.MultiAppExp (f, args)) acc =
         let
-          val (used1, exp1) = doExp exp1 acc
-          val (used2, exp2) = doExp exp2 used1
+          val (used1, f) = doExp f acc
+          val (used2, args) =
+            List.foldr
+              (fn (arg, (used, args)) =>
+                 case doExp arg used of (used', arg') => (used', arg' :: args))
+              (used1, []) args
         in
-          (used2, [F.AppExp (exp1, exp2)])
+          (used2, [F.MultiAppExp (f, args)])
         end
     | doIgnoredExp (F.HandleExp {body, exnName, handler}) acc =
         let
@@ -970,7 +979,7 @@ struct
                }]
           )
         end
-    | doIgnoredExp (F.FnExp _) acc = (acc, [])
+    | doIgnoredExp (F.MultiFnExp _) acc = (acc, [])
     | doIgnoredExp (F.ProjectionExp {label = _, record, fieldTypes = _}) acc =
         doIgnoredExp record acc
     | doIgnoredExp (F.TyAbsExp (tyvar, kind, exp)) acc =

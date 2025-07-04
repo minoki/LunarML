@@ -651,8 +651,8 @@ struct
         List.app (fn (_, exp) => goExp (ctx, exp)) fields
     | goExp (ctx, F.LetExp (decs, exp)) =
         (List.app (fn dec => goDec (ctx, dec)) decs; goExp (ctx, exp))
-    | goExp (ctx, F.AppExp (x, y)) =
-        (goExp (ctx, x); goExp (ctx, y))
+    | goExp (ctx, F.MultiAppExp (f, args)) =
+        (goExp (ctx, f); List.app (fn arg => goExp (ctx, arg)) args)
     | goExp (ctx, F.HandleExp {body, exnName = _, handler}) =
         (goExp (ctx, body); goExp (ctx, handler))
     | goExp (ctx, F.IfThenElseExp (x, y, z)) =
@@ -697,7 +697,7 @@ struct
             | LanguageOptions.ERROR => checkRedundancy (ctx, matches, ERROR)
           end
         )
-    | goExp (ctx, F.FnExp (_, _, body)) = goExp (ctx, body)
+    | goExp (ctx, F.MultiFnExp (_, body)) = goExp (ctx, body)
     | goExp (ctx, F.ProjectionExp {label = _, record, fieldTypes = _}) =
         goExp (ctx, record)
     | goExp (ctx, F.TyAbsExp (_, _, exp)) = goExp (ctx, exp)

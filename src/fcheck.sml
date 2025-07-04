@@ -41,9 +41,9 @@ struct
                raise TypeError
                  (Printer.build (FPrinter.doTy 0 applied)
                   ^ ": expected kind _ -> _, but has Type"))
-      | kindOf env (F.FnType (argTy, resultTy)) =
-          ( checkKind (env, F.TypeKind) argTy
-          ; checkKind (env, F.TypeKind) resultTy
+      | kindOf env (F.MultiFnType (params, result)) =
+          ( List.app (checkKind (env, F.TypeKind)) params
+          ; checkKind (env, F.TypeKind) result
           ; F.TypeKind
           )
       | kindOf env (F.ForallType (tv, kind, ty)) =
@@ -104,8 +104,9 @@ struct
                     body
             | _ => F.AppType {applied = applied, arg = arg}
           end
-      | normalizeType env (F.FnType (param, result)) =
-          F.FnType (normalizeType env param, normalizeType env result)
+      | normalizeType env (F.MultiFnType (params, result)) =
+          F.MultiFnType
+            (List.map (normalizeType env) params, normalizeType env result)
       | normalizeType env (F.ForallType (tv, kind, ty)) =
           F.ForallType (tv, kind, normalizeType env ty)
       | normalizeType env (F.ExistsType (tv, kind, ty)) =
@@ -135,9 +136,9 @@ struct
           (F.AppType {applied, arg}, F.AppType {applied = applied', arg = arg'}) =
           sameType' env (applied, applied') andalso sameType' env (arg, arg')
       | sameType' env
-          (F.FnType (paramTy, resultTy), F.FnType (paramTy', resultTy')) =
-          sameType' env (paramTy, paramTy')
-          andalso sameType' env (resultTy, resultTy')
+          (F.MultiFnType (params, result), F.MultiFnType (params', result')) =
+          ListPair.allEq (sameType' env) (params, params')
+          andalso sameType' env (result, result')
       | sameType' (i, tvmap, tvmap')
           (F.ForallType (tv, kind, ty), F.ForallType (tv', kind', ty')) =
           kind = kind'
@@ -622,13 +623,19 @@ struct
           let val env' = inferDecs (env, decs)
           in inferExp (env', exp)
           end
-      | inferExp (env, F.AppExp (f, arg)) =
+      | inferExp (env, F.MultiAppExp (f, args)) =
           let
             val fTy = inferExp (env, f)
           in
             case fTy of
-              F.FnType (paramTy, resultTy) =>
-                (checkExp (env, paramTy, arg); resultTy)
+              F.MultiFnType (params, resultTy) =>
+                ( ListPair.appEq (fn (ty, arg) => checkExp (env, ty, arg))
+                    (params, args)
+                  handle ListPair.UnequalLengths =>
+                    raise TypeError
+                      "invalid function application (arity mismatch)"
+                ; resultTy
+                )
             | _ => raise TypeError "invalid function application"
           end
       | inferExp (env, F.HandleExp {body, exnName, handler}) =
@@ -677,12 +684,12 @@ struct
             List.app checkMatch matches;
             resultTy
           end
-      | inferExp (env, F.FnExp (vid, ty, exp)) =
+      | inferExp (env, F.MultiFnExp (params, exp)) =
           let
             val env' = modifyValEnv
-              (fn m => TypedSyntax.VIdMap.insert (m, vid, ty), env)
+              (fn m => List.foldl TypedSyntax.VIdMap.insert' m params, env)
           in
-            F.FnType (ty, inferExp (env', exp))
+            F.MultiFnType (List.map #2 params, inferExp (env', exp))
           end
       | inferExp (env, F.ProjectionExp {label, record, fieldTypes}) =
           let
@@ -784,18 +791,22 @@ struct
           ; checkExp (env, expectedTy, then')
           ; checkExp (env, expectedTy, else')
           )
-      | checkExp (env, expectedTy, fnexp as F.FnExp (vid, ty, exp)) =
+      | checkExp (env, expectedTy, fnexp as F.MultiFnExp (params, exp)) =
           (case normalizeType (#aliasEnv env) expectedTy of
-             F.FnType (a, b) =>
+             F.MultiFnType (paramTypes, b) =>
                let
                  val env' = modifyValEnv
-                   (fn m => TypedSyntax.VIdMap.insert (m, vid, ty), env)
+                   (fn m => List.foldl TypedSyntax.VIdMap.insert' m params, env)
                in
-                 checkSame
-                   ( #aliasEnv env
-                   , "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
-                   , a
-                   ) ty;
+                 ListPair.appEq
+                   (fn (e, (_, a)) =>
+                      checkSame
+                        ( #aliasEnv env
+                        , "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
+                        , e
+                        ) a) (paramTypes, params)
+                 handle ListPair.UnequalLengths =>
+                   raise TypeError "MultiFnExp arity mismatch";
                  checkExp (env', b, exp)
                end
            | _ => raise TypeError "invalid function expression")

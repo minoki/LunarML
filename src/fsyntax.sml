@@ -10,7 +10,7 @@ sig
     TyVar of TyVar
   | RecordType of Ty Syntax.LabelMap.map
   | AppType of {applied: Ty, arg: Ty}
-  | FnType of Ty * Ty
+  | MultiFnType of Ty list * Ty
   | ForallType of TyVar * Kind * Ty
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
@@ -91,7 +91,7 @@ sig
   | VarExp of TypedSyntax.VId
   | RecordExp of (Syntax.Label * Exp) list
   | LetExp of Dec list * Exp
-  | AppExp of Exp * Exp
+  | MultiAppExp of Exp * Exp list
   | HandleExp of {body: Exp, exnName: TypedSyntax.VId, handler: Exp}
   | IfThenElseExp of Exp * Exp * Exp
   | CaseExp of
@@ -102,7 +102,7 @@ sig
       , matchType: TypedSyntax.match_type
       , resultTy: Ty
       }
-  | FnExp of TypedSyntax.VId * Ty * Exp
+  | MultiFnExp of (TypedSyntax.VId * Ty) list * Exp
   | ProjectionExp of
       {label: Syntax.Label, record: Exp, fieldTypes: Ty Syntax.LabelMap.map}
   | TyAbsExp of TyVar * Kind * Exp
@@ -142,11 +142,14 @@ sig
   val StructLabel: Syntax.StrId -> Syntax.Label
   val ExnPredicateLabel: Syntax.VId -> Syntax.Label
   val ExnPayloadLabel: Syntax.VId -> Syntax.Label
+  val FnExp: TypedSyntax.VId * Ty * Exp -> Exp
+  val AppExp: Exp * Exp -> Exp
   val IntConstExp: IntInf.int * Ty -> Exp
   val WordConstExp: IntInf.int * Ty -> Exp
   val RaiseExp: SourcePos.span * Ty * Exp -> Exp
   val ListExp: Exp vector * Ty -> Exp
   val VectorExp: Exp vector * Ty -> Exp
+  val FnType: Ty * Ty -> Ty
   val TupleType: Ty list -> Ty
   val PairType: Ty * Ty -> Ty
   val TuplePat: SourcePos.span * Pat list -> Pat
@@ -184,7 +187,7 @@ struct
     TyVar of TyVar
   | RecordType of Ty Syntax.LabelMap.map
   | AppType of {applied: Ty, arg: Ty}
-  | FnType of Ty * Ty
+  | MultiFnType of Ty list * Ty
   | ForallType of TyVar * Kind * Ty
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
@@ -265,7 +268,7 @@ struct
   | VarExp of TypedSyntax.VId
   | RecordExp of (Syntax.Label * Exp) list
   | LetExp of Dec list * Exp
-  | AppExp of Exp * Exp
+  | MultiAppExp of Exp * Exp list
   | HandleExp of {body: Exp, exnName: TypedSyntax.VId, handler: Exp}
   | IfThenElseExp of Exp * Exp * Exp
   | CaseExp of
@@ -276,7 +279,7 @@ struct
       , matchType: TypedSyntax.match_type
       , resultTy: Ty
       }
-  | FnExp of TypedSyntax.VId * Ty * Exp
+  | MultiFnExp of (TypedSyntax.VId * Ty) list * Exp
   | ProjectionExp of
       {label: Syntax.Label, record: Exp, fieldTypes: Ty Syntax.LabelMap.map}
   | TyAbsExp of TyVar * Kind * Exp
@@ -319,6 +322,10 @@ struct
     Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".p")
   fun ExnPayloadLabel vid =
     Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".a")
+  fun FnExp (vid, ty, body) =
+    MultiFnExp ([(vid, ty)], body)
+  fun AppExp (a, b) =
+    MultiAppExp (a, [b])
   fun IntConstExp (value, ty) =
     PrimExp (IntConstOp value, [ty], [])
   fun WordConstExp (value, ty) =
@@ -329,6 +336,8 @@ struct
     PrimExp (ListOp, [elemTy], Vector.foldr (op::) [] exps)
   fun VectorExp (exps, elemTy) =
     PrimExp (VectorOp, [elemTy], Vector.foldr (op::) [] exps)
+  fun FnType (param, result) =
+    MultiFnType ([param], result)
   fun TupleType xs =
     let
       fun doFields _ [] acc = acc
@@ -403,7 +412,8 @@ struct
       fun check (TyVar tv') = TypedSyntax.eqTyVar (tv, tv')
         | check (RecordType xs) = Syntax.LabelMap.exists check xs
         | check (AppType {applied, arg}) = check applied orelse check arg
-        | check (FnType (ty1, ty2)) = check ty1 orelse check ty2
+        | check (MultiFnType (params, result)) =
+            List.exists check params orelse check result
         | check (ForallType (tv', _, ty)) =
             if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (ExistsType (tv', _, ty)) =
@@ -423,8 +433,8 @@ struct
             RecordType (Syntax.LabelMap.map go fields)
         | go (AppType {applied, arg}) =
             AppType {applied = go applied, arg = go arg}
-        | go (FnType (ty1, ty2)) =
-            FnType (go ty1, go ty2)
+        | go (MultiFnType (params, result)) =
+            MultiFnType (List.map go params, go result)
         | go (ty as ForallType (tv', kind, ty')) =
             if TypedSyntax.eqTyVar (tv, tv') then
               ty
@@ -479,8 +489,8 @@ struct
             RecordType (Syntax.LabelMap.map doTy fields)
         | doTy (AppType {applied, arg}) =
             AppType {applied = doTy applied, arg = doTy arg}
-        | doTy (FnType (ty1, ty2)) =
-            FnType (doTy ty1, doTy ty2)
+        | doTy (MultiFnType (params, result)) =
+            MultiFnType (List.map doTy params, doTy result)
         | doTy (ForallType (tv, kind, ty)) =
             if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
               ForallType
@@ -570,8 +580,8 @@ struct
             RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
         | doExp (LetExp (decs, exp)) =
             LetExp (List.map doDec decs, doExp exp)
-        | doExp (AppExp (exp1, exp2)) =
-            AppExp (doExp exp1, doExp exp2)
+        | doExp (MultiAppExp (exp1, exp2)) =
+            MultiAppExp (doExp exp1, List.map doExp exp2)
         | doExp (HandleExp {body, exnName, handler}) =
             HandleExp
               {body = doExp body, exnName = exnName, handler = doExp handler}
@@ -589,8 +599,9 @@ struct
               , matchType = matchType
               , resultTy = doTy resultTy
               }
-        | doExp (FnExp (vid, ty, exp)) =
-            FnExp (vid, doTy ty, doExp exp)
+        | doExp (MultiFnExp (params, exp)) =
+            MultiFnExp
+              (List.map (fn (vid, ty) => (vid, doTy ty)) params, doExp exp)
         | doExp (ProjectionExp {label, record, fieldTypes}) =
             ProjectionExp
               { label = label
@@ -675,8 +686,9 @@ struct
           acc fields
     | freeTyVarsInTy (bound, AppType {applied, arg}) acc =
         freeTyVarsInTy (bound, applied) (freeTyVarsInTy (bound, arg) acc)
-    | freeTyVarsInTy (bound, FnType (ty1, ty2)) acc =
-        freeTyVarsInTy (bound, ty1) (freeTyVarsInTy (bound, ty2) acc)
+    | freeTyVarsInTy (bound, MultiFnType (params, result)) acc =
+        List.foldl (fn (param, acc) => freeTyVarsInTy (bound, param) acc)
+          (freeTyVarsInTy (bound, result) acc) params
     | freeTyVarsInTy (bound, ForallType (tv, _, ty)) acc =
         freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
     | freeTyVarsInTy (bound, ExistsType (tv, _, ty)) acc =
@@ -755,8 +767,9 @@ struct
         in
           freeTyVarsInExp (bound, exp) acc
         end
-    | freeTyVarsInExp (bound, AppExp (exp1, exp2)) acc =
-        freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) acc)
+    | freeTyVarsInExp (bound, MultiAppExp (f, args)) acc =
+        List.foldl (fn (arg, acc) => freeTyVarsInExp (bound, arg) acc)
+          (freeTyVarsInExp (bound, f) acc) args
     | freeTyVarsInExp (bound, HandleExp {body, exnName = _, handler}) acc =
         freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler) acc)
     | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc =
@@ -783,8 +796,9 @@ struct
                freeTyVarsInPat (bound, pat) (freeTyVarsInExp (bound, exp) acc))
             acc matches
         end
-    | freeTyVarsInExp (bound, FnExp (_, ty, exp)) acc =
-        freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
+    | freeTyVarsInExp (bound, MultiFnExp (params, exp)) acc =
+        List.foldl (fn ((_, ty), acc) => freeTyVarsInTy (bound, ty) acc)
+          (freeTyVarsInExp (bound, exp) acc) params
     | freeTyVarsInExp (bound, ProjectionExp {label = _, record, fieldTypes}) acc =
         freeTyVarsInExp (bound, record)
           (Syntax.LabelMap.foldl
@@ -946,8 +960,9 @@ struct
         in
           freeVarsInExp (bound, exp) acc
         end
-    | freeVarsInExp (bound, AppExp (exp1, exp2)) acc =
-        freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) acc)
+    | freeVarsInExp (bound, MultiAppExp (f, args)) acc =
+        List.foldl (fn (arg, acc) => freeVarsInExp (bound, arg) acc)
+          (freeVarsInExp (bound, f) acc) args
     | freeVarsInExp (bound, HandleExp {body, exnName, handler}) acc =
         freeVarsInExp (bound, body)
           (freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler) acc)
@@ -970,8 +985,13 @@ struct
              freeVarsInExp (varsInPat pat bound, exp)
                (freeVarsInPat (bound, pat) acc))
           (freeVarsInExp (bound, subjectExp) acc) matches
-    | freeVarsInExp (bound, FnExp (vid, _, exp)) acc =
-        freeVarsInExp (TypedSyntax.VIdSet.add (bound, vid), exp) acc
+    | freeVarsInExp (bound, MultiFnExp (params, exp)) acc =
+        freeVarsInExp
+          ( List.foldl
+              (fn ((vid, _), bound) => TypedSyntax.VIdSet.add (bound, vid))
+              bound params
+          , exp
+          ) acc
     | freeVarsInExp (bound, ProjectionExp {label = _, record, fieldTypes = _})
         acc =
         freeVarsInExp (bound, record) acc
@@ -1056,8 +1076,11 @@ struct
           end
       | print_Ty (AppType {applied, arg}) =
           "AppType{applied=" ^ print_Ty applied ^ ",arg=" ^ print_Ty arg ^ "}"
-      | print_Ty (FnType (x, y)) =
-          "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
+      | print_Ty (MultiFnType ([param], result)) =
+          "FnType(" ^ print_Ty param ^ "," ^ print_Ty result ^ ")"
+      | print_Ty (MultiFnType (params, result)) =
+          "MultiFnType(" ^ Syntax.print_list print_Ty params ^ ","
+          ^ print_Ty result ^ ")"
       | print_Ty (ForallType (tv, _, x)) =
           "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
       | print_Ty (ExistsType (tv, _, x)) =
@@ -1203,8 +1226,11 @@ struct
            | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys)
       | print_Exp (LetExp (decs, x)) =
           "LetExp(" ^ Syntax.print_list print_Dec decs ^ "," ^ print_Exp x ^ ")"
-      | print_Exp (AppExp (x, y)) =
-          "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+      | print_Exp (MultiAppExp (f, [arg])) =
+          "AppExp(" ^ print_Exp f ^ "," ^ print_Exp arg ^ ")"
+      | print_Exp (MultiAppExp (f, args)) =
+          "MultiAppExp(" ^ print_Exp f ^ "," ^ Syntax.print_list print_Exp args
+          ^ ")"
       | print_Exp (HandleExp {body, exnName, handler}) =
           "HandleExp{body=" ^ print_Exp body ^ ",exnName="
           ^ TypedSyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler
@@ -1216,9 +1242,13 @@ struct
           "CaseExp(" ^ print_Exp subjectExp ^ "," ^ print_Ty subjectTy ^ ","
           ^ Syntax.print_list (Syntax.print_pair (print_Pat, print_Exp)) matches
           ^ ")"
-      | print_Exp (FnExp (pname, pty, body)) =
+      | print_Exp (MultiFnExp ([(pname, pty)], body)) =
           "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body
           ^ ")"
+      | print_Exp (MultiFnExp (params, body)) =
+          "MultiFnExp("
+          ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) params
+          ^ "," ^ print_Exp body ^ ")"
       | print_Exp (ProjectionExp {label, record, fieldTypes = _}) =
           "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",record="
           ^ print_Exp record ^ "}"
@@ -1405,7 +1435,7 @@ struct
            )
          of
            ( SOME {predicate, getPayload = SOME getPayload}
-           , SOME (FSyntax.FnType (payloadTy, _))
+           , SOME (FSyntax.MultiFnType ([payloadTy], _))
            ) =>
              SOME
                { predicate = predicate
@@ -1443,7 +1473,7 @@ struct
                              Syntax.LabelMap.find
                                (fieldTypes, FSyntax.ValueLabel vid)
                            of
-                             SOME (FSyntax.FnType (payloadTy, _)) =>
+                             SOME (FSyntax.MultiFnType ([payloadTy], _)) =>
                                SOME
                                  { get =
                                      FSyntax.ProjectionExp
@@ -3329,7 +3359,7 @@ struct
                    )
                in
                  case typeSchemeToTy (ctx, env, tysc) of
-                   F.FnType (payloadTy, _) =>
+                   F.MultiFnType ([payloadTy], _) =>
                      Syntax.LabelMap.insert
                        ( fields
                        , F.ExnPayloadLabel vid
@@ -3595,7 +3625,7 @@ struct
             val ty =
               List.foldl
                 (fn ( {typeFunction = _, admitsEquality = true}
-                    , F.FnType (_, ty)
+                    , F.MultiFnType (_, ty)
                     ) => ty
                   | ({typeFunction = _, admitsEquality = true}, _) =>
                    emitFatalError (ctx, [sourceSpan], "invalid functor type")
@@ -3604,7 +3634,7 @@ struct
             val exp = F.AppExp (exp, argumentStr) (* apply the structure *)
             val ty =
               case ty of
-                F.FnType (_, ty) => ty
+                F.MultiFnType (_, ty) => ty
               | _ => emitFatalError (ctx, [sourceSpan], "invalid functor type")
           in
             (env (* What to do? *), decs, exp, ty)

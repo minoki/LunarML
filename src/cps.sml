@@ -755,10 +755,10 @@ struct
                               val contParam = genContSym ctx
                             in
                               case stripTyAbs exp of
-                                F.FnExp (param, _, body) =>
+                                F.MultiFnExp (params, body) =>
                                   { name = vid
                                   , contParam = contParam
-                                  , params = [param]
+                                  , params = List.map #1 params
                                   , body =
                                       transformT (ctx, env) body ([], contParam)
                                   , attr = {alwaysInline = false}
@@ -814,13 +814,23 @@ struct
           in
             doDecs (env, decs, revDecs)
           end
-      | F.AppExp (applied, arg) =>
+      | F.MultiAppExp (applied, args) =>
           transform (ctx, env) applied {revDecs = revDecs, resultHint = NONE}
             (fn (revDecs, f) =>
-               transform (ctx, env) arg {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, v) =>
+               foldlCont
+                 (fn (arg, (revDecs, acc), cont) =>
+                    transform (ctx, env) arg
+                      {revDecs = revDecs, resultHint = NONE}
+                      (fn (revDecs, v) => cont (revDecs, v :: acc)))
+                 (revDecs, []) args
+                 (fn (revDecs, revArgs) =>
                     reify (ctx, revDecs, k) (fn j =>
-                      C.App {applied = f, cont = j, args = [v], attr = {}})))
+                      C.App
+                        { applied = f
+                        , cont = j
+                        , args = List.rev revArgs
+                        , attr = {}
+                        })))
       | F.HandleExp {body, exnName, handler} =>
           reify (ctx, revDecs, k) (fn j =>
             let
@@ -843,7 +853,7 @@ struct
                    , elseCont = transformT (ctx, env) e3 ([], j)
                    }))
       | F.CaseExp _ => raise Fail "CaseExp: not supported here"
-      | F.FnExp (vid, _, body) =>
+      | F.MultiFnExp (params, body) =>
           let
             val f =
               case getResultHint k of
@@ -853,7 +863,7 @@ struct
             val dec = C.ValDec
               { exp = C.Abs
                   { contParam = kk
-                  , params = [vid]
+                  , params = List.map #1 params
                   , body = transformT (ctx, env) body ([], kk)
                   , attr = {alwaysInline = false}
                   }
