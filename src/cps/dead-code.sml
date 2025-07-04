@@ -9,7 +9,7 @@ local
   structure CpsDeadCodeAnalysis :>
   sig
     type usage
-    val analyze: CSyntax.CExp -> usage
+    val analyze: CSyntax.Stat -> usage
     val isUsed: usage * TypedSyntax.VId -> bool
   end =
   struct
@@ -90,7 +90,7 @@ local
             goExp (g, body, goExp (g, h, acc))
         | goExp (_, C.Raise (_, x), acc) = addValue (x, acc)
         | goExp (_, C.Unreachable, acc) = acc
-      (*: val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
+      (*: val makeGraph : CSyntax.Stat -> graph * TypedSyntax.VIdSet.set *)
       fun makeGraph program =
         let
           val g = TypedSyntax.VIdTable.mkTable (1, Fail
@@ -135,7 +135,7 @@ local
     val getValueUsage: usage_table * TypedSyntax.VId -> usage option
     val getContUsage: cont_usage_table * CSyntax.CVar -> cont_usage option
     val analyze:
-      CSyntax.CExp
+      CSyntax.Stat
       -> { usage: usage_table
          , rec_usage: usage_table
          , cont_usage: cont_usage_table
@@ -214,13 +214,13 @@ local
         fun add (env, v) =
           if TypedSyntax.VIdTable.inDomain env v then
             raise Fail
-              ("goCExp: duplicate name in AST: " ^ TypedSyntax.print_VId v)
+              ("goStat: duplicate name in AST: " ^ TypedSyntax.print_VId v)
           else
             TypedSyntax.VIdTable.insert env (v, ref neverUsed)
         fun addC (cenv, v) =
           if C.CVarTable.inDomain cenv v then
             raise Fail
-              ("goCExp: duplicate continuation name in AST: "
+              ("goStat: duplicate continuation name in AST: "
                ^ Int.toString (C.CVar.toInt v))
           else
             C.CVarTable.insert cenv (v, ref neverUsedCont)
@@ -242,7 +242,7 @@ local
               ) =
               ( List.app (fn p => add (env, p)) params
               ; addC (cenv, contParam)
-              ; goCExp (env, renv, cenv, crenv, body)
+              ; goStat (env, renv, cenv, crenv, body)
               )
         and goDec (env, renv, cenv, crenv) =
           fn C.ValDec {exp, results} =>
@@ -265,7 +265,7 @@ local
                 (fn {contParam, params, body, ...} =>
                    ( addC (cenv, contParam)
                    ; List.app (fn p => add (env, p)) params
-                   ; goCExp (env, renv, cenv, crenv, body)
+                   ; goStat (env, renv, cenv, crenv, body)
                    )) defs;
               TypedSyntax.VIdMap.appi
                 (fn (f, v) => TypedSyntax.VIdTable.insert renv (f, v))
@@ -276,7 +276,7 @@ local
             end
            | C.ContDec {name, params, body, attr = _} =>
             ( List.app (Option.app (fn p => add (env, p))) params
-            ; goCExp (env, renv, cenv, crenv, body)
+            ; goStat (env, renv, cenv, crenv, body)
             ; addC (cenv, name)
             )
            | C.RecContDec defs =>
@@ -292,7 +292,7 @@ local
               List.app
                 (fn (_, params, body) =>
                    ( List.app (Option.app (fn p => add (env, p))) params
-                   ; goCExp (env, renv, cenv, crenv, body)
+                   ; goStat (env, renv, cenv, crenv, body)
                    )) defs;
               C.CVarMap.appi (fn (f, v) => C.CVarTable.insert crenv (f, v))
                 recursiveCEnv;
@@ -302,17 +302,17 @@ local
             end
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
             List.app (fn (_, vid) => add (env, vid)) specs
-        and goCExp
+        and goStat
           ( env: (usage ref) TypedSyntax.VIdTable.hash_table
           , renv
           , cenv: (cont_usage ref) C.CVarTable.hash_table
           , crenv
-          , cexp
+          , stat
           ) =
-          case cexp of
+          case stat of
             C.Let {decs, cont} =>
               ( List.app (goDec (env, renv, cenv, crenv)) decs
-              ; goCExp (env, renv, cenv, crenv, cont)
+              ; goStat (env, renv, cenv, crenv, cont)
               )
           | C.App {applied, cont, args, attr = _} =>
               ( useValueAsCallee (env, applied)
@@ -323,16 +323,16 @@ local
               (useContVarDirect cenv applied; List.app (useValue env) args)
           | C.If {cond, thenCont, elseCont} =>
               ( useValue env cond
-              ; goCExp (env, renv, cenv, crenv, thenCont)
-              ; goCExp (env, renv, cenv, crenv, elseCont)
+              ; goStat (env, renv, cenv, crenv, thenCont)
+              ; goStat (env, renv, cenv, crenv, elseCont)
               )
           | C.Handle
               {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
               ( useContVarIndirect cenv successfulExitOut
               ; addC (cenv, successfulExitIn)
-              ; goCExp (env, renv, cenv, crenv, body)
+              ; goStat (env, renv, cenv, crenv, body)
               ; add (env, e)
-              ; goCExp (env, renv, cenv, crenv, h)
+              ; goStat (env, renv, cenv, crenv, h)
               )
           | C.Raise (_, x) => useValue env x
           | C.Unreachable => ()
@@ -349,7 +349,7 @@ local
           val crusage =
             CSyntax.CVarTable.mkTable (1, Fail "crusage table lookup failed")
         in
-          goCExp (usage, rusage, cusage, crusage, exp);
+          goStat (usage, rusage, cusage, crusage, exp);
           { usage = usage
           , rec_usage = rusage
           , cont_usage = cusage
@@ -362,7 +362,7 @@ local
 in
   structure CpsDeadCodeElimination:
   sig
-    val goCExp: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+    val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
   end =
   struct
     local
@@ -402,7 +402,7 @@ in
                        )
                    | SOME {call = ONCE, other = NEVER} =>
                        let
-                         val body = simplifyCExp
+                         val body = simplifyStat
                            (ctx, env, cenv, subst, csubst, body)
                          val env = TypedSyntax.VIdMap.insert
                            ( env
@@ -423,7 +423,7 @@ in
                        end
                    | _ =>
                        let
-                         val body = simplifyCExp
+                         val body = simplifyStat
                            (ctx, env, cenv, subst, csubst, body)
                          val exp = C.Abs
                            { contParam = contParam
@@ -476,7 +476,7 @@ in
                        { name = name
                        , contParam = contParam
                        , params = params
-                       , body = simplifyCExp
+                       , body = simplifyStat
                            (ctx, env, cenv, subst, csubst, body)
                        , attr = attr
                        }) defs
@@ -501,11 +501,11 @@ in
                    ((case appliedCont of
                        SOME c => c = name
                      | NONE => false)
-                    orelse CpsSimplify.sizeOfCExp (body, 10) >= 0)
+                    orelse CpsSimplify.sizeOfStat (body, 10) >= 0)
                  then (* Inline small continuations *)
                    let
                      val () = #simplificationOccurred (#base ctx) := true
-                     val body = simplifyCExp
+                     val body = simplifyStat
                        (ctx, env, cenv, subst, csubst, body)
                      val cenv = C.CVarMap.insert
                        (cenv, name, (params, SOME body))
@@ -514,7 +514,7 @@ in
                    end
                  else
                    let
-                     val body = simplifyCExp
+                     val body = simplifyStat
                        (ctx, env, cenv, subst, csubst, body)
                      val params =
                        List.map
@@ -552,7 +552,7 @@ in
                      (fn (name, params, body) =>
                         ( name
                         , params
-                        , simplifyCExp (ctx, env, cenv, subst, csubst, body)
+                        , simplifyStat (ctx, env, cenv, subst, csubst, body)
                         )) defs)
               in
                 (env, cenv, subst, csubst, dec :: acc)
@@ -576,10 +576,10 @@ in
                   (env, cenv, subst, csubst, dec :: acc)
                 end
             end
-      and simplifyCExp
+      and simplifyStat
         ( ctx: Context
         , env: CpsSimplify.value_info TypedSyntax.VIdMap.map
-        , cenv: ((C.Var option) list * C.CExp option) C.CVarMap.map
+        , cenv: ((C.Var option) list * C.Stat option) C.CVarMap.map
         , subst: C.Value TypedSyntax.VIdMap.map
         , csubst: C.CVar C.CVarMap.map
         , e
@@ -595,7 +595,7 @@ in
                 List.foldl (simplifyDec (ctx, appliedCont))
                   (env, cenv, subst, csubst, []) decs
             in
-              CpsTransform.prependRevDecs (revDecs, simplifyCExp
+              CpsTransform.prependRevDecs (revDecs, simplifyStat
                 (ctx, env, cenv, subst, csubst, cont))
             end
         | C.App {applied, cont, args, attr} =>
@@ -657,7 +657,7 @@ in
                                      | _ => false
                                  in
                                    if canOmitAlphaConversion then
-                                     CpsSimplify.substCExp
+                                     CpsSimplify.substStat
                                        ( subst
                                        , csubst
                                        , body
@@ -717,7 +717,7 @@ in
                       | _ => false
                   in
                     if canOmitAlphaConversion then
-                      CpsSimplify.substCExp
+                      CpsSimplify.substStat
                         (subst, csubst, body) (* no alpha conversion *)
                     else
                       CpsSimplify.alphaConvert (#base ctx, subst, csubst, body)
@@ -728,23 +728,23 @@ in
             (case CpsSimplify.substValue subst cond of
                C.BoolConst true =>
                  ( #simplificationOccurred (#base ctx) := true
-                 ; simplifyCExp (ctx, env, cenv, subst, csubst, thenCont)
+                 ; simplifyStat (ctx, env, cenv, subst, csubst, thenCont)
                  )
              | C.BoolConst false =>
                  ( #simplificationOccurred (#base ctx) := true
-                 ; simplifyCExp (ctx, env, cenv, subst, csubst, elseCont)
+                 ; simplifyStat (ctx, env, cenv, subst, csubst, elseCont)
                  )
              | cond =>
                  C.If
                    { cond = cond
-                   , thenCont = simplifyCExp
+                   , thenCont = simplifyStat
                        (ctx, env, cenv, subst, csubst, thenCont)
-                   , elseCont = simplifyCExp
+                   , elseCont = simplifyStat
                        (ctx, env, cenv, subst, csubst, elseCont)
                    })
         | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
             C.Handle
-              { body = simplifyCExp
+              { body = simplifyStat
                   ( ctx
                   , env
                   , C.CVarMap.empty (* do not inline across 'handle' *)
@@ -752,14 +752,14 @@ in
                   , csubst
                   , body
                   )
-              , handler = (e, simplifyCExp (ctx, env, cenv, subst, csubst, h))
+              , handler = (e, simplifyStat (ctx, env, cenv, subst, csubst, h))
               , successfulExitIn = successfulExitIn
               , successfulExitOut =
                   CpsSimplify.substCVar csubst successfulExitOut
               }
         | C.Raise (span, x) => C.Raise (span, CpsSimplify.substValue subst x)
         | C.Unreachable => e
-      fun goCExp (ctx: CpsSimplify.Context, exp) =
+      fun goStat (ctx: CpsSimplify.Context, exp) =
         let
           val usage = CpsUsageAnalysis.analyze exp
           val ctx' =
@@ -771,7 +771,7 @@ in
             , dead_code_analysis = #dead_code_analysis usage
             }
         in
-          simplifyCExp
+          simplifyStat
             ( ctx'
             , TypedSyntax.VIdMap.empty
             , C.CVarMap.empty

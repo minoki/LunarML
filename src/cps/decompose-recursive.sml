@@ -4,7 +4,7 @@
  *)
 structure CpsDecomposeRecursive:
 sig
-  val goCExp: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+  val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
   local structure C = CSyntax
@@ -17,7 +17,7 @@ struct
             { exp = C.Abs
                 { contParam = contParam
                 , params = params
-                , body = goCExp (ctx, body)
+                , body = goStat (ctx, body)
                 , attr = attr
                 }
             , results = results
@@ -31,7 +31,7 @@ struct
                    { name = name
                    , contParam = contParam
                    , params = params
-                   , body = goCExp (ctx, body)
+                   , body = goStat (ctx, body)
                    , attr = attr
                    }) defs
             val defined =
@@ -102,38 +102,38 @@ struct
           C.ContDec
             { name = name
             , params = params
-            , body = goCExp (ctx, body)
+            , body = goStat (ctx, body)
             , attr = attr
             } :: acc
       | C.RecContDec defs =>
           let
             val defs =
               List.map
-                (fn (name, params, body) => (name, params, goCExp (ctx, body)))
+                (fn (name, params, body) => (name, params, goStat (ctx, body)))
                 defs
           in
             C.RecContDec defs :: acc
           end
       | C.ESImportDec _ => dec :: acc
-    and goCExp (ctx: CpsSimplify.Context, exp) =
+    and goStat (ctx: CpsSimplify.Context, exp) =
       case exp of
         C.Let {decs, cont} =>
           C.Let
             { decs = List.rev (List.foldl (goDec ctx) [] decs)
-            , cont = goCExp (ctx, cont)
+            , cont = goStat (ctx, cont)
             }
       | C.App _ => exp
       | C.AppCont _ => exp
       | C.If {cond, thenCont, elseCont} =>
           C.If
             { cond = cond
-            , thenCont = goCExp (ctx, thenCont)
-            , elseCont = goCExp (ctx, elseCont)
+            , thenCont = goStat (ctx, thenCont)
+            , elseCont = goStat (ctx, elseCont)
             }
       | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
           C.Handle
-            { body = goCExp (ctx, body)
-            , handler = (e, goCExp (ctx, h))
+            { body = goStat (ctx, body)
+            , handler = (e, goStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }

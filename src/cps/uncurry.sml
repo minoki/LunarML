@@ -4,12 +4,12 @@
  *)
 structure CpsUncurry:
 sig
-  val goCExp: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+  val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
   local structure C = CSyntax
   in
-    (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.CExp) option *)
+    (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.Stat) option *)
     fun tryUncurry
           (C.Abs
              { contParam
@@ -34,7 +34,7 @@ struct
           let
             val () = #simplificationOccurred ctx := true
             val workerName = CpsSimplify.renewVId (ctx, name)
-            val body = simplifyCExp (ctx, body)
+            val body = simplifyStat (ctx, body)
             val workerDec = C.ValDec
               { exp = C.Abs
                   { contParam = k
@@ -101,7 +101,7 @@ struct
                    { name = name
                    , contParam = contParam
                    , params = params
-                   , body = simplifyCExp (ctx, body)
+                   , body = simplifyStat (ctx, body)
                    , attr = attr
                    }) defs
           in
@@ -111,7 +111,7 @@ struct
           C.ContDec
             { name = name
             , params = params
-            , body = simplifyCExp (ctx, body)
+            , body = simplifyStat (ctx, body)
             , attr = attr
             } :: acc
       | C.RecContDec defs =>
@@ -119,35 +119,35 @@ struct
             val defs =
               List.map
                 (fn (name, params, body) =>
-                   (name, params, simplifyCExp (ctx, body))) defs
+                   (name, params, simplifyStat (ctx, body))) defs
           in
             C.RecContDec defs :: acc
           end
       | C.ESImportDec _ => dec :: acc
-    and simplifyCExp (ctx: CpsSimplify.Context, exp) =
+    and simplifyStat (ctx: CpsSimplify.Context, exp) =
       case exp of
         C.Let {decs, cont} =>
           C.Let
             { decs = List.rev (List.foldl (simplifyDec ctx) [] decs)
-            , cont = simplifyCExp (ctx, cont)
+            , cont = simplifyStat (ctx, cont)
             }
       | C.App _ => exp
       | C.AppCont _ => exp
       | C.If {cond, thenCont, elseCont} =>
           C.If
             { cond = cond
-            , thenCont = simplifyCExp (ctx, thenCont)
-            , elseCont = simplifyCExp (ctx, elseCont)
+            , thenCont = simplifyStat (ctx, thenCont)
+            , elseCont = simplifyStat (ctx, elseCont)
             }
       | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
           C.Handle
-            { body = simplifyCExp (ctx, body)
-            , handler = (e, simplifyCExp (ctx, h))
+            { body = simplifyStat (ctx, body)
+            , handler = (e, simplifyStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
       | C.Raise _ => exp
       | C.Unreachable => exp
-    val goCExp = simplifyCExp
+    val goStat = simplifyStat
   end (* local *)
 end; (* structure CpsUncurry *)

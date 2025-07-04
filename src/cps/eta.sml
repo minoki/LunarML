@@ -4,7 +4,7 @@
  *)
 structure CpsEtaConvert:
 sig
-  val go: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+  val go: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
   structure C = CSyntax
@@ -57,7 +57,7 @@ struct
           , C.ContDec
               { name = name
               , params = params
-              , body = goCExp (env, body)
+              , body = goStat (env, body)
               , attr = attr
               } :: acc
           )
@@ -66,7 +66,7 @@ struct
         , C.ContDec
             { name = name
             , params = params
-            , body = goCExp (env, body)
+            , body = goStat (env, body)
             , attr = attr
             } :: acc
         )
@@ -74,17 +74,17 @@ struct
         let
           val defs =
             List.map
-              (fn (name, params, body) => (name, params, goCExp (env, body)))
+              (fn (name, params, body) => (name, params, goStat (env, body)))
               defs
         in
           (env, C.RecContDec defs :: acc)
         end
     | C.ESImportDec _ => (env, dec :: acc)
-  and goCExp (env, exp) =
+  and goStat (env, exp) =
     case exp of
       C.Let {decs, cont} =>
         let val (env, revDecs) = List.foldl goDec (env, []) decs
-        in C.Let {decs = List.rev revDecs, cont = goCExp (env, cont)}
+        in C.Let {decs = List.rev revDecs, cont = goStat (env, cont)}
         end
     | C.App {applied, cont, args, attr} =>
         C.App
@@ -98,18 +98,18 @@ struct
     | C.If {cond, thenCont, elseCont} =>
         C.If
           { cond = cond
-          , thenCont = goCExp (env, thenCont)
-          , elseCont = goCExp (env, elseCont)
+          , thenCont = goStat (env, thenCont)
+          , elseCont = goStat (env, elseCont)
           }
     | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
         C.Handle
           { body = goFunction body
-          , handler = (e, goCExp (env, h))
+          , handler = (e, goStat (env, h))
           , successfulExitIn = successfulExitIn
           , successfulExitOut = goCont (env, successfulExitOut)
           }
     | C.Raise _ => exp
     | C.Unreachable => exp
-  and goFunction exp = goCExp (C.CVarMap.empty, exp)
+  and goFunction exp = goStat (C.CVarMap.empty, exp)
   fun go (_: CpsSimplify.Context, exp) = goFunction exp
 end; (* structure CpsEtaConvert *)

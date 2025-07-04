@@ -46,20 +46,20 @@ sig
   | Abs of
       { contParam: CVar
       , params: Var list
-      , body: CExp
+      , body: Stat
       , attr: AbsAttr
       } (* non-recursive function *)
   and Dec =
     ValDec of {exp: SimpleExp, results: (Var option) list}
   | RecDec of
-      {name: Var, contParam: CVar, params: Var list, body: CExp, attr: AbsAttr} list (* recursive function *)
+      {name: Var, contParam: CVar, params: Var list, body: Stat, attr: AbsAttr} list (* recursive function *)
   | ContDec of
-      {name: CVar, params: (Var option) list, body: CExp, attr: ContAttr}
-  | RecContDec of (CVar * (Var option) list * CExp) list
+      {name: CVar, params: (Var option) list, body: Stat, attr: ContAttr}
+  | RecContDec of (CVar * (Var option) list * Stat) list
   | ESImportDec of
       {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
-  and CExp =
-    Let of {decs: Dec list, cont: CExp}
+  and Stat =
+    Let of {decs: Dec list, cont: Stat}
   | App of
       { applied: Value
       , cont: CVar
@@ -67,20 +67,20 @@ sig
       , attr: AppAttr
       } (* tail call *) (* return arity? *)
   | AppCont of {applied: CVar, args: Value list}
-  | If of {cond: Value, thenCont: CExp, elseCont: CExp}
+  | If of {cond: Value, thenCont: Stat, elseCont: Stat}
   | Handle of
-      { body: CExp
-      , handler: Var * CExp
+      { body: Stat
+      , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
   | Raise of SourcePos.span * Value
   | Unreachable
   val isDiscardable: SimpleExp -> bool
-  val containsApp: CExp -> bool
-  val freeVarsInExp: TypedSyntax.VIdSet.set * CExp * TypedSyntax.VIdSet.set
+  val containsApp: Stat -> bool
+  val freeVarsInExp: TypedSyntax.VIdSet.set * Stat * TypedSyntax.VIdSet.set
                      -> TypedSyntax.VIdSet.set
-  val recurseCExp: (CExp -> CExp) -> CExp -> CExp
+  val recurseStat: (Stat -> Stat) -> Stat -> Stat
 end =
 struct
   exception InvalidCode of string
@@ -143,20 +143,20 @@ struct
   | Abs of
       { contParam: CVar
       , params: Var list
-      , body: CExp
+      , body: Stat
       , attr: AbsAttr
       } (* non-recursive function *)
   and Dec =
     ValDec of {exp: SimpleExp, results: (Var option) list}
   | RecDec of
-      {name: Var, contParam: CVar, params: Var list, body: CExp, attr: AbsAttr} list (* recursive function *)
+      {name: Var, contParam: CVar, params: Var list, body: Stat, attr: AbsAttr} list (* recursive function *)
   | ContDec of
-      {name: CVar, params: (Var option) list, body: CExp, attr: ContAttr}
-  | RecContDec of (CVar * (Var option) list * CExp) list
+      {name: CVar, params: (Var option) list, body: Stat, attr: ContAttr}
+  | RecContDec of (CVar * (Var option) list * Stat) list
   | ESImportDec of
       {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
-  and CExp =
-    Let of {decs: Dec list, cont: CExp}
+  and Stat =
+    Let of {decs: Dec list, cont: Stat}
   | App of
       { applied: Value
       , cont: CVar
@@ -164,10 +164,10 @@ struct
       , attr: AppAttr
       } (* tail call *) (* return arity? *)
   | AppCont of {applied: CVar, args: Value list}
-  | If of {cond: Value, thenCont: CExp, elseCont: CExp}
+  | If of {cond: Value, thenCont: Stat, elseCont: Stat}
   | Handle of
-      { body: CExp
-      , handler: Var * CExp
+      { body: Stat
+      , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
       }
@@ -366,7 +366,7 @@ struct
           freeVarsInValue bound (x, acc)
       | freeVarsInExp (_, Unreachable, acc) = acc
 
-    fun recurseCExp f =
+    fun recurseStat f =
       let
         fun goSimpleExp (e as PrimOp _) = e
           | goSimpleExp (e as Record _) = e
@@ -432,11 +432,11 @@ sig
   type Context =
     {targetInfo: TargetInfo.target_info, nextVId: int ref, exportAsRecord: bool}
   val initialEnv: CSyntax.Value TypedSyntax.VIdMap.map
-  val prependRevDecs: CSyntax.Dec list * CSyntax.CExp -> CSyntax.CExp
+  val prependRevDecs: CSyntax.Dec list * CSyntax.Stat -> CSyntax.Stat
   val transformT: Context * CSyntax.Value TypedSyntax.VIdMap.map
                   -> FSyntax.Exp
                   -> CSyntax.Dec list * CSyntax.CVar
-                  -> CSyntax.CExp
+                  -> CSyntax.Stat
 end =
 struct
   local
@@ -475,7 +475,7 @@ struct
 
     datatype cont =
       REIFIED of C.CVar
-    | META of C.Var option * (C.Dec list * C.Value -> C.CExp)
+    | META of C.Var option * (C.Dec list * C.Value -> C.Stat)
     fun prependRevDecs ([], cont) = cont
       | prependRevDecs (revDecs, C.Let {decs, cont}) =
           C.Let {decs = List.revAppend (revDecs, decs), cont = cont}
@@ -513,16 +513,16 @@ struct
         , (InitialEnv.VId_nil, C.Nil)
         ]
     (*:
-    val transform : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option } -> (C.Dec list * C.Value -> C.CExp) -> C.CExp
-    and transformT : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * C.CVar -> C.CExp
-    and transformX : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * cont -> C.CExp
+    val transform : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option } -> (C.Dec list * C.Value -> C.Stat) -> C.Stat
+    and transformT : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * C.CVar -> C.Stat
+    and transformX : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * cont -> C.Stat
      *)
     fun transform (ctx, env) exp {revDecs, resultHint} k =
       transformX (ctx, env) exp (revDecs, META (resultHint, k))
     and transformT (ctx, env) exp (revDecs, k) =
       transformX (ctx, env) exp (revDecs, REIFIED k)
     and transformX (ctx: Context, env) (exp: F.Exp)
-      (revDecs: C.Dec list, k: cont) : C.CExp =
+      (revDecs: C.Dec list, k: cont) : C.Stat =
       case exp of
         F.PrimExp
           ( F.PrimCall Primitives.DelimCont_pushPrompt
@@ -949,26 +949,26 @@ sig
     * CSyntax.CVar CSyntax.CVarMap.map
     * CSyntax.SimpleExp
     -> CSyntax.SimpleExp
-  val sizeOfCExp: CSyntax.CExp * int -> int
+  val sizeOfStat: CSyntax.Stat * int -> int
   val substValue: CSyntax.Value TypedSyntax.VIdMap.map
                   -> CSyntax.Value
                   -> CSyntax.Value
   val substCVar: CSyntax.CVar CSyntax.CVarMap.map
                  -> CSyntax.CVar
                  -> CSyntax.CVar
-  val substCExp:
+  val substStat:
     CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
-    * CSyntax.CExp
-    -> CSyntax.CExp
+    * CSyntax.Stat
+    -> CSyntax.Stat
   val alphaConvert:
     Context
     * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
-    * CSyntax.CExp
-    -> CSyntax.CExp
-  val isDiscardableExp: value_info TypedSyntax.VIdMap.map * CSyntax.CExp -> bool
-  val finalizeCExp: Context * CSyntax.CExp -> CSyntax.CExp
+    * CSyntax.Stat
+    -> CSyntax.Stat
+  val isDiscardableExp: value_info TypedSyntax.VIdMap.map * CSyntax.Stat -> bool
+  val finalizeStat: Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
   local structure F = FSyntax structure C = CSyntax
@@ -1004,7 +1004,7 @@ struct
         | C.ExnTag _ => threshold - 1
         | C.Projection _ => threshold - 1
         | C.Abs {contParam = _, params = _, body, attr = _} =>
-            sizeOfCExp (body, threshold)
+            sizeOfStat (body, threshold)
     and sizeOfDec (dec, threshold) =
       if threshold < 0 then
         threshold
@@ -1012,32 +1012,32 @@ struct
         case dec of
           C.ValDec {exp, results = _} => sizeOfSimpleExp (exp, threshold)
         | C.RecDec defs =>
-            List.foldl (fn ({body, ...}, t) => sizeOfCExp (body, t)) threshold
+            List.foldl (fn ({body, ...}, t) => sizeOfStat (body, t)) threshold
               defs
         | C.ContDec {name = _, params = _, body, attr = _} =>
-            sizeOfCExp (body, threshold)
+            sizeOfStat (body, threshold)
         | C.RecContDec defs =>
-            List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold
+            List.foldl (fn ((_, _, body), t) => sizeOfStat (body, t)) threshold
               defs
         | C.ESImportDec _ => 0
-    and sizeOfCExp (e, threshold) =
+    and sizeOfStat (e, threshold) =
       if threshold < 0 then
         threshold
       else
         case e of
           C.Let {decs, cont} =>
-            List.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
+            List.foldl sizeOfDec (sizeOfStat (cont, threshold)) decs
         | C.App {applied = _, cont = _, args, attr = _} =>
             threshold - List.length args
         | C.AppCont {applied = _, args} => threshold - List.length args
         | C.If {cond = _, thenCont, elseCont} =>
-            sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
+            sizeOfStat (elseCont, sizeOfStat (thenCont, threshold - 1))
         | C.Handle
             { body
             , handler = (_, h)
             , successfulExitIn = _
             , successfulExitOut = _
-            } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
+            } => sizeOfStat (body, sizeOfStat (h, threshold - 1))
         | C.Raise _ => threshold
         | C.Unreachable => threshold
     fun substValue (subst: C.Value TypedSyntax.VIdMap.map) (x as C.Var v) =
@@ -1068,7 +1068,7 @@ struct
           C.Abs
             { contParam = contParam
             , params = params
-            , body = substCExp (subst, csubst, body)
+            , body = substStat (subst, csubst, body)
             , attr = attr
             }
     and substDec (subst, csubst) =
@@ -1081,69 +1081,69 @@ struct
                 { name = name
                 , contParam = contParam
                 , params = params
-                , body = substCExp (subst, csubst, body)
+                , body = substStat (subst, csubst, body)
                 , attr = attr
                 }) defs)
        | C.ContDec {name, params, body, attr} =>
         C.ContDec
           { name = name
           , params = params
-          , body = substCExp (subst, csubst, body)
+          , body = substStat (subst, csubst, body)
           , attr = attr
           }
        | C.RecContDec defs =>
         C.RecContDec
           (List.map
              (fn (f, params, body) =>
-                (f, params, substCExp (subst, csubst, body))) defs)
+                (f, params, substStat (subst, csubst, body))) defs)
        | dec as C.ESImportDec _ => dec
-    and substCExp
+    and substStat
           ( subst: C.Value TypedSyntax.VIdMap.map
           , csubst: C.CVar C.CVarMap.map
           , C.Let {decs, cont}
           ) =
           C.Let
             { decs = List.map (substDec (subst, csubst)) decs
-            , cont = substCExp (subst, csubst, cont)
+            , cont = substStat (subst, csubst, cont)
             }
-      | substCExp (subst, csubst, C.App {applied, cont, args, attr}) =
+      | substStat (subst, csubst, C.App {applied, cont, args, attr}) =
           C.App
             { applied = substValue subst applied
             , cont = substCVar csubst cont
             , args = List.map (substValue subst) args
             , attr = attr
             }
-      | substCExp (subst, csubst, C.AppCont {applied, args}) =
+      | substStat (subst, csubst, C.AppCont {applied, args}) =
           C.AppCont
             { applied = substCVar csubst applied
             , args = List.map (substValue subst) args
             }
-      | substCExp (subst, csubst, C.If {cond, thenCont, elseCont}) =
+      | substStat (subst, csubst, C.If {cond, thenCont, elseCont}) =
           C.If
             { cond = substValue subst cond
-            , thenCont = substCExp (subst, csubst, thenCont)
-            , elseCont = substCExp (subst, csubst, elseCont)
+            , thenCont = substStat (subst, csubst, thenCont)
+            , elseCont = substStat (subst, csubst, elseCont)
             }
-      | substCExp
+      | substStat
           ( subst
           , csubst
           , C.Handle
               {body, handler = (e, h), successfulExitIn, successfulExitOut}
           ) =
           C.Handle
-            { body = substCExp (subst, csubst, body)
-            , handler = (e, substCExp (subst, csubst, h))
+            { body = substStat (subst, csubst, body)
+            , handler = (e, substStat (subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = substCVar csubst successfulExitOut
             }
-      | substCExp (subst, _, C.Raise (span, x)) =
+      | substStat (subst, _, C.Raise (span, x)) =
           C.Raise (span, substValue subst x)
-      | substCExp (_, _, e as C.Unreachable) = e
-    val substCExp = fn (subst, csubst, e) =>
+      | substStat (_, _, e as C.Unreachable) = e
+    val substStat = fn (subst, csubst, e) =>
       if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
         e
       else
-        substCExp (subst, csubst, e)
+        substStat (subst, csubst, e)
     fun alphaConvertSimpleExp
           (ctx, subst, csubst, C.Abs {contParam, params, body, attr}) =
           let
@@ -1468,7 +1468,7 @@ struct
               { exp = C.Abs
                   { contParam = contParam
                   , params = params
-                  , body = finalizeCExp (ctx, body)
+                  , body = finalizeStat (ctx, body)
                   , attr = attr
                   }
               , results = results
@@ -1484,7 +1484,7 @@ struct
                     { name = name
                     , contParam = contParam
                     , params = params
-                    , body = finalizeCExp (ctx, body)
+                    , body = finalizeStat (ctx, body)
                     , attr = attr
                     }) defs)
           in
@@ -1495,7 +1495,7 @@ struct
             val dec = C.ContDec
               { name = name
               , params = params
-              , body = finalizeCExp (ctx, body)
+              , body = finalizeStat (ctx, body)
               , attr = attr
               }
           in
@@ -1506,35 +1506,35 @@ struct
             val dec = C.RecContDec
               (List.map
                  (fn (name, params, body) =>
-                    (name, params, finalizeCExp (ctx, body))) defs)
+                    (name, params, finalizeStat (ctx, body))) defs)
           in
             (dec :: decs, cont)
           end
       | C.ESImportDec _ => (dec :: decs, cont)
-    and finalizeCExp (ctx, C.Let {decs, cont}) =
+    and finalizeStat (ctx, C.Let {decs, cont}) =
           prependDecs
-            (List.foldr (finalizeDec ctx) ([], finalizeCExp (ctx, cont)) decs)
-      | finalizeCExp (_, e as C.App _) = e
-      | finalizeCExp (_, e as C.AppCont _) = e
-      | finalizeCExp (ctx, C.If {cond, thenCont, elseCont}) =
+            (List.foldr (finalizeDec ctx) ([], finalizeStat (ctx, cont)) decs)
+      | finalizeStat (_, e as C.App _) = e
+      | finalizeStat (_, e as C.AppCont _) = e
+      | finalizeStat (ctx, C.If {cond, thenCont, elseCont}) =
           C.If
             { cond = cond
-            , thenCont = finalizeCExp (ctx, thenCont)
-            , elseCont = finalizeCExp (ctx, elseCont)
+            , thenCont = finalizeStat (ctx, thenCont)
+            , elseCont = finalizeStat (ctx, elseCont)
             }
-      | finalizeCExp
+      | finalizeStat
           ( ctx
           , C.Handle
               {body, handler = (e, h), successfulExitIn, successfulExitOut}
           ) =
           C.Handle
-            { body = finalizeCExp (ctx, body)
-            , handler = (e, finalizeCExp (ctx, h))
+            { body = finalizeStat (ctx, body)
+            , handler = (e, finalizeStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
-      | finalizeCExp (_, e as C.Raise _) = e
-      | finalizeCExp (_, e as C.Unreachable) = e
+      | finalizeStat (_, e as C.Raise _) = e
+      | finalizeStat (_, e as C.Unreachable) = e
   end
 end;
 
@@ -1543,7 +1543,7 @@ sig
   type cont_map
   val escapes: cont_map * CSyntax.CVar -> bool
   val escapesTransitively: cont_map * CSyntax.CVar -> bool
-  val contEscape: CSyntax.CVar * CSyntax.CExp -> cont_map
+  val contEscape: CSyntax.CVar * CSyntax.Stat -> cont_map
 end =
 struct
   local structure C = CSyntax
@@ -1688,7 +1688,7 @@ struct
           end
       | go (_, _, C.Raise _, acc) = acc
       | go (_, _, C.Unreachable, acc) = acc
-    fun contEscape (cont, cexp) =
+    fun contEscape (cont, stat) =
       let
         val table =
           C.CVarTable.mkTable (1, C.InvalidCode "unbound continuation")
@@ -1701,7 +1701,7 @@ struct
             , free = C.CVarSet.empty
             }
           );
-        ignore (go (table, 0, cexp, C.CVarSet.empty));
+        ignore (go (table, 0, stat, C.CVarSet.empty));
         C.CVarTable.appi
           (fn (k, {escapes = ref true, escapesTransitively = ref false, ...}) =>
              recEscape table k

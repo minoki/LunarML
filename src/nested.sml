@@ -52,7 +52,7 @@ sig
   | Raise of SourcePos.span * Exp
   | Unreachable
   val containsApp: Stat -> bool
-  val fromCExp: CSyntax.CExp -> Stat
+  val fromStat: CSyntax.Stat -> Stat
   val toNested: Backend.backend * Stat -> Stat
 end =
 struct
@@ -134,7 +134,7 @@ struct
           Abs
             { contParam = contParam
             , params = params
-            , body = goCExp body
+            , body = goStat body
             , attr = attr
             }
     and goDec (C.ValDec {exp, results}) =
@@ -146,46 +146,46 @@ struct
                   { name = name
                   , contParam = contParam
                   , params = params
-                  , body = goCExp body
+                  , body = goStat body
                   , attr = attr
                   }) decs)
       | goDec (C.ContDec {name, params, body, attr = _}) =
-          ContDec {name = name, params = params, body = goCExp body}
+          ContDec {name = name, params = params, body = goStat body}
       | goDec (C.RecContDec decs) =
           RecContDec
-            (List.map (fn (name, params, body) => (name, params, goCExp body))
+            (List.map (fn (name, params, body) => (name, params, goStat body))
                decs)
       | goDec (C.ESImportDec dec) = ESImportDec dec
-    and goCExp (C.Let {decs, cont}) =
-          Let {decs = List.map goDec decs, cont = goCExp cont}
-      | goCExp (C.App {applied, cont, args, attr}) =
+    and goStat (C.Let {decs, cont}) =
+          Let {decs = List.map goDec decs, cont = goStat cont}
+      | goStat (C.App {applied, cont, args, attr}) =
           App
             { applied = Value applied
             , cont = cont
             , args = List.map Value args
             , attr = attr
             }
-      | goCExp (C.AppCont {applied, args}) =
+      | goStat (C.AppCont {applied, args}) =
           AppCont {applied = applied, args = List.map Value args}
-      | goCExp (C.If {cond, thenCont, elseCont}) =
+      | goStat (C.If {cond, thenCont, elseCont}) =
           If
             { cond = Value cond
-            , thenCont = goCExp thenCont
-            , elseCont = goCExp elseCont
+            , thenCont = goStat thenCont
+            , elseCont = goStat elseCont
             }
-      | goCExp
+      | goStat
           (C.Handle
              {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
           Handle
-            { body = goCExp body
-            , handler = (e, goCExp h)
+            { body = goStat body
+            , handler = (e, goStat h)
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
             }
-      | goCExp (C.Raise (span, x)) =
+      | goStat (C.Raise (span, x)) =
           Raise (span, Value x)
-      | goCExp C.Unreachable = Unreachable
-  in val fromCExp = goCExp
+      | goStat C.Unreachable = Unreachable
+  in val fromStat = goStat
   end (* local *)
 
   structure Analysis :>

@@ -398,7 +398,7 @@ struct
   (*:
   val doExp : Context * Env * N.Exp -> L.Exp
   val doDecs : Context * Env * C.CVar option * N.Dec list * N.Stat * L.Stat list -> L.Stat list
-  and doCExp : Context * Env * C.CVar option * N.Stat -> L.Stat list
+  and doStat : Context * Env * C.CVar option * N.Stat -> L.Stat list
    *)
   fun doExp (ctx, _, N.Value v) = doValue ctx v
     | doExp (ctx, env, N.PrimOp {primOp, tyargs = _, args}) =
@@ -1798,7 +1798,7 @@ struct
         in
           L.FunctionExp
             ( Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params)
-            , vector (doCExp (ctx, env', SOME contParam, body))
+            , vector (doStat (ctx, env', SOME contParam, body))
             )
         end
     | doExp (ctx, env, N.LogicalAnd (x, y)) =
@@ -1807,7 +1807,7 @@ struct
         L.BinExp (L.OR, doExp (ctx, env, x), doExp (ctx, env, y))
   and doDecs (ctx, env, defaultCont, decs, finalExp, revStats: L.Stat list) =
     (case decs of
-       [] => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))
+       [] => List.revAppend (revStats, doStat (ctx, env, defaultCont, finalExp))
      | dec :: decs =>
          let
            fun pure (NONE, _) =
@@ -2319,7 +2319,7 @@ struct
                                  ( Vector.map (fn vid => VIdToLua (ctx, vid))
                                      (vector params)
                                  , vector
-                                     (doCExp (ctx, env', SOME contParam, body))
+                                     (doStat (ctx, env', SOME contParam, body))
                                  )]
                             )
                         in
@@ -2355,13 +2355,13 @@ struct
                       in
                         List.revAppend
                           ( revStats
-                          , stat :: doCExp (ctx, env, defaultCont, body)
+                          , stat :: doStat (ctx, env, defaultCont, body)
                           )
                       end
                     else
                       List.revAppend
                         ( revStats
-                        , doCExp (ctx, env, defaultCont, finalExp)
+                        , doStat (ctx, env, defaultCont, finalExp)
                         ) (* dead continuation elimination *)
                 | _ =>
                     let
@@ -2396,7 +2396,7 @@ struct
                             }
                           @
                           L.LabelStat label
-                          :: doCExp (ctx, env, defaultCont, body)
+                          :: doStat (ctx, env, defaultCont, body)
                         ) (* enclose with do statement? *)
                     end)
            | N.RecContDec defs =>
@@ -2501,7 +2501,7 @@ struct
                           ::
                           L.makeDoStat
                             { loopLike = true
-                            , body = dec @ doCExp (ctx, env', NONE, body)
+                            , body = dec @ doStat (ctx, env', NONE, body)
                             }
                         end) defs
                in
@@ -2510,10 +2510,10 @@ struct
            | N.ESImportDec _ =>
                raise CodeGenError "_esImport is not supported by Lua backend"
          end)
-  and doCExp
+  and doStat
         (ctx: Context, env: Env, defaultCont: C.CVar option, N.Let {decs, cont}) =
         doDecs (ctx, env, defaultCont, decs, cont, [])
-    | doCExp (ctx, env, _, N.App {applied, cont, args, attr = _}) =
+    | doStat (ctx, env, _, N.App {applied, cont, args, attr = _}) =
         (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO {label, params}) =>
              let
@@ -2561,7 +2561,7 @@ struct
                    , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                    )])] (* tail call *)
          | NONE => raise CodeGenError "undefined continuation")
-    | doCExp (ctx, env, defaultCont, N.AppCont {applied, args}) =
+    | doStat (ctx, env, defaultCont, N.AppCont {applied, args}) =
         applyCont
           ( ctx
           , env
@@ -2569,7 +2569,7 @@ struct
           , applied
           , List.map (fn x => doExp (ctx, env, x)) args
           )
-    | doCExp (ctx, env, defaultCont, N.If {cond, thenCont, elseCont}) =
+    | doStat (ctx, env, defaultCont, N.If {cond, thenCont, elseCont}) =
         let
           fun containsNestedBlock (N.Let {decs, cont}) =
                 List.exists containsNestedBlockDec decs
@@ -2599,12 +2599,12 @@ struct
                 L.IfStat
                   ( doExp (ctx, env, cond)
                   , vector [L.GotoStat thenLabel]
-                  , vector (doCExp (ctx, env, NONE, elseCont))
+                  , vector (doStat (ctx, env, NONE, elseCont))
                   ) :: L.LabelStat thenLabel
                 ::
                 L.makeDoStat
                   { loopLike = false
-                  , body = doCExp (ctx, env, defaultCont, thenCont)
+                  , body = doStat (ctx, env, defaultCont, thenCont)
                   }
               else
                 let
@@ -2617,26 +2617,26 @@ struct
                     ) :: L.LabelStat thenLabel
                   ::
                   L.makeDoStat
-                    {loopLike = false, body = doCExp (ctx, env, NONE, thenCont)}
+                    {loopLike = false, body = doStat (ctx, env, NONE, thenCont)}
                   @
                   L.LabelStat elseLabel
-                  :: doCExp (ctx, env, defaultCont, elseCont)
+                  :: doStat (ctx, env, defaultCont, elseCont)
                 end
             end
           else if isSimpleIf elseCont then
             [L.IfStat
                ( doExp (ctx, env, cond)
-               , vector (doCExp (ctx, env, defaultCont, thenCont))
-               , vector (doCExp (ctx, env, defaultCont, elseCont))
+               , vector (doStat (ctx, env, defaultCont, thenCont))
+               , vector (doStat (ctx, env, defaultCont, elseCont))
                )]
           else
             L.IfStat
               ( doExp (ctx, env, cond)
-              , vector (doCExp (ctx, env, NONE, thenCont))
+              , vector (doStat (ctx, env, NONE, thenCont))
               , vector []
-              ) :: doCExp (ctx, env, defaultCont, elseCont)
+              ) :: doStat (ctx, env, defaultCont, elseCont)
         end
-    | doCExp
+    | doStat
         ( ctx
         , env
         , defaultCont
@@ -2648,7 +2648,7 @@ struct
           val status = genSymWithName (ctx, "status")
           val resultOrError = e
           val functionExp = L.FunctionExp (vector [], vector
-            (doCExp (ctx, env', NONE, body)))
+            (doStat (ctx, env', NONE, body)))
         in
           [ L.LocalStat
               ( [(status, L.CONST), (resultOrError, L.CONST)]
@@ -2657,7 +2657,7 @@ struct
               )
           , L.IfStat
               ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
-              , vector (doCExp (ctx, env, defaultCont, h))
+              , vector (doStat (ctx, env, defaultCont, h))
               , vector (applyCont
                   ( ctx
                   , env
@@ -2668,7 +2668,7 @@ struct
               )
           ]
         end
-    | doCExp (ctx, env, _, N.Raise ({start as {file, line, column}, ...}, exp)) =
+    | doStat (ctx, env, _, N.Raise ({start as {file, line, column}, ...}, exp)) =
         let
           val exp = doExp (ctx, env, exp)
           val locationInfo =
@@ -2682,17 +2682,17 @@ struct
           [L.CallStat
              (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo])]
         end
-    | doCExp (_, _, _, N.Unreachable) = []
+    | doStat (_, _, _, N.Unreachable) = []
 
-  fun doProgram ctx cont cexp =
+  fun doProgram ctx cont program =
     let val env = {continuations = C.CVarMap.singleton (cont, RETURN)}
-    in vector (doCExp (ctx, env, SOME cont, cexp))
+    in vector (doStat (ctx, env, SOME cont, program))
     end
-  fun doProgramWithContinuations ctx cont cexp =
+  fun doProgramWithContinuations ctx cont program =
     let
       val env = {continuations = C.CVarMap.singleton (cont, RETURN)}
       val func = L.FunctionExp (vector [], vector
-        (doCExp (ctx, env, SOME cont, cexp)))
+        (doStat (ctx, env, SOME cont, program)))
     in
       vector
         [L.ReturnStat (vector

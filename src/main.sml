@@ -105,13 +105,13 @@ struct
           val timer = Timer.startCPUTimer ()
           val ctx' =
             {nextVId = #nextVId ctx, simplificationOccurred = ref false}
-          val cexp = CpsDeadCodeElimination.goCExp (ctx', cexp)
-          val cexp = CpsUncurry.goCExp (ctx', cexp)
-          val cexp = CpsUnpackRecordParameter.goCExp (ctx', cexp)
-          val cexp = CpsLoopOptimization.goCExp (ctx', cexp)
-          val cexp = CpsDecomposeRecursive.goCExp (ctx', cexp)
-          val cexp = CpsConstantRefCell.goCExp (ctx', cexp)
-          val cexp = CpsInline.goCExp (ctx', cexp)
+          val cexp = CpsDeadCodeElimination.goStat (ctx', cexp)
+          val cexp = CpsUncurry.goStat (ctx', cexp)
+          val cexp = CpsUnpackRecordParameter.goStat (ctx', cexp)
+          val cexp = CpsLoopOptimization.goStat (ctx', cexp)
+          val cexp = CpsDecomposeRecursive.goStat (ctx', cexp)
+          val cexp = CpsConstantRefCell.goStat (ctx', cexp)
+          val cexp = CpsInline.goStat (ctx', cexp)
           val cexp = CpsEtaConvert.go (ctx', cexp)
         in
           if #printTimings ctx then
@@ -143,7 +143,7 @@ struct
             , targetLuaVersion = CodeGenLua.LUA5_3
             , hasDelimitedContinuations = runtime = LUA_CONTINUATIONS
             }
-          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
+          val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
           val lua =
             case runtime of
               LUA_PLAIN => CodeGenLua.doProgram luactx cont nested
@@ -207,7 +207,7 @@ struct
             , targetLuaVersion = CodeGenLua.LUAJIT
             , hasDelimitedContinuations = false
             }
-          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
+          val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
           val lua = CodeGenLua.doProgram luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
@@ -275,7 +275,7 @@ struct
             , style = style
             , imports = ref []
             }
-          val nested = NSyntax.toNested (backend, NSyntax.fromCExp cexp)
+          val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
           val js =
             case (style, export) of
               (Backend.DIRECT_STYLE, ToFSyntax.NO_EXPORT) =>
@@ -626,7 +626,7 @@ struct
           (3 * (#optimizationLevel opts + 3))
       val cexp =
         let val context = {nextVId = nextId, simplificationOccurred = ref false}
-        in CpsSimplify.finalizeCExp (context, cexp)
+        in CpsSimplify.finalizeStat (context, cexp)
         end
       val cexp =
         optimizeCps {nextVId = nextId, printTimings = #printTimings opts} cexp

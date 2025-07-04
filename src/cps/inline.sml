@@ -8,7 +8,7 @@
  *)
 structure CpsInline:
 sig
-  val goCExp: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+  val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
   local structure F = FSyntax structure C = CSyntax structure P = Primitives
@@ -926,7 +926,7 @@ struct
                     , [SOME result]
                     ) =>
                       let
-                        val body = simplifyCExp
+                        val body = simplifyStat
                           (ctx, env, cenv, subst, csubst, body)
                         val exp = C.Abs
                           { contParam = contParam
@@ -940,7 +940,7 @@ struct
                           , {exp =
                                if
                                  alwaysInline
-                                 orelse CpsSimplify.sizeOfCExp (body, 10) >= 0
+                                 orelse CpsSimplify.sizeOfStat (body, 10) >= 0
                                then (* Inline small functions *)
                                  SOME exp
                                else
@@ -981,7 +981,7 @@ struct
                    { name = name
                    , contParam = contParam
                    , params = params
-                   , body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
+                   , body = simplifyStat (ctx, env, cenv, subst, csubst, body)
                    , attr = attr
                    }) defs
           in
@@ -989,12 +989,12 @@ struct
           end
       | C.ContDec {name, params, body, attr as {alwaysInline}} =>
           let
-            val body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
+            val body = simplifyStat (ctx, env, cenv, subst, csubst, body)
             val cenv = C.CVarMap.insert
               ( cenv
               , name
               , ( params
-                , if alwaysInline orelse CpsSimplify.sizeOfCExp (body, 3) >= 0 then (* Inline very small continuations *)
+                , if alwaysInline orelse CpsSimplify.sizeOfStat (body, 3) >= 0 then (* Inline very small continuations *)
                     SOME body
                   else
                     NONE
@@ -1012,16 +1012,16 @@ struct
                  (fn (name, params, body) =>
                     ( name
                     , params
-                    , simplifyCExp (ctx, env, cenv, subst, csubst, body)
+                    , simplifyStat (ctx, env, cenv, subst, csubst, body)
                     )) defs)
           in
             (env, cenv, subst, csubst, dec :: acc)
           end
       | C.ESImportDec _ => (env, cenv, subst, csubst, dec :: acc)
-    and simplifyCExp
+    and simplifyStat
       ( ctx: Context
       , env: value_info TypedSyntax.VIdMap.map
-      , cenv: ((C.Var option) list * C.CExp option) C.CVarMap.map
+      , cenv: ((C.Var option) list * C.Stat option) C.CVarMap.map
       , subst: C.Value TypedSyntax.VIdMap.map
       , csubst: C.CVar C.CVarMap.map
       , e
@@ -1032,7 +1032,7 @@ struct
             val (env, cenv, subst, csubst, revDecs) =
               List.foldl (simplifyDec ctx) (env, cenv, subst, csubst, []) decs
           in
-            CpsTransform.prependRevDecs (revDecs, simplifyCExp
+            CpsTransform.prependRevDecs (revDecs, simplifyStat
               (ctx, env, cenv, subst, csubst, cont))
           end
       | C.App {applied, cont, args, attr} =>
@@ -1109,23 +1109,23 @@ struct
           (case CpsSimplify.substValue subst cond of
              C.BoolConst true =>
                ( #simplificationOccurred ctx := true
-               ; simplifyCExp (ctx, env, cenv, subst, csubst, thenCont)
+               ; simplifyStat (ctx, env, cenv, subst, csubst, thenCont)
                )
            | C.BoolConst false =>
                ( #simplificationOccurred ctx := true
-               ; simplifyCExp (ctx, env, cenv, subst, csubst, elseCont)
+               ; simplifyStat (ctx, env, cenv, subst, csubst, elseCont)
                )
            | cond =>
                C.If
                  { cond = cond
-                 , thenCont = simplifyCExp
+                 , thenCont = simplifyStat
                      (ctx, env, cenv, subst, csubst, thenCont)
-                 , elseCont = simplifyCExp
+                 , elseCont = simplifyStat
                      (ctx, env, cenv, subst, csubst, elseCont)
                  })
       | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
           C.Handle
-            { body = simplifyCExp
+            { body = simplifyStat
                 ( ctx
                 , env
                 , C.CVarMap.empty (* do not inline across 'handle' *)
@@ -1133,7 +1133,7 @@ struct
                 , csubst
                 , body
                 )
-            , handler = (e, simplifyCExp (ctx, env, cenv, subst, csubst, h))
+            , handler = (e, simplifyStat (ctx, env, cenv, subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
             }
@@ -1512,8 +1512,8 @@ struct
           , {exp = SOME JavaScript_decodeUtf8}
           )
         ]
-    fun goCExp (ctx: CpsSimplify.Context, exp) =
-      simplifyCExp
+    fun goStat (ctx: CpsSimplify.Context, exp) =
+      simplifyStat
         ( ctx
         , initialEnv
         , C.CVarMap.empty

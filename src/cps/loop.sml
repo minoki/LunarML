@@ -12,7 +12,7 @@ local
     val neverUsed: usage
     type usage_table
     val getValueUsage: usage_table * TypedSyntax.VId -> usage
-    val analyze: CSyntax.CExp -> {rec_usage: usage_table}
+    val analyze: CSyntax.Stat -> {rec_usage: usage_table}
   end =
   struct
     local structure C = CSyntax
@@ -44,7 +44,7 @@ local
         fun add (env, v) =
           if TypedSyntax.VIdTable.inDomain env v then
             raise Fail
-              ("goCExp: duplicate name in AST: " ^ TypedSyntax.print_VId v)
+              ("goStat: duplicate name in AST: " ^ TypedSyntax.print_VId v)
           else
             TypedSyntax.VIdTable.insert env (v, ref neverUsed)
       in
@@ -54,7 +54,7 @@ local
           | goSimpleExp (_, _, C.Projection _) = ()
           | goSimpleExp
               (env, renv, C.Abs {contParam = _, params, body, attr = _}) =
-              (List.app (fn p => add (env, p)) params; goCExp (env, renv, body))
+              (List.app (fn p => add (env, p)) params; goStat (env, renv, body))
         and goDec (env, renv) =
           fn C.ValDec {exp, results} =>
             ( goSimpleExp (env, renv, exp)
@@ -75,7 +75,7 @@ local
               List.app
                 (fn {params, body, ...} =>
                    ( List.app (fn p => add (env, p)) params
-                   ; goCExp (env, renv, body)
+                   ; goStat (env, renv, body)
                    )) defs;
               TypedSyntax.VIdMap.appi
                 (fn (f, v) => TypedSyntax.VIdTable.insert renv (f, v))
@@ -86,33 +86,33 @@ local
             end
            | C.ContDec {name = _, params, body, attr = _} =>
             ( List.app (Option.app (fn p => add (env, p))) params
-            ; goCExp (env, renv, body)
+            ; goStat (env, renv, body)
             )
            | C.RecContDec defs =>
             List.app
               (fn (_, params, body) =>
                  ( List.app (Option.app (fn p => add (env, p))) params
-                 ; goCExp (env, renv, body)
+                 ; goStat (env, renv, body)
                  )) defs
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
             List.app (fn (_, vid) => add (env, vid)) specs
-        and goCExp
-          (env: (usage ref) TypedSyntax.VIdTable.hash_table, renv, cexp) =
-          case cexp of
+        and goStat
+          (env: (usage ref) TypedSyntax.VIdTable.hash_table, renv, stat) =
+          case stat of
             C.Let {decs, cont} =>
-              (List.app (goDec (env, renv)) decs; goCExp (env, renv, cont))
+              (List.app (goDec (env, renv)) decs; goStat (env, renv, cont))
           | C.App {applied, cont, args = _, attr = _} =>
               (useValueAsCallee (env, cont, applied))
           | C.AppCont {applied = _, args = _} => ()
           | C.If {cond = _, thenCont, elseCont} =>
-              (goCExp (env, renv, thenCont); goCExp (env, renv, elseCont))
+              (goStat (env, renv, thenCont); goStat (env, renv, elseCont))
           | C.Handle
               { body
               , handler = (e, h)
               , successfulExitIn = _
               , successfulExitOut = _
               } =>
-              (goCExp (env, renv, body); add (env, e); goCExp (env, renv, h))
+              (goStat (env, renv, body); add (env, e); goStat (env, renv, h))
           | C.Raise _ => ()
           | C.Unreachable => ()
       end (* local *)
@@ -123,7 +123,7 @@ local
           val rusage =
             TypedSyntax.VIdTable.mkTable (1, Fail "rusage table lookup failed")
         in
-          goCExp (usage, rusage, exp);
+          goStat (usage, rusage, exp);
           {rec_usage = rusage}
         end
     end (* local *)
@@ -131,7 +131,7 @@ local
 in
   structure CpsLoopOptimization:
   sig
-    val goCExp: CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
+    val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
   end =
   struct
     local structure C = CSyntax
@@ -144,7 +144,7 @@ in
             (case (exp, results) of
                (C.Abs {contParam, params, body, attr}, results) =>
                  let
-                   val body = simplifyCExp (ctx, body)
+                   val body = simplifyStat (ctx, body)
                    val exp = C.Abs
                      { contParam = contParam
                      , params = params
@@ -167,7 +167,7 @@ in
                      { name = name
                      , contParam = contParam
                      , params = params
-                     , body = simplifyCExp (ctx, body)
+                     , body = simplifyStat (ctx, body)
                      , attr = attr
                      }) defs
               fun tryConvertToLoop
@@ -185,7 +185,7 @@ in
                       List.map (fn v => CpsSimplify.renewVId (#base ctx, v))
                         params
                     val body' =
-                      C.recurseCExp
+                      C.recurseStat
                         (fn call as
                              C.App
                                {applied = C.Var applied, cont, args, attr = _} =>
@@ -218,7 +218,7 @@ in
               val dec = C.ContDec
                 { name = name
                 , params = params
-                , body = simplifyCExp (ctx, body)
+                , body = simplifyStat (ctx, body)
                 , attr = attr
                 }
             in
@@ -229,40 +229,40 @@ in
               val dec = C.RecContDec
                 (List.map
                    (fn (name, params, body) =>
-                      (name, params, simplifyCExp (ctx, body))) defs)
+                      (name, params, simplifyStat (ctx, body))) defs)
             in
               dec :: acc
             end
         | C.ESImportDec _ => dec :: acc
-      and simplifyCExp (ctx: Context, e) =
+      and simplifyStat (ctx: Context, e) =
         case e of
           C.Let {decs, cont} =>
             let val revDecs = List.foldl (simplifyDec ctx) [] decs
-            in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, cont))
+            in CpsTransform.prependRevDecs (revDecs, simplifyStat (ctx, cont))
             end
         | C.App _ => e
         | C.AppCont _ => e
         | C.If {cond, thenCont, elseCont} =>
             C.If
               { cond = cond
-              , thenCont = simplifyCExp (ctx, thenCont)
-              , elseCont = simplifyCExp (ctx, elseCont)
+              , thenCont = simplifyStat (ctx, thenCont)
+              , elseCont = simplifyStat (ctx, elseCont)
               }
         | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
             C.Handle
-              { body = simplifyCExp (ctx, body)
-              , handler = (e, simplifyCExp (ctx, h))
+              { body = simplifyStat (ctx, body)
+              , handler = (e, simplifyStat (ctx, h))
               , successfulExitIn = successfulExitIn
               , successfulExitOut = successfulExitOut
               }
         | C.Raise _ => e
         | C.Unreachable => e
-      fun goCExp (ctx: CpsSimplify.Context, exp) =
+      fun goStat (ctx: CpsSimplify.Context, exp) =
         let
           val usage = CpsUsageAnalysis.analyze exp
           val ctx' = {base = ctx, rec_usage = #rec_usage usage}
         in
-          simplifyCExp (ctx', exp)
+          simplifyStat (ctx', exp)
         end
     end (* local *)
   end (* structure CpsLoopOptimization *)

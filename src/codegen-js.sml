@@ -337,7 +337,7 @@ struct
   (*:
   val doExp : Context * Env * N.Exp -> J.Exp
   val doDecs : Context * Env * N.Dec list * N.Stat * J.Stat list -> J.Stat list
-  val doCExp : Context -> Env -> N.Stat -> J.Stat list
+  val doStat : Context -> Env -> N.Stat -> J.Stat list
    *)
   fun doExp (ctx, env, N.Value v) =
         doValue (ctx, env) v
@@ -1279,7 +1279,7 @@ struct
                  J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector
                    [J.FunctionExp
                       ( Vector.map (VIdToJs ctx) (vector params)
-                      , vector (doCExp ctx env' body)
+                      , vector (doStat ctx env' body)
                       )])
                end
              else
@@ -1291,7 +1291,7 @@ struct
                    }
                in
                  J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector
-                   (doCExp ctx env' body))
+                   (doStat ctx env' body))
                end
          | Backend.CPS =>
              let
@@ -1303,7 +1303,7 @@ struct
              in
                J.FunctionExp
                  ( vector (CVarToJs contParam :: List.map (VIdToJs ctx) params)
-                 , vector (doCExp ctx env' body)
+                 , vector (doStat ctx env' body)
                  )
              end)
     | doExp (ctx, env, N.LogicalAnd (x, y)) =
@@ -1312,7 +1312,7 @@ struct
         J.BinExp (J.OR, doExp (ctx, env, x), doExp (ctx, env, y))
   and doDecs (ctx, env, decs, finalExp, revStats) =
     (case decs of
-       [] => List.revAppend (revStats, doCExp ctx env finalExp)
+       [] => List.revAppend (revStats, doStat ctx env finalExp)
      | dec :: decs =>
          let
            fun pure (NONE, _) =
@@ -1542,7 +1542,7 @@ struct
                                              [J.FunctionExp
                                                 ( Vector.map (VIdToJs ctx)
                                                     (vector params)
-                                                , vector (doCExp ctx env' body)
+                                                , vector (doStat ctx env' body)
                                                 )]
                                          )
                                      ) :: assignments
@@ -1563,7 +1563,7 @@ struct
                                      , J.FunctionExp
                                          ( Vector.map (VIdToJs ctx)
                                              (vector params)
-                                         , vector (doCExp ctx env' body)
+                                         , vector (doStat ctx env' body)
                                          )
                                      ) :: assignments
                                  )
@@ -1599,7 +1599,7 @@ struct
                                        ( vector
                                            (CVarToJs contParam
                                             :: List.map (VIdToJs ctx) params)
-                                       , vector (doCExp ctx env' body)
+                                       , vector (doStat ctx env' body)
                                        )
                                    ) :: assignments
                                ) (* in fact, ConstStat can be used *)
@@ -1631,7 +1631,7 @@ struct
                                  (List.map
                                     (fn SOME p => VIdToJs ctx p
                                       | NONE => VIdToJs ctx (genSym ctx)) params)
-                             , vector (doCExp ctx env body)
+                             , vector (doStat ctx env body)
                              )
                          )
                      val env' =
@@ -1653,12 +1653,12 @@ struct
                                ( doExp (ctx, env, applied)
                                , Vector.map (fn x => doExp (ctx, env, x))
                                    (vector args)
-                               )) :: doCExp ctx env body
+                               )) :: doStat ctx env body
                            )
                        else
                          List.revAppend
                            ( revStats
-                           , doCExp ctx env finalExp
+                           , doStat ctx env finalExp
                            ) (* dead continuation elimination *)
                    | _ =>
                        let
@@ -1693,7 +1693,7 @@ struct
                              @
                              J.BlockStat (SOME (CVarToJs name), vector (doDecs
                                (ctx, newEnv, decs, finalExp, [])))
-                             :: doCExp ctx env body
+                             :: doStat ctx env body
                            )
                        end
                end
@@ -1730,7 +1730,7 @@ struct
                                            (fn SOME p => VIdToJs ctx p
                                              | NONE => VIdToJs ctx (genSym ctx))
                                            params)
-                                    , vector (doCExp ctx env' body)
+                                    , vector (doStat ctx env' body)
                                     )
                                 ) :: assignments
                             ) (* in fact, ConstStat can be used *)) ([], [])
@@ -1894,7 +1894,7 @@ struct
                                         else [J.ConstStat (vector defs)]
                                       end
                                   in
-                                    vector (dec @ doCExp ctx recEnv body)
+                                    vector (dec @ doStat ctx recEnv body)
                                   end
                               | NEED_WHICH which' =>
                                   vector
@@ -1927,7 +1927,7 @@ struct
                                                , ( J.Numeral (Int.toString i)
                                                  , vector
                                                      (dec
-                                                      @ doCExp ctx recEnv body)
+                                                      @ doStat ctx recEnv body)
                                                  ) :: cases
                                                )
                                              end) (n, []) defs))]
@@ -1991,9 +1991,9 @@ struct
                  doDecs (ctx, env', decs, finalExp, revStats)
                end
          end)
-  and doCExp (ctx: Context) (env: Env) (N.Let {decs, cont}) : J.Stat list =
+  and doStat (ctx: Context) (env: Env) (N.Let {decs, cont}) : J.Stat list =
         doDecs (ctx, env, decs, cont, [])
-    | doCExp ctx env (N.App {applied, cont, args, attr = _}) =
+    | doStat ctx env (N.App {applied, cont, args, attr = _}) =
         (case C.CVarMap.find (#continuations env, cont) of
            SOME (TAILCALL k) =>
              [J.ReturnStat (SOME (J.ArrayExp (vector
@@ -2057,16 +2057,16 @@ struct
          | SOME RETURN_SIMPLE =>
              raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation")
-    | doCExp ctx env (N.AppCont {applied, args}) =
+    | doStat ctx env (N.AppCont {applied, args}) =
         applyCont
           (ctx, env, applied, List.map (fn x => doExp (ctx, env, x)) args)
-    | doCExp ctx env (N.If {cond, thenCont, elseCont}) =
+    | doStat ctx env (N.If {cond, thenCont, elseCont}) =
         [J.IfStat
            ( doExp (ctx, env, cond)
-           , vector (doCExp ctx env thenCont)
-           , vector (doCExp ctx env elseCont)
+           , vector (doStat ctx env thenCont)
+           , vector (doStat ctx env elseCont)
            )]
-    | doCExp ctx env
+    | doStat ctx env
         (N.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
         (case #style ctx of
            Backend.DIRECT_STYLE =>
@@ -2079,8 +2079,8 @@ struct
                  , subst = #subst env
                  }
              in
-               [J.TryCatchStat (vector (doCExp ctx env' body), e, vector
-                  (doCExp ctx env h))]
+               [J.TryCatchStat (vector (doStat ctx env' body), e, vector
+                  (doStat ctx env h))]
              end
          | Backend.CPS =>
              let
@@ -2094,7 +2094,7 @@ struct
                  , J.VarExp (J.UserDefinedId oldExh)
                  )
                val handler = J.FunctionExp (vector [VIdToJs ctx e], vector
-                 (restore :: doCExp ctx env h))
+                 (restore :: doStat ctx env h))
                val install = J.AssignStat
                  (J.VarExp (J.PredefinedId "_exh"), handler)
              in
@@ -2121,7 +2121,7 @@ struct
                               )))
                        )
                  in
-                   save :: install :: dec :: doCExp ctx env' body
+                   save :: install :: dec :: doStat ctx env' body
                  end
                else
                  let
@@ -2140,7 +2140,7 @@ struct
                    save :: install :: dec
                    ::
                    J.BlockStat (SOME (CVarToJs successfulExitIn), vector
-                     (doCExp ctx env' body)) :: restore
+                     (doStat ctx env' body)) :: restore
                    ::
                    applyCont
                      ( ctx
@@ -2150,12 +2150,12 @@ struct
                      )
                  end
              end)
-    | doCExp ctx env
+    | doStat ctx env
         (N.Raise (_ (* span as {start as {file, line, column}} *), exp)) =
         [J.ThrowStat (doExp (ctx, env, exp))] (* TODO: location information *)
-    | doCExp _ _ N.Unreachable = []
+    | doStat _ _ N.Unreachable = []
 
-  fun doProgramDirect ctx cont cexp =
+  fun doProgramDirect ctx cont program =
     let
       val label = CVarToJs cont
       val env =
@@ -2164,9 +2164,9 @@ struct
         , subst = TypedSyntax.VIdMap.empty
         }
     in
-      vector [J.BlockStat (SOME label, vector (doCExp ctx env cexp))]
+      vector [J.BlockStat (SOME label, vector (doStat ctx env program))]
     end
-  fun doProgramDirectDefaultExport ctx cont cexp =
+  fun doProgramDirectDefaultExport ctx cont program =
     let
       val label = CVarToJs cont
       val varName = genSymNamed (ctx, "export")
@@ -2179,11 +2179,11 @@ struct
     in
       vector
         [ J.LetStat (vector [(varName, NONE)])
-        , J.BlockStat (SOME label, vector (doCExp ctx env cexp))
+        , J.BlockStat (SOME label, vector (doStat ctx env program))
         , J.DefaultExportStat (J.VarExp item)
         ]
     end
-  fun doProgramDirectNamedExport ctx cont cexp entities =
+  fun doProgramDirectNamedExport ctx cont program entities =
     let
       val label = CVarToJs cont
       val entities' =
@@ -2204,20 +2204,21 @@ struct
       vector
         (letStat
          @
-         [ J.BlockStat (SOME label, vector (doCExp ctx env cexp))
+         [ J.BlockStat (SOME label, vector (doStat ctx env program))
          , J.NamedExportStat
              (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')
          ])
     end
-  fun doProgramCPS' ctx cont retVar cexp =
-    if N.containsApp cexp then
+  fun doProgramCPS' ctx cont retVar program =
+    if N.containsApp program then
       let
         val env =
           { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
           , subst = TypedSyntax.VIdMap.empty
           }
         val callExp = J.CallExp (J.VarExp (J.PredefinedId "_run"), vector
-          [ J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp))
+          [ J.FunctionExp (vector [CVarToJs cont], vector
+              (doStat ctx env program))
           , J.ConstExp J.True
           ])
       in
@@ -2243,19 +2244,20 @@ struct
           , subst = TypedSyntax.VIdMap.empty
           }
       in
-        dec @ [J.BlockStat (SOME (CVarToJs cont), vector (doCExp ctx env cexp))]
+        dec
+        @ [J.BlockStat (SOME (CVarToJs cont), vector (doStat ctx env program))]
       end
-  fun doProgramCPS ctx cont cexp =
-    vector (doProgramCPS' ctx cont NONE cexp)
-  fun doProgramCPSDefaultExport ctx cont cexp =
+  fun doProgramCPS ctx cont program =
+    vector (doProgramCPS' ctx cont NONE program)
+  fun doProgramCPSDefaultExport ctx cont program =
     let
       val varName = genSymNamed (ctx, "export")
     in
       vector
-        (doProgramCPS' ctx cont (SOME varName) cexp
+        (doProgramCPS' ctx cont (SOME varName) program
          @ [J.DefaultExportStat (J.VarExp (J.UserDefinedId varName))])
     end
-  fun doProgramCPSNamedExport ctx cont cexp entities =
+  fun doProgramCPSNamedExport ctx cont program entities =
     let
       val varName = genSymNamed (ctx, "export")
       val entities' =
@@ -2275,7 +2277,7 @@ struct
           []
     in
       vector
-        (doProgramCPS' ctx cont (SOME varName) cexp @ unpack
+        (doProgramCPS' ctx cont (SOME varName) program @ unpack
          @
          [J.NamedExportStat
             (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')])
