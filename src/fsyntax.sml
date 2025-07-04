@@ -401,7 +401,7 @@ struct
         else AndalsoExp (a, b)
     | SimplifyingAndalsoExp (a, b) = AndalsoExp (a, b)
   fun EqualityType t =
-    FnType (PairType (t, t), TyVar Typing.primTyName_bool) (* t * t -> bool *)
+    MultiFnType ([t, t], TyVar Typing.primTyName_bool) (* [t, t] -> bool *)
   fun arityToKind 0 = TypeKind
     | arityToKind n =
         ArrowKind (TypeKind, arityToKind (n - 1))
@@ -580,8 +580,8 @@ struct
             RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
         | doExp (LetExp (decs, exp)) =
             LetExp (List.map doDec decs, doExp exp)
-        | doExp (MultiAppExp (exp1, exp2)) =
-            MultiAppExp (doExp exp1, List.map doExp exp2)
+        | doExp (MultiAppExp (f, args)) =
+            MultiAppExp (doExp f, List.map doExp args)
         | doExp (HandleExp {body, exnName, handler}) =
             HandleExp
               {body = doExp body, exnName = exnName, handler = doExp handler}
@@ -2632,7 +2632,7 @@ struct
               val x = toFExp (ctx, env, Vector.sub (args, 0))
               val y = toFExp (ctx, env, Vector.sub (args, 1))
             in
-              F.AppExp (getEquality (ctx, env, tyarg), F.TupleExp [x, y])
+              F.MultiAppExp (getEquality (ctx, env, tyarg), [x, y])
             end
           else
             emitFatalError
@@ -2820,66 +2820,41 @@ struct
           getEquality (ctx, env, ty)
       | getEquality (ctx, _, T.AnonymousTyVar (span, ref (T.Unbound _))) =
           emitFatalError (ctx, [span], "unexpected anonymous type variable")
-      | getEquality (ctx, env, recordTy as T.RecordType (span, fields)) =
-          let
-            val param = freshVId (ctx, "a")
-          in
-            if Syntax.LabelMap.isEmpty fields then
-              F.VarExp Typing.VId_unit_equal
-            else
-              let
-                val recordTy = toFTy (ctx, env, recordTy)
-                val fieldTypes =
-                  case recordTy of
-                    F.RecordType fieldTypes => fieldTypes
-                  | _ => raise Fail "invalid record type"
-                val pairTy = F.PairType (recordTy, recordTy)
-                val lhs = freshVId (ctx, "x")
-                val rhs = freshVId (ctx, "y")
-                val body = F.LetExp
-                  ( [ F.ValDec (lhs, SOME recordTy, F.ProjectionExp
-                        { label = Syntax.NumericLabel 1
-                        , record = F.VarExp param
-                        , fieldTypes =
-                            case pairTy of
-                              F.RecordType fieldTypes => fieldTypes
-                            | _ =>
-                                emitFatalError
-                                  (ctx, [span], "invalid record type")
-                        })
-                    , F.ValDec (rhs, SOME recordTy, F.ProjectionExp
-                        { label = Syntax.NumericLabel 2
-                        , record = F.VarExp param
-                        , fieldTypes =
-                            case pairTy of
-                              F.RecordType fieldTypes => fieldTypes
-                            | _ =>
-                                emitFatalError
-                                  (ctx, [span], "invalid record type")
-                        })
-                    ]
-                  , Syntax.LabelMap.foldli
-                      (fn (label, ty, rest) =>
-                         F.SimplifyingAndalsoExp
-                           ( F.AppExp (getEquality (ctx, env, ty), F.TupleExp
-                               [ F.ProjectionExp
-                                   { label = label
-                                   , record = F.VarExp lhs
-                                   , fieldTypes = fieldTypes
-                                   }
-                               , F.ProjectionExp
-                                   { label = label
-                                   , record = F.VarExp rhs
-                                   , fieldTypes = fieldTypes
-                                   }
-                               ])
-                           , rest
-                           )) (F.VarExp InitialEnv.VId_true) fields
-                  )
-              in
-                F.FnExp (param, pairTy, body)
-              end
-          end
+      | getEquality (ctx, env, recordTy as T.RecordType (_, fields)) =
+          if Syntax.LabelMap.isEmpty fields then
+            F.VarExp Typing.VId_unit_equal
+          else
+            let
+              val lhs = freshVId (ctx, "x")
+              val rhs = freshVId (ctx, "y")
+              val recordTy = toFTy (ctx, env, recordTy)
+              val fieldTypes =
+                case recordTy of
+                  F.RecordType fieldTypes => fieldTypes
+                | _ => raise Fail "invalid record type"
+              val body =
+                Syntax.LabelMap.foldli
+                  (fn (label, ty, rest) =>
+                     F.SimplifyingAndalsoExp
+                       ( F.MultiAppExp
+                           ( getEquality (ctx, env, ty)
+                           , [ F.ProjectionExp
+                                 { label = label
+                                 , record = F.VarExp lhs
+                                 , fieldTypes = fieldTypes
+                                 }
+                             , F.ProjectionExp
+                                 { label = label
+                                 , record = F.VarExp rhs
+                                 , fieldTypes = fieldTypes
+                                 }
+                             ]
+                           )
+                       , rest
+                       )) (F.VarExp InitialEnv.VId_true) fields
+            in
+              F.MultiFnExp ([(lhs, recordTy), (rhs, recordTy)], body)
+            end
       | getEquality (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
       | getEquality (ctx, _, T.FnType (span, _, _)) =
@@ -3198,7 +3173,8 @@ struct
             val tyvarEqualities =
               if Typing.isRefOrArray tyname then []
               else List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
-            val ty = F.EqualityType (F.TyCon (List.map F.TyVar tyvars, tyname))
+            val subjectTy = F.TyCon (List.map F.TyVar tyvars, tyname)
+            val ty = F.EqualityType subjectTy
             val ty =
               List.foldr
                 (fn ((tv, _), ty) => F.FnType (F.EqualityType (F.TyVar tv), ty))
@@ -3219,7 +3195,16 @@ struct
                   List.foldl TypedSyntax.TyVarMap.insert' m tyvarEqualities
               , env
               )
-            val exp = toFExp (ctx, innerEnv, exp)
+            val exp =
+              let
+                val a = freshVId (ctx, "a")
+                val b = freshVId (ctx, "b")
+              in
+                F.MultiFnExp ([(a, subjectTy), (b, subjectTy)], F.AppExp
+                  ( toFExp (ctx, innerEnv, exp)
+                  , F.TupleExp [F.VarExp a, F.VarExp b]
+                  ))
+              end
             val exp =
               List.foldr
                 (fn ((tv, eqParam), exp) =>
@@ -3327,20 +3312,20 @@ struct
                   )
                 val body =
                   let
-                    val param = freshVId (ctx, "p")
-                    val paramTy = let val ty = F.TyCon (tyvars'', tyname)
-                                  in F.PairType (ty, ty)
-                                  end
+                    val param1 = freshVId (ctx, "a")
+                    val param2 = freshVId (ctx, "b")
+                    val ty = F.TyCon (tyvars'', tyname)
                     val hasMultipleConstructors =
                       case conbinds of
                         [] => true (* ? *)
                       | [_] => false
                       | _ => true
                   in
-                    F.FnExp (param, paramTy, F.CaseExp
+                    F.MultiFnExp ([(param1, ty), (param2, ty)], F.CaseExp
                       { sourceSpan = span
-                      , subjectExp = F.VarExp param
-                      , subjectTy = paramTy
+                      , subjectExp =
+                          F.TupleExp [F.VarExp param1, F.VarExp param2]
+                      , subjectTy = F.PairType (ty, ty)
                       , matches =
                           List.foldr
                             (fn (T.ConBind (span, _, NONE, info), rest) =>
@@ -3353,7 +3338,7 @@ struct
                                      }
                                in
                                  ( F.TuplePat (span, [conPat, conPat])
-                                 , F.VarExp (InitialEnv.VId_true)
+                                 , F.VarExp InitialEnv.VId_true
                                  ) :: rest
                                end
                               | ( T.ConBind (span, _, SOME payloadTy, info)
@@ -3389,8 +3374,10 @@ struct
                                            }
                                        ]
                                      )
-                                 , F.AppExp (payloadEq, F.TupleExp
-                                     [F.VarExp (payload1), F.VarExp (payload2)])
+                                 , F.MultiAppExp
+                                     ( payloadEq
+                                     , [F.VarExp payload1, F.VarExp payload2]
+                                     )
                                  ) :: rest
                                end)
                             (if hasMultipleConstructors then

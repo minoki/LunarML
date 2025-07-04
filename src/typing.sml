@@ -1957,8 +1957,12 @@ struct
       | synthTypeOfPat
           (_, _, S.VarPat (span, vid as S.MkVId "_Prim.unit.equal")) =
           let
-            val ty = T.FnType
-              (span, T.PairType (span, primTy_unit, primTy_unit), primTy_bool)
+            val ty =
+              T.TyCon
+                ( span
+                , [primTy_unit, primTy_unit, primTy_bool]
+                , primTyName_function2
+                )
           in
             ( ty
             , S.VIdMap.singleton (vid, (VId_unit_equal, ty))

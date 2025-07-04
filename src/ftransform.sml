@@ -172,7 +172,7 @@ struct
             F.VarExp InitialEnv.VId_true (* always match *)
         | genMatcher exp _
             (F.SConPat {sourceSpan = _, scon = _, equality, cookedValue}) =
-            F.AppExp (equality, F.TupleExp [exp, cookedValue])
+            F.MultiAppExp (equality, [exp, cookedValue])
         | genMatcher _ _ (F.VarPat (_, _, _)) =
             F.VarExp InitialEnv.VId_true (* always match *)
         | genMatcher exp (recordTy as F.RecordType fieldTypes)
