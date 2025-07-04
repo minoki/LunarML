@@ -17,8 +17,11 @@ sig
     , tynameset: TypedSyntax.TyNameSet.set
     , toFEnv: ToFSyntax.Env
     }
-  val compile: Context * LanguageOptions.options * Env * string * string
-               -> Env * FSyntax.Dec list
+  val compile:
+    Context * LanguageOptions.options * Env * string * string
+    -> Env
+       * FSyntax.Dec list
+       * {lexTime: Time.time, parseTime: Time.time, typecheckTime: Time.time}
 end =
 struct
 
@@ -166,9 +169,11 @@ struct
               )
         end
       val messageHandler = Message.newHandler (errorCounter, printMessage)
+      val timer = Timer.startCPUTimer ()
       val lexer =
         LunarMLParser.makeLexer (LunarMLLex.makeInputFromString source)
           (name, langopt, messageHandler)
+      val lexTime = #usr (Timer.checkCPUTimer timer)
       val (decs, _) =
         let
           fun onError (message, p1, p2) =
@@ -178,6 +183,7 @@ struct
           LunarMLParser.parse ( (* lookahead *)0, lexer, onError, name)
         end
         handle LunarMLParser.ParseError => raise Message.Abort
+      val parseTime = Time.- (#usr (Timer.checkCPUTimer timer), lexTime)
       val (fixity', decs) = Fixity.doProgram
         ( { nextVId = nextVId
           , messageHandler = messageHandler
@@ -219,6 +225,7 @@ struct
           List.app
             (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
         end
+      val typecheckTime = Time.- (#usr (Timer.checkCPUTimer timer), parseTime)
       val modifiedEnv =
         { fixity = fixity'
         , typingEnv = typingEnv'
@@ -226,6 +233,12 @@ struct
         , toFEnv = toFEnv
         }
     in
-      (modifiedEnv, fdecs)
+      ( modifiedEnv
+      , fdecs
+      , { lexTime = lexTime
+        , parseTime = parseTime
+        , typecheckTime = typecheckTime
+        }
+      )
     end
 end; (* structure Driver *)

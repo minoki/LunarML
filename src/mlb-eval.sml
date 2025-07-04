@@ -11,6 +11,7 @@ sig
     , targetInfo: TargetInfo.target_info
     , defaultLanguageOptions: LanguageOptions.options
     , messageHandler: Message.handler
+    , time: {lexTime: Time.time, parseTime: Time.time, typecheckTime: Time.time} ref
     }
   datatype Env' =
     MkEnv of
@@ -56,6 +57,8 @@ struct
       , targetInfo: TargetInfo.target_info
       , defaultLanguageOptions: LanguageOptions.options
       , messageHandler: Message.handler
+      , time:
+          {lexTime: Time.time, parseTime: Time.time, typecheckTime: Time.time} ref
       }
     datatype Env' = MkEnv of Env
     withtype Env =
@@ -357,7 +360,11 @@ struct
         val source = let val ins = TextIO.openIn path (* may raise Io *)
                      in TextIO.inputAll ins before TextIO.closeIn ins
                      end
-        val ({fixity, typingEnv, tynameset, toFEnv}, fdecs) = Driver.compile
+        val
+          ( {fixity, typingEnv, tynameset, toFEnv}
+          , fdecs
+          , {lexTime, parseTime, typecheckTime}
+          ) = Driver.compile
           ( #driverContext ctx
           , langopt
           , { fixity = #fixity env
@@ -368,6 +375,15 @@ struct
           , path
           , source
           ) (* TODO: use langopt *)
+        val () =
+          #time ctx
+          :=
+          (case !(#time ctx) of
+             {lexTime = l, parseTime = p, typecheckTime = t} =>
+               { lexTime = Time.+ (l, lexTime)
+               , parseTime = Time.+ (p, parseTime)
+               , typecheckTime = Time.+ (t, typecheckTime)
+               })
         val newenv = {bas = M.BasMap.empty, fixity = fixity, typing = typingEnv}
       in
         ( newenv
@@ -405,6 +421,7 @@ struct
                       , targetInfo = #targetInfo ctx
                       , defaultLanguageOptions = #defaultLanguageOptions ctx
                       , messageHandler = #messageHandler ctx
+                      , time = #time ctx
                       }
                     val (env', acc) =
                       doDecs ctx' (#defaultLanguageOptions ctx) emptyEnv decs

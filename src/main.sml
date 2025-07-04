@@ -422,6 +422,12 @@ struct
         , targetInfo = targetInfo
         , defaultLanguageOptions = defaultLanguageOptions
         , messageHandler = messageHandler
+        , time =
+            ref
+              { lexTime = Time.zeroTime
+              , parseTime = Time.zeroTime
+              , typecheckTime = Time.zeroTime
+              }
         }
       val timer = Timer.startCPUTimer ()
       val (env, {tynameset = _, toFEnv, fdecs, cache = _}) = f ctx
@@ -584,12 +590,21 @@ struct
           ()
       val () =
         if #printTimings opts then
-          print
-            ("[TIME] frontend: " ^ LargeInt.toString frontTime
-             ^
-             " us\n\
-             \[TIME] optimization (F): "
-             ^ LargeInt.toString (optTime - frontTime) ^ " us\n")
+          let
+            val {lexTime, parseTime, typecheckTime} = !(#time ctx)
+          in
+            print
+              ("[TIME] frontend: " ^ LargeInt.toString frontTime ^ " us (lex: "
+               ^ LargeInt.toString (Time.toMicroseconds lexTime)
+               ^ " us, parse: "
+               ^ LargeInt.toString (Time.toMicroseconds parseTime)
+               ^ " us, type check: "
+               ^ LargeInt.toString (Time.toMicroseconds typecheckTime)
+               ^
+               " us)\n\
+               \[TIME] optimization (F): "
+               ^ LargeInt.toString (optTime - frontTime) ^ " us\n")
+          end
         else
           ()
       val nextId = #nextVId (#driverContext ctx)
