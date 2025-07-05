@@ -1121,6 +1121,9 @@ struct
                            (fn (p, a, subst) =>
                               TypedSyntax.VIdMap.insert (subst, p, a)) subst
                            (params, args)
+                         handle ListPair.UnequalLengths =>
+                           raise Fail
+                             "inliner: arity mismatch in function application"
                        val csubst = C.CVarMap.insert (csubst, contParam, cont)
                      in
                        CpsSimplify.alphaConvert (ctx, subst, csubst, body)
@@ -1166,6 +1169,9 @@ struct
                       (fn (SOME p, a, subst) =>
                          TypedSyntax.VIdMap.insert (subst, p, a)
                         | (NONE, _, subst) => subst) subst (params, args)
+                    handle ListPair.UnequalLengths =>
+                      raise Fail
+                        "inliner: arity mismatch in continuation application"
                 in
                   CpsSimplify.alphaConvert (ctx, subst, csubst, body)
                 end

@@ -2110,12 +2110,13 @@ struct
                              emitFatalTypeError (ctx, [span], "invalid pattern"))
                   end
                 else (* idstatus = Syntax.ValueVariable *)
-                  emitFatalTypeError (ctx, [span], "invalid pattern"))
+                  emitFatalTypeError
+                    (ctx, [span], "invalid pattern; a constructor is expected"))
            | ValueNotFound notfound =>
                emitFatalTypeError
                  ( ctx
                  , [span]
-                 , "invalid pattern: value name '"
+                 , "invalid pattern: constructor '"
                    ^ Syntax.print_LongVId notfound ^ "' not found"
                  )
            | StructureNotFound notfound =>
