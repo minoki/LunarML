@@ -490,8 +490,12 @@ struct
                         ^ ": invalid number of arguments")
              in
                case prim of
-                 Primitives.call2 =>
-                   doTernary (fn (f, a0, a1) => J.CallExp (f, vector [a0, a1]))
+                 Primitives.mkFn2 =>
+                   doUnary (fn f =>
+                     J.CallExp (J.VarExp (J.PredefinedId "_mkFn2"), vector [f]))
+               | Primitives.mkFn3 =>
+                   doUnary (fn f =>
+                     J.CallExp (J.VarExp (J.PredefinedId "_mkFn3"), vector [f]))
                | Primitives.List_cons =>
                    doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), PURE)
                | Primitives.List_null =>

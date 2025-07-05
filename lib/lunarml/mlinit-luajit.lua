@@ -109,6 +109,21 @@ local function _method(obj, name, ...)
 end
 --END
 
+--BEGIN _mkFn2
+local function _mkFn2(f)
+  return function(a, b)
+    return f({a, b})
+  end
+end
+--END
+--BEGIN _mkFn3
+local function _mkFn3(f)
+  return function(a, b, c)
+    return f({a, b, c})
+  end
+end
+--END
+
 --BEGIN _exn_meta: string_format
 local _exn_meta = {}
 function _exn_meta:__tostring()

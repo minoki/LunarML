@@ -38,14 +38,14 @@ do
   local pair = function(ty1, ty2) return {string_format("pairOf (%s, %s)", ty1[1], ty2[1])} end
   local tuple = function(types)
     local t = {}
-    for _, v in pairs(types) do
+    for _, v in ipairs(types) do
       table.insert(t, v[1])
     end
     return {string_format("tupleOf [%s]", table.concat(t, ", "))}
   end
-  local function1 = function(resultTy, arg1Ty) return {string_format("function1Of (%s, %s)", resultTy[1], arg1Ty[1])} end
-  local function2 = function(resultTy, arg1Ty, arg2Ty) return {string_format("function2Of (%s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1])} end
-  local function3 = function(resultTy, arg1Ty, arg2Ty, arg3Ty) return {string_format("function3Of (%s, %s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1], arg3Ty[1])} end
+  local function1 = function(arg1Ty, resultTy) return {string_format("function1Of (%s, %s)", arg1Ty[1], resultTy[1])} end
+  local function2 = function(arg1Ty, arg2Ty, resultTy) return {string_format("function2Of (%s, %s, %s)", arg1Ty[1], arg2Ty[1], resultTy[1])} end
+  local function3 = function(arg1Ty, arg2Ty, arg3Ty, resultTy) return {string_format("function3Of (%s, %s, %s, %s)", arg1Ty[1], arg2Ty[1], arg3Ty[1], resultTy[1])} end
   local promptTag = function(ty) return {string_format("promptTagOf (%s)", ty[1])} end
   local subcont = function(ty1, ty2) return {string_format("subcontOf (%s, %s)", ty1[1], ty2[1])} end
   local function Binary(a, b)
@@ -72,16 +72,30 @@ do
       discardable = true,
     },
     {
+      name = "mkFn2",
+      srcname = "mkFn2",
+      type = { vars = {TV.a, TV.b, TV.c}, args = {function1(pair(TV.a, TV.b), TV.c)}, results = {function2(TV.a, TV.b, TV.c)} },
+      mayraise = true,
+      discardable = false,
+    },
+    {
+      name = "mkFn3",
+      srcname = "mkFn3",
+      type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function1(tuple{TV.a, TV.b, TV.c}, TV.d)}, results = {function3(TV.a, TV.b, TV.c, TV.d)} },
+      mayraise = true,
+      discardable = false,
+    },
+    {
       name = "call2",
       srcname = "call2",
-      type = { vars = {TV.a, TV.b, TV.c}, args = {function2(TV.a, TV.b, TV.c), TV.b, TV.c}, results = {TV.a} },
+      type = { vars = {TV.a, TV.b, TV.c}, args = {function2(TV.a, TV.b, TV.c), TV.a, TV.b}, results = {TV.c} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "call3",
       srcname = "call3",
-      type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function3(TV.a, TV.b, TV.c, TV.d), TV.b, TV.c, TV.d}, results = {TV.a} },
+      type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function3(TV.a, TV.b, TV.c, TV.d), TV.a, TV.b, TV.c}, results = {TV.d} },
       mayraise = true,
       discardable = false,
     },
@@ -886,28 +900,28 @@ do
     {
       name = "DelimCont.pushPrompt",
       srcname = "DelimCont_pushPrompt",
-      type = { vars = {TV.a}, args = {promptTag(TV.a), function1(TV.a, unit)}, results = {TV.a} },
+      type = { vars = {TV.a}, args = {promptTag(TV.a), function1(unit, TV.a)}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "DelimCont.withSubCont",
       srcname = "DelimCont_withSubCont",
-      type = { vars = {TV.a, TV.b}, args = {promptTag(TV.b), function1(TV.b, subcont(TV.a, TV.b))}, results = {TV.a} },
+      type = { vars = {TV.a, TV.b}, args = {promptTag(TV.b), function1(subcont(TV.a, TV.b), TV.b)}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "DelimCont.pushSubCont",
       srcname = "DelimCont_pushSubCont",
-      type = { vars = {TV.a, TV.b}, args = {subcont(TV.a, TV.b), function1(TV.a, unit)}, results = {TV.b} },
+      type = { vars = {TV.a, TV.b}, args = {subcont(TV.a, TV.b), function1(unit, TV.a)}, results = {TV.b} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "assumeDiscardable",
       srcname = "assumeDiscardable",
-      type = { vars = {TV.a, TV.b}, args = {function1(TV.b, TV.a), TV.a}, results = {TV.b} },
+      type = { vars = {TV.a, TV.b}, args = {function1(TV.a, TV.b), TV.a}, results = {TV.b} },
       mayraise = true,
       discardable = true,
     },
@@ -1482,7 +1496,7 @@ do
     {
       name = "JavaScript.function",
       srcname = "JavaScript_function",
-      type = { vars = {}, args = {function1(JSValue, vector(JSValue))}, results = {JSValue} },
+      type = { vars = {}, args = {function1(vector(JSValue), JSValue)}, results = {JSValue} },
       mayraise = false,
       discardable = true,
     },

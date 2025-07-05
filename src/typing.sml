@@ -596,12 +596,14 @@ struct
        fun pairOf (ty1, ty2) =
          TypedSyntax.PairType (SourcePos.nullSpan, ty1, ty2)
        fun tupleOf types = TypedSyntax.TupleType (SourcePos.nullSpan, types)
-       fun function1Of (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, b, a)
-       fun function2Of (a, b, c) =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
-       fun function3Of (a, b, c, d) =
+       fun function1Of (a, result) =
+         TypedSyntax.FnType (SourcePos.nullSpan, a, result)
+       fun function2Of (a, b, result) =
          TypedSyntax.TyCon
-           (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
+           (SourcePos.nullSpan, [a, b, result], primTyName_function2)
+       fun function3Of (a, b, c, result) =
+         TypedSyntax.TyCon
+           (SourcePos.nullSpan, [a, b, c, result], primTyName_function3)
        fun promptTagOf ty =
          TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_prompt_tag)
        fun subcontOf (a, b) =

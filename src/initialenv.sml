@@ -363,10 +363,10 @@ struct
       mkTyCon ([t], primTyName_array)
     fun vectorOf t =
       mkTyCon ([t], primTyName_vector)
-    fun function2 (resultTy, arg1Ty, arg2Ty) =
-      mkTyCon ([resultTy, arg1Ty, arg2Ty], primTyName_function2)
-    fun function3 (resultTy, arg1Ty, arg2Ty, arg3Ty) =
-      mkTyCon ([resultTy, arg1Ty, arg2Ty, arg3Ty], primTyName_function3)
+    fun function2 (arg1Ty, arg2Ty, resultTy) =
+      mkTyCon ([arg1Ty, arg2Ty, resultTy], primTyName_function2)
+    fun function3 (arg1Ty, arg2Ty, arg3Ty, resultTy) =
+      mkTyCon ([arg1Ty, arg2Ty, arg3Ty, resultTy], primTyName_function3)
   in
     val
       initialValEnv:
@@ -520,7 +520,7 @@ struct
               , TypeScheme
                   ( []
                   , function2
-                      (primTy_string, primTy_string, listOf primTy_string)
+                      (primTy_string, listOf primTy_string, primTy_string)
                   )
               )
             , ( "_Prim.String.implode"
@@ -532,8 +532,8 @@ struct
               , TypeScheme
                   ( []
                   , function2
-                      ( primTy_string
-                      , primTy_char --> primTy_string
+                      ( primTy_char --> primTy_string
+                      , primTy_string
                       , primTy_string
                       )
                   )

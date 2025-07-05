@@ -252,32 +252,11 @@ struct
            F.AppType {applied = F.TyVar Typing.primTyName_array, arg = ty}
          val pairOf = F.PairType
          val tupleOf = F.TupleType
-         fun function1Of (a, b) = F.FnType (b, a)
-         fun function2Of (a, b, c) =
-           F.AppType
-             { applied = F.AppType
-                 { applied =
-                     F.AppType
-                       {applied = F.TyVar Typing.primTyName_function2, arg = a}
-                 , arg = b
-                 }
-             , arg = c
-             }
-         fun function3Of (a, b, c, d) =
-           F.AppType
-             { applied = F.AppType
-                 { applied = F.AppType
-                     { applied =
-                         F.AppType
-                           { applied = F.TyVar Typing.primTyName_function2
-                           , arg = a
-                           }
-                     , arg = b
-                     }
-                 , arg = c
-                 }
-             , arg = d
-             }
+         fun function1Of (a, result) = F.FnType (a, result)
+         fun function2Of (a, b, result) =
+           F.MultiFnType ([a, b], result)
+         fun function3Of (a, b, c, result) =
+           F.MultiFnType ([a, b, c], result)
          fun promptTagOf ty =
            F.AppType {applied = F.TyVar Typing.primTyName_prompt_tag, arg = ty}
          fun subcontOf (a, b) =

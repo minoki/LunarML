@@ -1641,9 +1641,30 @@ struct
             (Syntax.LabelMap.map (fn ty => toFTyPure (ctx, env, ty)) fields)
       | toFTyPure (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
-      | toFTyPure (ctx, env, T.TyCon (_, tyargs, tyname)) =
-          F.TyCon
-            (List.map (fn arg => toFTyPure (ctx, env, arg)) tyargs, tyname)
+      | toFTyPure (ctx, env, T.TyCon (span, tyargs, tyname)) =
+          if TypedSyntax.eqTyName (tyname, Typing.primTyName_function2) then
+            case List.map (fn ty => toFTyPure (ctx, env, ty)) tyargs of
+              [a, b, result] => F.MultiFnType ([a, b], result)
+            | xs =>
+                emitFatalError
+                  ( ctx
+                  , [span]
+                  , "arity mismatch: expected 3, but got "
+                    ^ Int.toString (List.length xs)
+                  )
+          else if TypedSyntax.eqTyName (tyname, Typing.primTyName_function3) then
+            case List.map (fn ty => toFTyPure (ctx, env, ty)) tyargs of
+              [a, b, c, result] => F.MultiFnType ([a, b, c], result)
+            | xs =>
+                emitFatalError
+                  ( ctx
+                  , [span]
+                  , "arity mismatch: expected 4, but got "
+                    ^ Int.toString (List.length xs)
+                  )
+          else
+            F.TyCon
+              (List.map (fn arg => toFTyPure (ctx, env, arg)) tyargs, tyname)
       | toFTyPure (ctx, env, T.FnType (_, paramTy, resultTy)) =
           let
             fun doTy ty = toFTyPure (ctx, env, ty)
@@ -1661,8 +1682,29 @@ struct
             (Syntax.LabelMap.map (fn ty => toFTy (ctx, env, ty)) fields)
       | toFTy (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
-      | toFTy (ctx, env, T.TyCon (_, tyargs, tyname)) =
-          F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
+      | toFTy (ctx, env, T.TyCon (span, tyargs, tyname)) =
+          if TypedSyntax.eqTyName (tyname, Typing.primTyName_function2) then
+            case List.map (fn ty => toFTy (ctx, env, ty)) tyargs of
+              [a, b, result] => F.MultiFnType ([a, b], result)
+            | xs =>
+                emitFatalError
+                  ( ctx
+                  , [span]
+                  , "arity mismatch: expected 3, but got "
+                    ^ Int.toString (List.length xs)
+                  )
+          else if TypedSyntax.eqTyName (tyname, Typing.primTyName_function3) then
+            case List.map (fn ty => toFTy (ctx, env, ty)) tyargs of
+              [a, b, c, result] => F.MultiFnType ([a, b, c], result)
+            | xs =>
+                emitFatalError
+                  ( ctx
+                  , [span]
+                  , "arity mismatch: expected 4, but got "
+                    ^ Int.toString (List.length xs)
+                  )
+          else
+            F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
       | toFTy (ctx, env, T.FnType (_, paramTy, resultTy)) =
           let
             fun doTy ty = toFTy (ctx, env, ty)
@@ -2597,6 +2639,41 @@ struct
               ( ctx
               , [span]
               , "invalid arguments to primop '=' ("
+                ^ Int.toString (Vector.length tyargs) ^ ", "
+                ^ Int.toString (Vector.length args) ^ ")"
+              )
+      | toFExp (ctx, env, T.PrimExp (span, Primitives.call2, tyargs, args)) =
+          if Vector.length tyargs = 3 andalso Vector.length args = 3 then
+            let
+              val f = toFExp (ctx, env, Vector.sub (args, 0))
+              val a = toFExp (ctx, env, Vector.sub (args, 1))
+              val b = toFExp (ctx, env, Vector.sub (args, 2))
+            in
+              F.MultiAppExp (f, [a, b])
+            end
+          else
+            emitFatalError
+              ( ctx
+              , [span]
+              , "invalid arguments to primop 'call2' ("
+                ^ Int.toString (Vector.length tyargs) ^ ", "
+                ^ Int.toString (Vector.length args) ^ ")"
+              )
+      | toFExp (ctx, env, T.PrimExp (span, Primitives.call3, tyargs, args)) =
+          if Vector.length tyargs = 4 andalso Vector.length args = 4 then
+            let
+              val f = toFExp (ctx, env, Vector.sub (args, 0))
+              val a = toFExp (ctx, env, Vector.sub (args, 1))
+              val b = toFExp (ctx, env, Vector.sub (args, 2))
+              val c = toFExp (ctx, env, Vector.sub (args, 3))
+            in
+              F.MultiAppExp (f, [a, b, c])
+            end
+          else
+            emitFatalError
+              ( ctx
+              , [span]
+              , "invalid arguments to primop 'call2' ("
                 ^ Int.toString (Vector.length tyargs) ^ ", "
                 ^ Int.toString (Vector.length args) ^ ")"
               )

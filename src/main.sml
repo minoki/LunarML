@@ -506,7 +506,21 @@ struct
               | toFTy (TypedSyntax.RecordExtType (_, _, _)) =
                   raise Fail "unexpected record extension"
               | toFTy (TypedSyntax.TyCon (_, tyargs, tyname)) =
-                  FSyntax.TyCon (List.map toFTy tyargs, tyname)
+                  if
+                    TypedSyntax.eqTyName (tyname, Typing.primTyName_function2)
+                  then
+                    case List.map toFTy tyargs of
+                      [a, b, result] => FSyntax.MultiFnType ([a, b], result)
+                    | _ => raise Fail "invalid use of function2"
+                  else if
+                    TypedSyntax.eqTyName (tyname, Typing.primTyName_function3)
+                  then
+                    case List.map toFTy tyargs of
+                      [a, b, c, result] =>
+                        FSyntax.MultiFnType ([a, b, c], result)
+                    | _ => raise Fail "invalid use of function3"
+                  else
+                    FSyntax.TyCon (List.map toFTy tyargs, tyname)
               | toFTy (TypedSyntax.FnType (_, paramTy, resultTy)) =
                   FSyntax.FnType (toFTy paramTy, toFTy resultTy)
             fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty)) =

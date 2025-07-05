@@ -4,6 +4,8 @@ structure Primitives = struct
 datatype int_width = INT | I32 | I54 | I64 | INT_INF
 datatype word_width = WORD | W32 | W64
 datatype PrimOp = EQUAL (* = *)
+                | mkFn2 (* mkFn2 *)
+                | mkFn3 (* mkFn3 *)
                 | call2 (* call2 *)
                 | call3 (* call3 *)
                 | List_cons (* List.:: *)
@@ -208,6 +210,8 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_encodeUtf8 (* JavaScript.encodeUtf8 *)
                 | JavaScript_decodeUtf8 (* JavaScript.decodeUtf8 *)
 fun toString EQUAL = "="
+  | toString mkFn2 = "mkFn2"
+  | toString mkFn3 = "mkFn3"
   | toString call2 = "call2"
   | toString call3 = "call3"
   | toString List_cons = "List.::"
@@ -630,6 +634,8 @@ fun toString EQUAL = "="
   | toString JavaScript_encodeUtf8 = "JavaScript.encodeUtf8"
   | toString JavaScript_decodeUtf8 = "JavaScript.decodeUtf8"
 fun fromString "=" = SOME EQUAL
+  | fromString "mkFn2" = SOME mkFn2
+  | fromString "mkFn3" = SOME mkFn3
   | fromString "call2" = SOME call2
   | fromString "call3" = SOME call3
   | fromString "List.::" = SOME List_cons
@@ -1058,6 +1064,8 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Int_TILDE INT_INF) = false
   | mayRaise (Int_abs INT_INF) = false
   | mayRaise EQUAL = false
+  | mayRaise mkFn2 = true
+  | mayRaise mkFn3 = true
   | mayRaise call2 = true
   | mayRaise call3 = true
   | mayRaise List_cons = false
@@ -1267,6 +1275,8 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Int_TILDE INT_INF) = true
   | isDiscardable (Int_abs INT_INF) = true
   | isDiscardable EQUAL = true
+  | isDiscardable mkFn2 = false
+  | isDiscardable mkFn3 = false
   | isDiscardable call2 = false
   | isDiscardable call3 = false
   | isDiscardable List_cons = true
@@ -1534,6 +1544,8 @@ fun fixIntWord { int, word }
         | p => p
     end
 fun returnArity EQUAL = 1
+  | returnArity mkFn2 = 1
+  | returnArity mkFn3 = 1
   | returnArity call2 = 1
   | returnArity call3 = 1
   | returnArity List_cons = 1
@@ -1788,8 +1800,10 @@ functor TypeOfPrimitives (type ty
                                val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, results : ty list }
                              end = struct
 fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [tyEqA, tyEqA], results = [bool] }
-  | typeOf Primitives.call2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], results = [tyA] }
-  | typeOf Primitives.call3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], results = [tyA] }
+  | typeOf Primitives.mkFn2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function1Of (pairOf (tyA, tyB), tyC)], results = [function2Of (tyA, tyB, tyC)] }
+  | typeOf Primitives.mkFn3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function1Of (tupleOf [tyA, tyB, tyC], tyD)], results = [function3Of (tyA, tyB, tyC, tyD)] }
+  | typeOf Primitives.call2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function2Of (tyA, tyB, tyC), tyA, tyB], results = [tyC] }
+  | typeOf Primitives.call3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function3Of (tyA, tyB, tyC, tyD), tyA, tyB, tyC], results = [tyD] }
   | typeOf Primitives.List_cons = { vars = [(tyVarA, Unconstrained)], args = vector [tyA, listOf (tyA)], results = [listOf (tyA)] }
   | typeOf Primitives.List_null = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [bool] }
   | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [tyA] }
@@ -2122,10 +2136,10 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf, tyA], results = [] }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], results = [bool] }
   | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
-  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], results = [tyA] }
-  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], results = [tyA] }
-  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], results = [tyB] }
-  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyB, tyA), tyA], results = [tyB] }
+  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (unit, tyA)], results = [tyA] }
+  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (subcontOf (tyA, tyB), tyB)], results = [tyA] }
+  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (unit, tyA)], results = [tyB] }
+  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyA, tyB), tyA], results = [tyB] }
   | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [tyA] }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], results = [] }
@@ -2206,7 +2220,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_function = { vars = [], args = vector [function1Of (JavaScriptValue, vectorOf (JavaScriptValue))], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_function = { vars = [], args = vector [function1Of (vectorOf (JavaScriptValue), JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_encodeUtf8 = { vars = [], args = vector [string16], results = [string] }
   | typeOf Primitives.JavaScript_decodeUtf8 = { vars = [], args = vector [string], results = [string16] }
 end;

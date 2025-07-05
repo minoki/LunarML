@@ -44,8 +44,8 @@ struct
       IntInf.min (x, IntInf.min (y, z))
     fun max3 (x, y, z) =
       IntInf.max (x, IntInf.max (y, z))
-    fun simplifySimpleExp (_: env, C.Record _) = NOT_SIMPLIFIED
-      | simplifySimpleExp (env, C.PrimOp {primOp, tyargs, args}) =
+    fun simplifySimpleExp (_: Context, _: env, C.Record _) = NOT_SIMPLIFIED
+      | simplifySimpleExp (ctx, env, C.PrimOp {primOp, tyargs, args}) =
           (case (primOp, args) of
              (F.ListOp, []) => VALUE C.Nil (* empty list *)
            | (F.PrimCall P.JavaScript_call, [f, C.Var args]) =>
@@ -872,9 +872,75 @@ struct
                       (C.PrimOp
                          {primOp = F.VectorOp, tyargs = tyargs, args = args})
                 | _ => NOT_SIMPLIFIED)
+           | (F.PrimCall P.mkFn2, [C.Var f]) =>
+               let
+                 val l = CpsSimplify.genContSym ctx
+                 val a = CpsSimplify.newVId (ctx, "a")
+                 val b = CpsSimplify.newVId (ctx, "b")
+                 val t = CpsSimplify.newVId (ctx, "t")
+               in
+                 SIMPLE_EXP (C.Abs
+                   { contParam = l
+                   , params = [a, b]
+                   , body = C.Let
+                       { decs =
+                           [C.ValDec
+                              { exp =
+                                  C.Record
+                                    (List.foldl Syntax.LabelMap.insert'
+                                       Syntax.LabelMap.empty
+                                       [ (Syntax.NumericLabel 1, C.Var a)
+                                       , (Syntax.NumericLabel 2, C.Var b)
+                                       ])
+                              , results = [SOME t]
+                              }]
+                       , cont = C.App
+                           { applied = C.Var f
+                           , cont = l
+                           , args = [C.Var t]
+                           , attr = {}
+                           }
+                       }
+                   , attr = {alwaysInline = false}
+                   })
+               end
+           | (F.PrimCall P.mkFn3, [C.Var f]) =>
+               let
+                 val l = CpsSimplify.genContSym ctx
+                 val a = CpsSimplify.newVId (ctx, "a")
+                 val b = CpsSimplify.newVId (ctx, "b")
+                 val c = CpsSimplify.newVId (ctx, "c")
+                 val t = CpsSimplify.newVId (ctx, "t")
+               in
+                 SIMPLE_EXP (C.Abs
+                   { contParam = l
+                   , params = [a, b, c]
+                   , body = C.Let
+                       { decs =
+                           [C.ValDec
+                              { exp =
+                                  C.Record
+                                    (List.foldl Syntax.LabelMap.insert'
+                                       Syntax.LabelMap.empty
+                                       [ (Syntax.NumericLabel 1, C.Var a)
+                                       , (Syntax.NumericLabel 2, C.Var b)
+                                       , (Syntax.NumericLabel 3, C.Var c)
+                                       ])
+                              , results = [SOME t]
+                              }]
+                       , cont = C.App
+                           { applied = C.Var f
+                           , cont = l
+                           , args = [C.Var t]
+                           , attr = {}
+                           }
+                       }
+                   , attr = {alwaysInline = false}
+                   })
+               end
            | _ => NOT_SIMPLIFIED)
-      | simplifySimpleExp (_, C.ExnTag _) = NOT_SIMPLIFIED
-      | simplifySimpleExp (env, C.Projection {label, record, fieldTypes = _}) =
+      | simplifySimpleExp (_, _, C.ExnTag _) = NOT_SIMPLIFIED
+      | simplifySimpleExp (_, env, C.Projection {label, record, fieldTypes = _}) =
           (case record of
              C.Var v =>
                (case TypedSyntax.VIdMap.find (env, v) of
@@ -885,7 +951,7 @@ struct
                 | _ => NOT_SIMPLIFIED)
            | _ => NOT_SIMPLIFIED)
       | simplifySimpleExp
-          (_, C.Abs {contParam = _, params = _, body = _, attr = _}) =
+          (_, _, C.Abs {contParam = _, params = _, body = _, attr = _}) =
           NOT_SIMPLIFIED (* TODO: Try eta conversion *)
     and simplifyDec (ctx: Context)
       (dec, (env, cenv, subst, csubst, acc: C.Dec list)) =
@@ -894,7 +960,7 @@ struct
           let
             val exp = CpsSimplify.substSimpleExp (subst, csubst, exp)
           in
-            case simplifySimpleExp (env, exp) of
+            case simplifySimpleExp (ctx, env, exp) of
               VALUE v =>
                 let
                   val () = #simplificationOccurred ctx := true
