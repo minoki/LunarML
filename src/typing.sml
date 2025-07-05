@@ -846,7 +846,7 @@ struct
                           } => Syntax.LabelMap.numItems fields' = 0
                       | _ => false
                   in
-                    if isUnit then ["unit"] else ["{}"]
+                    (if isUnit then "unit" else "{}") :: acc
                   end
                 else
                   case t of
