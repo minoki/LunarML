@@ -117,11 +117,15 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | COMMA_TyRow_NoELLIPSIS of (Syntax.Label * Syntax.Ty) list
        | AtExp of UnfixedSyntax.Exp
        | AppOrInfExp of UnfixedSyntax.Exp list
+       | AppOrInfExp_NoHead of UnfixedSyntax.Exp list
+       | AppOrInfExp_NoMatch of UnfixedSyntax.Exp list
        | ExpRow of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpRowRest of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpCSeqRest of UnfixedSyntax.Exp list
        | ExpSSeqRest of UnfixedSyntax.Exp list * UnfixedSyntax.optional_semicolon
        | TypedExp of UnfixedSyntax.Exp
+       | TypedExp_NoHead of UnfixedSyntax.Exp
+       | TypedExp_NoMatch of UnfixedSyntax.Exp
        | AndalsoExp of UnfixedSyntax.Exp
        | AndalsoExp_NoHead of UnfixedSyntax.Exp
        | AndalsoExp_NoMatch of UnfixedSyntax.Exp
@@ -468,26 +472,49 @@ AppExp : AtExp
        | AppExp AtExp
 InfExp : AppExp
        | InfExp VId InfExp
+       | InfExp VId HeadExp (* This is a syntax error, but parsed to produce better error messages *)
 *)
 
 AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
             | AtExp ([AtExp])
             | AtExp InfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)) :: AppOrInfExp)
             | AtExp QualifiedInfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))) :: AppOrInfExp)
+            | AtExp HeadExp (AtExp :: [UnfixedSyntax.MissingParenExp HeadExp])
+            | AtExp InfixIdent HeadExp (AtExp :: [UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)), UnfixedSyntax.MissingParenExp HeadExp])
+            | AtExp QualifiedInfixIdent HeadExp (AtExp :: [UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))), UnfixedSyntax.MissingParenExp HeadExp])
+
+AppOrInfExp_NoHead : AtExp AppOrInfExp_NoHead (AtExp :: AppOrInfExp_NoHead) (* atomic *)
+                   | AtExp ([AtExp])
+                   | AtExp InfixIdent AppOrInfExp_NoHead (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)) :: AppOrInfExp_NoHead)
+                   | AtExp QualifiedInfixIdent AppOrInfExp_NoHead (AtExp :: UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))) :: AppOrInfExp_NoHead)
+
+AppOrInfExp_NoMatch : AtExp AppOrInfExp_NoMatch (AtExp :: AppOrInfExp_NoMatch) (* atomic *)
+                    | AtExp ([AtExp])
+                    | AtExp InfixIdent AppOrInfExp_NoMatch (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)) :: AppOrInfExp_NoMatch)
+                    | AtExp QualifiedInfixIdent AppOrInfExp_NoMatch (AtExp :: UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))) :: AppOrInfExp_NoMatch)
+                    | AtExp HeadExp_NoMatch (AtExp :: [UnfixedSyntax.MissingParenExp HeadExp_NoMatch])
+                    | AtExp InfixIdent HeadExp_NoMatch (AtExp :: [UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)), UnfixedSyntax.MissingParenExp HeadExp_NoMatch])
+                    | AtExp QualifiedInfixIdent HeadExp_NoMatch (AtExp :: [UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))), UnfixedSyntax.MissingParenExp HeadExp_NoMatch])
 
 TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExpleft,AppOrInfExpright), AppOrInfExp))
-         | TypedExp COLON Ty (UnfixedSyntax.TypedExp (span(TypedExpleft,Tyright), TypedExp, Ty)) (* typed (L) *)
+         | TypedExp_NoHead COLON Ty (UnfixedSyntax.TypedExp (span(TypedExp_NoHeadleft,Tyright), TypedExp_NoHead, Ty)) (* typed (L) *)
+
+TypedExp_NoHead : AppOrInfExp_NoHead (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExp_NoHeadleft,AppOrInfExp_NoHeadright), AppOrInfExp_NoHead))
+                | TypedExp_NoHead COLON Ty (UnfixedSyntax.TypedExp (span(TypedExp_NoHeadleft,Tyright), TypedExp_NoHead, Ty)) (* typed (L) *)
+
+TypedExp_NoMatch : AppOrInfExp_NoMatch (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExp_NoMatchleft,AppOrInfExp_NoMatchright), AppOrInfExp_NoMatch))
+                 | TypedExp_NoHead COLON Ty (UnfixedSyntax.TypedExp (span(TypedExp_NoHeadleft,Tyright), TypedExp_NoHead, Ty)) (* typed (L) *)
 
 AndalsoExp : TypedExp (TypedExp)
-           | TypedExp ANDALSO AndalsoExp (MkAndAlsoExp (span(TypedExpleft, AndalsoExpright), TypedExp, AndalsoExp)) (* [derived] conjunction *)
-           | TypedExp ANDALSO HeadExp (MkAndAlsoExp (span(TypedExpleft, HeadExpright), TypedExp, HeadExp)) (* [derived] conjunction *)
+           | TypedExp_NoHead ANDALSO AndalsoExp (MkAndAlsoExp (span(TypedExp_NoHeadleft, AndalsoExpright), TypedExp_NoHead, AndalsoExp)) (* [derived] conjunction *)
+           | TypedExp_NoHead ANDALSO HeadExp (MkAndAlsoExp (span(TypedExp_NoHeadleft, HeadExpright), TypedExp_NoHead, HeadExp)) (* [derived] conjunction *)
 
-AndalsoExp_NoHead : TypedExp (TypedExp)
-                  | TypedExp ANDALSO AndalsoExp_NoHead (MkAndAlsoExp (span(TypedExpleft, AndalsoExp_NoHeadright), TypedExp, AndalsoExp_NoHead)) (* [derived] conjunction *)
+AndalsoExp_NoHead : TypedExp_NoHead (TypedExp_NoHead)
+                  | TypedExp_NoHead ANDALSO AndalsoExp_NoHead (MkAndAlsoExp (span(TypedExp_NoHeadleft, AndalsoExp_NoHeadright), TypedExp_NoHead, AndalsoExp_NoHead)) (* [derived] conjunction *)
 
-AndalsoExp_NoMatch : TypedExp (TypedExp)
-                   | TypedExp ANDALSO AndalsoExp_NoMatch (MkAndAlsoExp (span(TypedExpleft, AndalsoExp_NoMatchright), TypedExp, AndalsoExp_NoMatch)) (* [derived] conjunction *)
-                   | TypedExp ANDALSO HeadExp_NoMatch (MkAndAlsoExp (span(TypedExpleft, HeadExp_NoMatchright), TypedExp, HeadExp_NoMatch)) (* [derived] conjunction *)
+AndalsoExp_NoMatch : TypedExp_NoMatch (TypedExp_NoMatch)
+                   | TypedExp_NoHead ANDALSO AndalsoExp_NoMatch (MkAndAlsoExp (span(TypedExp_NoHeadleft, AndalsoExp_NoMatchright), TypedExp_NoHead, AndalsoExp_NoMatch)) (* [derived] conjunction *)
+                   | TypedExp_NoHead ANDALSO HeadExp_NoMatch (MkAndAlsoExp (span(TypedExp_NoHeadleft, HeadExp_NoMatchright), TypedExp_NoHead, HeadExp_NoMatch)) (* [derived] conjunction *)
 
 OrelseExp : AndalsoExp (AndalsoExp)
           | AndalsoExp_NoHead ORELSE OrelseExp (MkOrElseExp (span(AndalsoExp_NoHeadleft, OrelseExpright), AndalsoExp_NoHead, OrelseExp)) (* [derived] disjunction *)

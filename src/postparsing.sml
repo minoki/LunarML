@@ -903,6 +903,14 @@ struct
             , doExp (ctx, env, y)
             )
         )
+    | doExp (ctx, env, UnfixedSyntax.MissingParenExp exp) =
+        ( emitNonfatalError
+            ( ctx
+            , [UnfixedSyntax.getSourceSpanOfExp exp]
+            , "parentheses are missing"
+            )
+        ; doExp (ctx, env, exp)
+        )
   and doDecs (_, _, nil) = (emptyEnv, nil)
     | doDecs (ctx, env, dec :: decs) =
         let

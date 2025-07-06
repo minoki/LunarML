@@ -903,6 +903,8 @@ sig
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
   | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
+  | MissingParenExp of
+      Exp (* expressions lacking necessary parentheses; like 'if ...' in '1 + if ...' *)
   and Dec =
     ValDec of
       SourcePos.span
@@ -953,6 +955,7 @@ sig
   val TupleExp: SourcePos.span * Exp list -> Exp
   val TuplePat: SourcePos.span * Pat list -> Pat
   val getSourceSpanOfPat: Pat -> SourcePos.span
+  val getSourceSpanOfExp: Exp -> SourcePos.span
 end =
 struct
   datatype 'a RecordItem =
@@ -1023,6 +1026,8 @@ struct
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
   | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
+  | MissingParenExp of
+      Exp (* expressions lacking necessary parentheses; like 'if ...' in '1 + if ...' *)
   and Dec =
     ValDec of
       SourcePos.span
@@ -1093,5 +1098,28 @@ struct
     | getSourceSpanOfPat (TypedPat (span, _, _)) = span
     | getSourceSpanOfPat (ConjunctivePat (span, _, _)) = span
     | getSourceSpanOfPat (VectorPat (span, _, _)) = span
+
+  fun getSourceSpanOfExp (SConExp (span, _)) = span
+    | getSourceSpanOfExp (NonInfixVIdExp (span, _)) = span
+    | getSourceSpanOfExp (InfixOrVIdExp (span, _)) = span
+    | getSourceSpanOfExp (InfixExp (span, _)) = span
+    | getSourceSpanOfExp (RecordExp (span, _)) = span
+    | getSourceSpanOfExp (RecordUpdateExp (span, _, _)) = span
+    | getSourceSpanOfExp (LetInExp (span, _, _)) = span
+    | getSourceSpanOfExp (JuxtapositionExp (span, _)) = span
+    | getSourceSpanOfExp (AppExp (span, _, _)) = span
+    | getSourceSpanOfExp (TypedExp (span, _, _)) = span
+    | getSourceSpanOfExp (HandleExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (RaiseExp (span, _)) = span
+    | getSourceSpanOfExp (IfThenElseExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (WhileDoExp (span, _, _)) = span
+    | getSourceSpanOfExp (CaseExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (FnExp (span, _, _)) = span
+    | getSourceSpanOfExp (ProjectionExp (span, _)) = span
+    | getSourceSpanOfExp (ListExp (span, _)) = span
+    | getSourceSpanOfExp (VectorExp (span, _)) = span
+    | getSourceSpanOfExp (PrimExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (SequentialExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (MissingParenExp exp) = getSourceSpanOfExp exp
 
 end (* structure UnfixedSyntax *)
