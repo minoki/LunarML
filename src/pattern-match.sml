@@ -205,6 +205,7 @@ struct
         collectConstructors (innerPat, acc)
     | collectConstructors (F.VectorPat (_, pats, ellipsis, _), acc) =
         ConstructorSet.addVector (acc, Vector.length pats, ellipsis)
+    | collectConstructors (F.BogusPat _, acc) = acc
   fun specializeValCon (con, hasPayload) =
     let
       fun goPat (F.WildcardPat span, ps) =
@@ -228,6 +229,7 @@ struct
         | goPat (F.ExnConPat _, _) = [] (* should not occur *)
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
+        | goPat (F.BogusPat _, _) = []
       fun goMatrix [] = []
         | goMatrix ((p :: ps) :: rest) =
             goPat (p, ps) @ goMatrix rest
@@ -263,6 +265,7 @@ struct
             else []
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
+        | goPat (F.BogusPat _, _) = []
       fun goMatrix [] = []
         | goMatrix ((p :: ps) :: rest) =
             goPat (p, ps) @ goMatrix rest
@@ -281,6 +284,7 @@ struct
         | goPat (F.ExnConPat _, _) = [] (* should not occur *)
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
+        | goPat (F.BogusPat _, _) = []
       fun goMatrix [] = []
         | goMatrix ((p :: ps) :: rest) =
             goPat (p, ps) @ goMatrix rest
@@ -327,6 +331,7 @@ struct
         | goPat (F.ExnConPat _, _) = [] (* should not occur *)
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
+        | goPat (F.BogusPat _, _) = []
       fun goMatrix [] = []
         | goMatrix ((p :: ps) :: rest) =
             goPat (p, ps) @ goMatrix rest
@@ -357,6 +362,7 @@ struct
               else
                 []
             end
+        | goPat (F.BogusPat _, _) = []
       fun goMatrix [] = []
         | goMatrix ((p :: ps) :: rest) =
             goPat (p, ps) @ goMatrix rest
@@ -508,6 +514,8 @@ struct
           defaultMatrix' ((innerPat :: ps) :: matrix, acc)
       | defaultMatrix' ((F.VectorPat _ :: _) :: matrix, acc) =
           defaultMatrix' (matrix, acc) (* no row *)
+      | defaultMatrix' ((F.BogusPat _ :: _) :: matrix, acc) =
+          defaultMatrix' (matrix, acc) (* is this ok? *)
   in
     fun defaultMatrix matrix = defaultMatrix' (matrix, [])
   end
@@ -602,6 +610,7 @@ struct
                   ( specializeVector (Vector.length pats) matrix
                   , Vector.foldr (op::) qs pats
                   )
+            | goPat (F.BogusPat _) = true (* is this ok? *)
         in
           goPat q
         end

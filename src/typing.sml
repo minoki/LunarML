@@ -480,6 +480,7 @@ struct
         isExhaustive (ctx, env, innerPat)
     | isExhaustive (_, _, TypedSyntax.VectorPat (_, pats, ellipsis, _)) =
         ellipsis andalso Vector.length pats = 0
+    | isExhaustive (_, _, TypedSyntax.BogusPat _) = false
 
   val primTyName_int = TypedSyntax.MkTyName ("int", 0)
   val primTyName_word = TypedSyntax.MkTyName ("word", 1)
@@ -2061,71 +2062,110 @@ struct
                 end
           end
       | synthTypeOfPat (ctx, env, S.ConPat (span, longvid, optInnerPat)) =
-          (case lookupLongVIdInEnv (ctx, env, span, longvid) of
-             Found (longvid, tysc, idstatus) =>
-               (if
-                  (case idstatus of
-                     Syntax.ValueConstructor _ => true
-                   | Syntax.ExceptionConstructor => true
-                   | _ => false)
-                then
-                  let
-                    val (ty, tyargs) = instantiate (ctx, span, tysc)
-                    val valueConstructorInfo =
-                      case idstatus of
-                        Syntax.ValueConstructor info => SOME info
-                      | _ => NONE
-                  in
-                    case optInnerPat of
-                      NONE =>
-                        ( ty
-                        , Syntax.VIdMap.empty
-                        , T.ConPat
-                            { sourceSpan = span
-                            , longvid = longvid
-                            , payload = NONE
-                            , tyargs = List.map #1 tyargs
-                            , valueConstructorInfo = valueConstructorInfo
-                            }
+          let
+            fun makeBogus () =
+              let
+                val freshTy = T.AnonymousTyVar
+                  (span, freshTyVar (ctx, span, false, NONE))
+              in
+                case optInnerPat of
+                  NONE =>
+                    ( freshTy
+                    , Syntax.VIdMap.empty
+                    , T.BogusPat (span, freshTy, [])
+                    )
+                | SOME innerPat =>
+                    let
+                      val (innerTy, innerVars, innerPat) =
+                        synthTypeOfPat (ctx, env, innerPat)
+                    in
+                      ( freshTy
+                      , innerVars
+                      , T.BogusPat (span, freshTy, [(innerTy, innerPat)])
+                      )
+                    end
+              end
+          in
+            case lookupLongVIdInEnv (ctx, env, span, longvid) of
+              Found (longvid, tysc, idstatus) =>
+                let
+                  val isConstructor =
+                    case idstatus of
+                      Syntax.ValueConstructor _ => true
+                    | Syntax.ExceptionConstructor => true
+                    | _ => false
+                in
+                  if isConstructor then
+                    let
+                      val (ty, tyargs) = instantiate (ctx, span, tysc)
+                      val valueConstructorInfo =
+                        case idstatus of
+                          Syntax.ValueConstructor info => SOME info
+                        | _ => NONE
+                    in
+                      case optInnerPat of
+                        NONE =>
+                          ( ty
+                          , Syntax.VIdMap.empty
+                          , T.ConPat
+                              { sourceSpan = span
+                              , longvid = longvid
+                              , payload = NONE
+                              , tyargs = List.map #1 tyargs
+                              , valueConstructorInfo = valueConstructorInfo
+                              }
+                          )
+                      | SOME innerPat =>
+                          (case ty of
+                             T.FnType (_, argTy, resultTy) =>
+                               let
+                                 val (innerVars, innerPat') =
+                                   checkTypeOfPat (ctx, env, innerPat, argTy)
+                               in
+                                 ( resultTy
+                                 , innerVars
+                                 , T.ConPat
+                                     { sourceSpan = span
+                                     , longvid = longvid
+                                     , payload = SOME (argTy, innerPat')
+                                     , tyargs = List.map #1 tyargs
+                                     , valueConstructorInfo =
+                                         valueConstructorInfo
+                                     }
+                                 )
+                               end
+                           | _ =>
+                               emitFatalTypeError
+                                 (ctx, [span], "invalid pattern"))
+                    end
+                  else (* idstatus = Syntax.ValueVariable *)
+                    ( emitTypeError
+                        ( ctx
+                        , [span]
+                        , "invalid pattern; a constructor is expected"
                         )
-                    | SOME innerPat =>
-                        (case ty of
-                           T.FnType (_, argTy, resultTy) =>
-                             let
-                               val (innerVars, innerPat') =
-                                 checkTypeOfPat (ctx, env, innerPat, argTy)
-                             in
-                               ( resultTy
-                               , innerVars
-                               , T.ConPat
-                                   { sourceSpan = span
-                                   , longvid = longvid
-                                   , payload = SOME (argTy, innerPat')
-                                   , tyargs = List.map #1 tyargs
-                                   , valueConstructorInfo = valueConstructorInfo
-                                   }
-                               )
-                             end
-                         | _ =>
-                             emitFatalTypeError (ctx, [span], "invalid pattern"))
-                  end
-                else (* idstatus = Syntax.ValueVariable *)
-                  emitFatalTypeError
-                    (ctx, [span], "invalid pattern; a constructor is expected"))
-           | ValueNotFound notfound =>
-               emitFatalTypeError
-                 ( ctx
-                 , [span]
-                 , "invalid pattern: constructor '"
-                   ^ Syntax.print_LongVId notfound ^ "' not found"
-                 )
-           | StructureNotFound notfound =>
-               emitFatalTypeError
-                 ( ctx
-                 , [span]
-                 , "invalid pattern: structure name '"
-                   ^ Syntax.print_LongStrId notfound ^ "' not found"
-                 ))
+                    ; makeBogus ()
+                    )
+                end
+            | ValueNotFound notfound =>
+                ( emitTypeError
+                    ( ctx
+                    , [span]
+                    , "invalid pattern: constructor '"
+                      ^ Syntax.print_LongVId notfound ^ "' not found"
+                    )
+                ; makeBogus ()
+                )
+            | StructureNotFound notfound =>
+                ( emitTypeError
+                    ( ctx
+                    , [span]
+                    , "invalid pattern: structure name '"
+                      ^ Syntax.print_LongStrId notfound ^ "' not found"
+                    )
+                ; makeBogus ()
+                )
+          end
       | synthTypeOfPat (ctx, env, S.TypedPat (span, pat, ty)) =
           let
             val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
@@ -5657,6 +5697,8 @@ struct
               (goTy ty; goPat pat)
           | goPat (T.VectorPat (_, pats, _, elemTy)) =
               (goTy elemTy; Vector.app goPat pats)
+          | goPat (T.BogusPat (_, ty, pats)) =
+              (goTy ty; List.app (fn (ty, pat) => (goTy ty; goPat pat)) pats)
         fun goExp (T.SConExp (_, _, ty)) = goTy ty
           | goExp (T.VarExp (_, _, _, tyargs)) =
               List.app (fn (ty, _) => goTy ty) tyargs

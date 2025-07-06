@@ -406,6 +406,17 @@ struct
                    (newEnv, checkPat (env, elemTy, pat)))
               TypedSyntax.VIdMap.empty pats
           end
+      | checkPat (env, expectedTy, F.BogusPat (_, ty, pats)) =
+          let
+            val () = checkSame (#aliasEnv env, "BogusPat", expectedTy) ty
+          in
+            List.foldl
+              (fn ((ty, pat), newEnv) =>
+                 TypedSyntax.VIdMap.unionWith
+                   (fn _ => raise TypeError "BogusPat: duplicate binding")
+                   (newEnv, checkPat (env, ty, pat))) TypedSyntax.VIdMap.empty
+              pats
+          end
     and inferExp (env: Env, F.PrimExp (F.PrimCall primOp, tyargs, valargs)) :
       F.Ty =
           let

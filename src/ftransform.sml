@@ -49,6 +49,7 @@ struct
     | isWildcardPat (F.LayeredPat _) = false
     | isWildcardPat (F.VectorPat (_, pats, ellipsis, _)) =
         ellipsis andalso Vector.length pats = 0
+    | isWildcardPat (F.BogusPat _) = false
   fun desugarPatternMatches (ctx: Context) :
     { doExp: F.Exp -> F.Exp
     , doDec: F.Dec -> F.Dec
@@ -405,6 +406,8 @@ struct
                      F.SimplifyingAndalsoExp (e, exp)
                    end) e0 pats
             end
+        | genMatcher exp _ (F.BogusPat _) =
+            F.VarExp InitialEnv.VId_false (* never match *)
       and genBinders _ _ (F.WildcardPat _) = []
         | genBinders _ _ (F.SConPat _) = []
         | genBinders exp _ (F.VarPat (_, vid, ty)) =
@@ -515,6 +518,7 @@ struct
                         , [exp, F.IntConstExp (Int.toLarge i, intTy)]
                         )) elemTy pat @ acc) [] pats
             end
+        | genBinders exp _ (F.BogusPat (_, _, pats)) = raise Message.Abort
       and isExhaustive (F.WildcardPat _) = true
         | isExhaustive (F.SConPat _) = false
         | isExhaustive (F.VarPat _) = true
@@ -533,6 +537,7 @@ struct
             isExhaustive innerPat
         | isExhaustive (F.VectorPat (_, pats, ellipsis, _)) =
             ellipsis andalso Vector.length pats = 0
+        | isExhaustive (F.BogusPat _) = false
       fun doDecs decs = List.map doDec decs
     in
       {doExp = doExp, doDec = doDec, doDecs = doDecs}
@@ -746,6 +751,8 @@ struct
     | doPat (F.LayeredPat (_, _, _, innerPat)) acc = doPat innerPat acc
     | doPat (F.VectorPat (_, pats, _, _)) acc =
         Vector.foldl (fn (pat, acc) => doPat pat acc) acc pats
+    | doPat (F.BogusPat (_, _, pats)) acc =
+        List.foldl (fn ((_, pat), acc) => doPat pat acc) acc pats
   and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc :
     TypedSyntax.VIdSet.set * F.Exp =
         let

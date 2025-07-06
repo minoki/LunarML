@@ -150,6 +150,10 @@ sig
   | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
   | VectorPat of
       SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
+  | BogusPat of
+      SourcePos.span
+      * Ty
+      * (Ty * Pat) list (* invalid pattern (e.g. invalid constructor) *)
   datatype TypBind =
     TypBind of SourcePos.span * TyVar list * Syntax.TyCon * PureTy
   datatype ConBind =
@@ -533,6 +537,10 @@ struct
   | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
   | VectorPat of
       SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
+  | BogusPat of
+      SourcePos.span
+      * Ty
+      * (Ty * Pat) list (* invalid pattern (e.g. invalid constructor) *)
 
   datatype TypBind =
     TypBind of SourcePos.span * TyVar list * Syntax.TyCon * PureTy
@@ -835,6 +843,7 @@ struct
           Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat))
             x ^ ",SOME(" ^ print_Pat basePat ^ "))"
       | print_Pat (VectorPat _) = "VectorPat"
+      | print_Pat (BogusPat _) = "BogusPat"
     (* | print_Pat _ = "<Pat>" *)
     fun print_Exp (SConExp (_, x, _)) =
           "SConExp(" ^ Syntax.print_SCon x ^ ")"
@@ -1137,6 +1146,12 @@ struct
             LayeredPat (span, vid, doTy ty, doPat pat)
         | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
             VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
+        | doPat (BogusPat (span, ty, pats)) =
+            BogusPat
+              ( span
+              , doTy ty
+              , List.map (fn (ty, pat) => (doTy ty, doPat pat)) pats
+              )
     in
       doPat
     end
@@ -1338,6 +1353,10 @@ struct
         VIdSet.add (boundVIdsInPat pat, vid)
     | boundVIdsInPat (VectorPat (_, pats, _, _)) =
         Vector.foldl (fn (pat, acc) => VIdSet.union (boundVIdsInPat pat, acc))
+          VIdSet.empty pats
+    | boundVIdsInPat (BogusPat (_, _, pats)) =
+        List.foldl
+          (fn ((_, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc))
           VIdSet.empty pats
 
   fun substVId
@@ -1677,6 +1696,12 @@ struct
             LayeredPat (span, vid, doTy ty, doPat pat)
         | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
             VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
+        | doPat (BogusPat (span, ty, pats)) =
+            BogusPat
+              ( span
+              , doTy ty
+              , List.map (fn (ty, pat) => (doTy ty, doPat pat)) pats
+              )
       fun doSignature ({valMap, tyConMap, strMap}: Signature) =
         { valMap =
             Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids))
@@ -1755,7 +1780,12 @@ struct
          freeAnonymousTyVarsInTy ty @ freeTyVarsInPat (bound, pat)
      | VectorPat (_, pats, _, elemTy) =>
          Vector.foldl (fn (pat, set) => freeTyVarsInPat (bound, pat) @ set)
-           (freeAnonymousTyVarsInTy elemTy) pats)
+           (freeAnonymousTyVarsInTy elemTy) pats
+     | BogusPat (_, ty, pats) =>
+         List.foldl
+           (fn ((ty, pat), set) =>
+              freeAnonymousTyVarsInTy ty @ freeTyVarsInPat (bound, pat) @ set)
+           (freeAnonymousTyVarsInTy ty) pats)
 
   (*: val freeTyVarsInExp : 'a * Exp -> AnonymousTyVar list *)
   fun freeTyVarsInExp (bound, exp) =
@@ -1897,6 +1927,8 @@ struct
             else TypedPat (span, doPat innerPat, ty)
         | VectorPat (span, pats, ellipsis, elemTy) =>
             VectorPat (span, Vector.map doPat pats, ellipsis, elemTy)
+        | BogusPat (span, ty, pats) =>
+            BogusPat (span, ty, List.map (fn (ty, pat) => (ty, doPat pat)) pats)
     in
       doPat
     end
@@ -1939,6 +1971,8 @@ struct
               )
         | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
             VectorPat (span, Vector.map doPat pats, ellipsis, elemTy)
+        | doPat (BogusPat (span, ty, pats)) =
+            BogusPat (span, ty, List.map (fn (ty, pat) => (ty, doPat pat)) pats)
     in
       doPat
     end

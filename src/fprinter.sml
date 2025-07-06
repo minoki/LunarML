@@ -164,6 +164,7 @@ struct
           (Vector.foldr (fn (pat, xs) => doPat 0 pat :: xs)
              (if wildcard then [[P.Fragment "..."]] else []) pats)
         @ [P.Fragment "]"] (* elemTy? *)
+    | doPat _ (F.BogusPat _) = [P.Fragment "<bogus pattern>"]
   (* precedence
    * atomexp ::= PrimExp | VarExp | RecordExp | ProjectionExp | StructExp | '(' exp ')' (* prec: 2 *)
    * appexp ::= atomexp

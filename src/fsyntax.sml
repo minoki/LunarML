@@ -86,6 +86,7 @@ sig
       }
   | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
   | VectorPat of SourcePos.span * Pat vector * bool * Ty
+  | BogusPat of SourcePos.span * Ty * (Ty * Pat) list
   and Exp =
     PrimExp of PrimOp * Ty list * Exp list
   | VarExp of TypedSyntax.VId
@@ -263,6 +264,7 @@ struct
       }
   | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
   | VectorPat of SourcePos.span * Pat vector * bool * Ty
+  | BogusPat of SourcePos.span * Ty * (Ty * Pat) list
   and Exp =
     PrimExp of PrimOp * Ty list * Exp list
   | VarExp of TypedSyntax.VId
@@ -573,6 +575,12 @@ struct
             LayeredPat (span, vid, doTy ty, doPat pat)
         | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
             VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
+        | doPat (BogusPat (span, ty, pats)) =
+            BogusPat
+              ( span
+              , doTy ty
+              , List.map (fn (ty, pat) => (doTy ty, doPat pat)) pats
+              )
       and doExp (PrimExp (primOp, tyargs, args)) =
             PrimExp (primOp, List.map doTy tyargs, List.map doExp args)
         | doExp (exp as VarExp _) = exp
@@ -744,6 +752,11 @@ struct
     | freeTyVarsInPat (bound, VectorPat (_, pats, _, elemTy)) acc =
         Vector.foldr (fn (pat, acc) => freeTyVarsInPat (bound, pat) acc)
           (freeTyVarsInTy (bound, elemTy) acc) pats
+    | freeTyVarsInPat (bound, BogusPat (_, ty, pats)) acc =
+        List.foldl
+          (fn ((ty, pat), acc) =>
+             freeTyVarsInPat (bound, pat) (freeTyVarsInTy (bound, ty) acc))
+          (freeTyVarsInTy (bound, ty) acc) pats
   and freeTyVarsInExp
         (bound: TypedSyntax.TyVarSet.set, PrimExp (_, tyargs, args)) acc =
         let
@@ -900,6 +913,8 @@ struct
         varsInPat innerPat (TypedSyntax.VIdSet.add (acc, vid))
     | varsInPat (VectorPat (_, pats, _, _)) acc =
         Vector.foldl (fn (pat, acc) => varsInPat pat acc) acc pats
+    | varsInPat (BogusPat (_, _, pats)) acc =
+        List.foldl (fn ((_, pat), acc) => varsInPat pat acc) acc pats
 
   fun freeVarsInPat (_: TypedSyntax.VIdSet.set, WildcardPat _) acc = acc
     | freeVarsInPat
@@ -943,6 +958,9 @@ struct
         freeVarsInPat (bound, innerPat) acc
     | freeVarsInPat (bound, VectorPat (_, pats, _, _)) acc =
         Vector.foldl (fn (pat, acc) => freeVarsInPat (bound, pat) acc) acc pats
+    | freeVarsInPat (bound, BogusPat (_, _, pats)) acc =
+        List.foldl (fn ((_, pat), acc) => freeVarsInPat (bound, pat) acc) acc
+          pats
   and freeVarsInExp (bound: TypedSyntax.VIdSet.set, PrimExp (_, _, args)) acc =
         List.foldl (fn (exp, acc) => freeVarsInExp (bound, exp) acc) acc args
     | freeVarsInExp (bound, VarExp vid) acc =
@@ -1055,6 +1073,7 @@ struct
     | getSourceSpanOfPat (ExnConPat {sourceSpan, ...}) = sourceSpan
     | getSourceSpanOfPat (LayeredPat (span, _, _, _)) = span
     | getSourceSpanOfPat (VectorPat (span, _, _, _)) = span
+    | getSourceSpanOfPat (BogusPat (span, _, _)) = span
 
   structure PrettyPrint =
   struct
@@ -1210,6 +1229,7 @@ struct
           Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat))
             fields ^ ",SOME(" ^ print_Pat basePat ^ "))"
       | print_Pat (VectorPat _) = "VectorPat"
+      | print_Pat (BogusPat _) = "BogusPat"
     and print_Exp (PrimExp (primOp, tyargs, args)) =
           "PrimExp(" ^ print_PrimOp primOp ^ ","
           ^ String.concatWith "," (List.map print_Ty tyargs) ^ ","
@@ -2375,6 +2395,20 @@ struct
             , F.VectorPat
                 (span, Vector.fromList pats, ellipsis, toFTy (ctx, env, elemTy))
             )
+          end
+      | toFPat (ctx, env, T.BogusPat (span, ty, pats)) =
+          let
+            val (m, pats) =
+              List.foldr
+                (fn ((ty, pat), (m, xs)) =>
+                   let
+                     val ty = toFTy (ctx, env, ty)
+                     val (m', pat) = toFPat (ctx, env, pat)
+                   in
+                     (TypedSyntax.VIdMap.unionWith #2 (m, m'), (ty, pat) :: xs)
+                   end) (TypedSyntax.VIdMap.empty, []) pats
+          in
+            (m, F.BogusPat (span, toFTy (ctx, env, ty), pats))
           end
     and toFExp
           ( ctx: Context
