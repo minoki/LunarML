@@ -483,6 +483,16 @@ struct
   (*: val substTy : Ty TypedSyntax.TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list } *)
   fun substTy (subst: Ty TypedSyntax.TyVarMap.map) =
     let
+      fun isRelevant (TyVar tv) = TypedSyntax.TyVarMap.inDomain (subst, tv)
+        | isRelevant (RecordType fields) =
+            Syntax.LabelMap.exists isRelevant fields
+        | isRelevant (AppType {applied, arg}) =
+            isRelevant applied orelse isRelevant arg
+        | isRelevant (MultiFnType (params, result)) =
+            List.exists isRelevant params orelse isRelevant result
+        | isRelevant (ForallType (_, _, ty)) = isRelevant ty (* approximation *)
+        | isRelevant (ExistsType (_, _, ty)) = isRelevant ty (* approximation *)
+        | isRelevant (TypeFn (_, _, ty)) = isRelevant ty (* approximation *)
       fun doTy (ty as TyVar tv) =
             (case TypedSyntax.TyVarMap.find (subst, tv) of
                NONE => ty
@@ -520,6 +530,8 @@ struct
                    , #doTy (substTy subst) ty
                    ) (* TODO: use fresh tyvar if necessary *)
              | NONE => TypeFn (tv, kind, doTy ty))
+      val doTy = fn ty =>
+        if isRelevant ty then doTy ty else ty (* optimization *)
       fun doConBind (ConBind (vid, optTy)) =
         ConBind (vid, Option.map doTy optTy)
       fun doDatBind (DatBind (tyvars, tyname, conbinds)) =
