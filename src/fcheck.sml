@@ -183,7 +183,7 @@ struct
     fun sameType env (ty, ty') =
       sameType' (0, TypedSyntax.TyVarMap.empty, TypedSyntax.TyVarMap.empty)
         (normalizeType env ty, normalizeType env ty')
-    (*: val checkSame : F.Ty TypedSyntax.TyVarMap.map * string * F.Ty -> F.Ty -> unit *)
+    (*: val checkSame : F.Ty TypedSyntax.TyVarMap.map * (unit -> string) * F.Ty -> F.Ty -> unit *)
     fun checkSame (env, comment, expectedTy) actualTy =
       if sameType env (expectedTy, actualTy) then
         ()
@@ -191,7 +191,7 @@ struct
         raise TypeError
           ("type mismatch: expected "
            ^ Printer.build (FPrinter.doTy 0 expectedTy) ^ ", but got "
-           ^ Printer.build (FPrinter.doTy 0 actualTy) ^ " (" ^ comment ^ ")")
+           ^ Printer.build (FPrinter.doTy 0 actualTy) ^ " (" ^ comment () ^ ")")
 
     type ValEnv = (F.Ty (* * Syntax.IdStatus *)) TypedSyntax.VIdMap.map
     val emptyValEnv: ValEnv = TypedSyntax.VIdMap.empty
@@ -295,7 +295,7 @@ struct
           )
       | checkPat (env, expectedTy, F.VarPat (_, vid, ty)) =
           ( checkKind (#tyVarEnv env, F.TypeKind) ty
-          ; checkSame (#aliasEnv env, "VarPat", expectedTy) ty
+          ; checkSame (#aliasEnv env, fn () => "VarPat", expectedTy) ty
           ; TypedSyntax.VIdMap.singleton (vid, ty)
           )
       | checkPat
@@ -362,7 +362,7 @@ struct
            | NONE => emptyValEnv)
       | checkPat
           (env, expectedTy, F.ExnConPat {sourceSpan = _, predicate, payload}) =
-          ( checkSame (#aliasEnv env, "ExnConPat", expectedTy)
+          ( checkSame (#aliasEnv env, fn () => "ExnConPat", expectedTy)
               (F.TyVar Typing.primTyName_exn)
           ; checkExp
               ( env
@@ -387,7 +387,8 @@ struct
       | checkPat (env, expectedTy, F.LayeredPat (_, vid, ty, pat)) =
           let
             val ty = normalizeType (#aliasEnv env) ty
-            val () = checkSame (#aliasEnv env, "LayeredPat", expectedTy) ty
+            val () =
+              checkSame (#aliasEnv env, fn () => "LayeredPat", expectedTy) ty
             val newEnv = checkPat (env, expectedTy, pat)
           in
             TypedSyntax.VIdMap.insert (newEnv, vid, ty)
@@ -395,7 +396,7 @@ struct
       | checkPat (env, expectedTy, F.VectorPat (_, pats, _, elemTy)) =
           let
             val elemTy = normalizeType (#aliasEnv env) elemTy
-            val () = checkSame (#aliasEnv env, "VectorPat", expectedTy)
+            val () = checkSame (#aliasEnv env, fn () => "VectorPat", expectedTy)
               (F.AppType
                  {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
           in
@@ -408,7 +409,8 @@ struct
           end
       | checkPat (env, expectedTy, F.BogusPat (_, ty, pats)) =
           let
-            val () = checkSame (#aliasEnv env, "BogusPat", expectedTy) ty
+            val () =
+              checkSame (#aliasEnv env, fn () => "BogusPat", expectedTy) ty
           in
             List.foldl
               (fn ((ty, pat), newEnv) =>
@@ -792,7 +794,8 @@ struct
                    (fn (e, (_, a)) =>
                       checkSame
                         ( #aliasEnv env
-                        , "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
+                        , fn () =>
+                            "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
                         , e
                         ) a) (paramTypes, params)
                  handle ListPair.UnequalLengths =>
@@ -836,7 +839,7 @@ struct
       | checkExp (env, expectedTy, exp) =
           checkSame
             ( #aliasEnv env
-            , "checkExp: " ^ Printer.build (FPrinter.doExp 0 exp)
+            , fn () => "checkExp: " ^ Printer.build (FPrinter.doExp 0 exp)
             , expectedTy
             ) (inferExp (env, exp))
     and inferDecs (env, decs) =
