@@ -494,35 +494,32 @@ struct
         | doTy (MultiFnType (params, result)) =
             MultiFnType (List.map doTy params, doTy result)
         | doTy (ForallType (tv, kind, ty)) =
-            if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-              ForallType
-                ( tv
-                , kind
-                , #doTy (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv))))
-                    ty
-                )
-            else
-              ForallType (tv, kind, doTy ty)
+            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+               SOME (subst, _) =>
+                 ForallType
+                   ( tv
+                   , kind
+                   , #doTy (substTy subst) ty
+                   ) (* TODO: use fresh tyvar if necessary *)
+             | NONE => ForallType (tv, kind, doTy ty))
         | doTy (ExistsType (tv, kind, ty)) =
-            if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-              ExistsType
-                ( tv
-                , kind
-                , #doTy (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv))))
-                    ty
-                )
-            else
-              ExistsType (tv, kind, doTy ty)
+            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+               SOME (subst, _) =>
+                 ExistsType
+                   ( tv
+                   , kind
+                   , #doTy (substTy subst) ty
+                   ) (* TODO: use fresh tyvar if necessary *)
+             | NONE => ExistsType (tv, kind, doTy ty))
         | doTy (TypeFn (tv, kind, ty)) =
-            if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-              TypeFn
-                ( tv
-                , kind
-                , #doTy (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv))))
-                    ty
-                )
-            else
-              TypeFn (tv, kind, doTy ty)
+            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+               SOME (subst, _) =>
+                 TypeFn
+                   ( tv
+                   , kind
+                   , #doTy (substTy subst) ty
+                   ) (* TODO: use fresh tyvar if necessary *)
+             | NONE => TypeFn (tv, kind, doTy ty))
       fun doConBind (ConBind (vid, optTy)) =
         ConBind (vid, Option.map doTy optTy)
       fun doDatBind (DatBind (tyvars, tyname, conbinds)) =
@@ -530,10 +527,10 @@ struct
           val subst' =
             List.foldl
               (fn (tv, subst) =>
-                 if TypedSyntax.TyVarMap.inDomain (subst, tv) then
-                   #1 (TypedSyntax.TyVarMap.remove (subst, tv))
-                 else
-                   subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
+                 case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+                   SOME (subst, _) => subst
+                 | NONE => subst) subst
+              tyvars (* TODO: use fresh tyvar if necessary *)
         in
           DatBind
             (tyvars, tyname, List.map (#doConBind (substTy subst')) conbinds)
@@ -617,15 +614,10 @@ struct
               , fieldTypes = Syntax.LabelMap.map doTy fieldTypes
               }
         | doExp (TyAbsExp (tv, kind, exp)) =
-            if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-              TyAbsExp
-                ( tv
-                , kind
-                , #doExp
-                    (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv)))) exp
-                )
-            else
-              TyAbsExp (tv, kind, doExp exp)
+            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of (* TODO: use fresh tyvar if necessary *)
+               SOME (subst, _) =>
+                 TyAbsExp (tv, kind, #doExp (substTy subst) exp)
+             | NONE => TyAbsExp (tv, kind, doExp exp))
         | doExp (PackExp {payloadTy, exp, packageTy}) =
             PackExp
               { payloadTy = doTy payloadTy
@@ -652,11 +644,9 @@ struct
               ( tv
               , kind
               , vid
-              , if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-                  #doTy (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv))))
-                    ty
-                else
-                  doTy ty
+              , case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of (* TODO: use fresh tyvar if necessary *)
+                  SOME (subst, _) => #doTy (substTy subst) ty
+                | NONE => doTy ty
               , doExp exp
               )
         | doDec (IgnoreDec exp) =

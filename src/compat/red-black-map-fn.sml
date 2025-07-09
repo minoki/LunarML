@@ -13,6 +13,8 @@ in
       in
         insert (map, key, value)
       end
+    fun findAndRemove (map, key) =
+      if inDomain (map, key) then SOME (remove (map, key)) else NONE
     open M
   end
 end;

@@ -846,7 +846,7 @@ struct
                           { typeFunction =
                               T.TypeFunction ([], T.RecordType (_, fields'))
                           , valEnv = _
-                          } => Syntax.LabelMap.numItems fields' = 0
+                          } => Syntax.LabelMap.isEmpty fields'
                       | _ => false
                   in
                     (if isUnit then "unit" else "{}") :: acc
@@ -2403,10 +2403,9 @@ struct
                  val baseFields =
                    List.foldl
                      (fn ((label, _), map) =>
-                        if Syntax.LabelMap.inDomain (map, label) then
-                          #1 (Syntax.LabelMap.remove (map, label))
-                        else
-                          map) fieldTypes fields
+                        case Syntax.LabelMap.findAndRemove (map, label) of
+                          SOME (map, _) => map
+                        | NONE => map) fieldTypes fields
                in
                  case ellipsis of
                    SOME basePat =>
@@ -3189,10 +3188,9 @@ struct
                  val extraFields =
                    List.foldl
                      (fn ((label, _), map) =>
-                        if Syntax.LabelMap.inDomain (map, label) then
-                          #1 (Syntax.LabelMap.remove (map, label))
-                        else
-                          map) fieldTypes fields
+                        case Syntax.LabelMap.findAndRemove (map, label) of
+                          SOME (map, _) => map
+                        | NONE => map) fieldTypes fields
                  val () =
                    if Syntax.LabelMap.isEmpty extraFields then
                      ()
@@ -3243,10 +3241,9 @@ struct
                  val baseFields =
                    List.foldl
                      (fn ((label, _), map) =>
-                        if Syntax.LabelMap.inDomain (map, label) then
-                          #1 (Syntax.LabelMap.remove (map, label))
-                        else
-                          map) fieldTypes fields
+                        case Syntax.LabelMap.findAndRemove (map, label) of
+                          SOME (map, _) => map
+                        | NONE => map) fieldTypes fields
                  val baseTy = T.RecordType (span', baseFields)
                  val baseExp = checkTypeOfExp (ctx, env, baseExp, baseTy)
                in

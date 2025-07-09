@@ -1243,10 +1243,9 @@ struct
               val subst' =
                 List.foldl
                   (fn (tv, s) =>
-                     if TyVarMap.inDomain (s, tv) then
-                       #1 (TyVarMap.remove (s, tv))
-                     else
-                       s) subst tyvars
+                     case TyVarMap.findAndRemove (s, tv) of
+                       SOME (s, _) => s
+                     | NONE => s) subst tyvars
             in
               EqualityDec
                 ( span
@@ -1266,17 +1265,15 @@ struct
               val subst' =
                 List.foldl
                   (fn ((tv, _), s) =>
-                     if TyVarMap.inDomain (s, tv) then
-                       #1 (TyVarMap.remove (s, tv))
-                     else
-                       s) subst tyvars
+                     case TyVarMap.findAndRemove (s, tv) of
+                       SOME (s, _) => s
+                     | NONE => s) subst tyvars
               val subst'' =
                 List.foldl
                   (fn ((tv, _), s) =>
-                     if TyVarMap.inDomain (s, tv) then
-                       #1 (TyVarMap.remove (s, tv))
-                     else
-                       s) subst tyvars'
+                     case TyVarMap.findAndRemove (s, tv) of
+                       SOME (s, _) => s
+                     | NONE => s) subst tyvars'
             in
               ValDescDec
                 { sourceSpan = sourceSpan
@@ -1301,10 +1298,9 @@ struct
               val subst' =
                 List.foldl
                   (fn ((tv, _), s) =>
-                     if TyVarMap.inDomain (s, tv) then
-                       #1 (TyVarMap.remove (s, tv))
-                     else
-                       s) subst tyvars
+                     case TyVarMap.findAndRemove (s, tv) of
+                       SOME (s, _) => s
+                     | NONE => s) subst tyvars
             in
               PolyVarBind
                 ( span
@@ -1367,8 +1363,9 @@ struct
         -> Exp) VIdMap.map) =
     let
       fun remove' (map, key) =
-        if VIdMap.inDomain (map, key) then #1 (VIdMap.remove (map, key))
-        else map
+        case VIdMap.findAndRemove (map, key) of
+          SOME (map, _) => map
+        | NONE => map
       fun removeKeys (map, keys) =
         VIdSet.foldl (fn (key, map) => remove' (map, key)) map keys
       fun boundVIdsInValBinds valbinds =

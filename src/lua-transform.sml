@@ -193,10 +193,9 @@ struct
           val map' =
             Vector.foldl
               (fn (id, map) =>
-                 if L.IdMap.inDomain (map, id) then
-                   #1 (L.IdMap.remove (map, id))
-                 else
-                   map) map params
+                 case L.IdMap.findAndRemove (map, id) of
+                   SOME (map, _) => map
+                 | NONE => map) map params
         in
           L.FunctionExp (params, substBlock map' body)
         end
@@ -210,14 +209,9 @@ struct
           val map' =
             List.foldl
               (fn ((id, _), map) =>
-                 let
-                   val id = L.UserDefinedId id
-                 in
-                   if L.IdMap.inDomain (map, id) then
-                     #1 (L.IdMap.remove (map, id))
-                   else
-                     map
-                 end) map lhs
+                 case L.IdMap.findAndRemove (map, L.UserDefinedId id) of
+                   SOME (map, _) => map
+                 | NONE => map) map lhs
         in
           (map', L.LocalStat (lhs, rhs))
         end
