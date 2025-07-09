@@ -2215,15 +2215,16 @@ struct
            end
        | _ => emitFatalError (ctx, [span], "invalid string constant: type"))
     (*:
-    val toFPat : Context * Env * TypedSyntax.Pat -> FSyntax.Ty TypedSyntax.VIdMap.map * FSyntax.Pat
+    val toFPat : Context * Env * TypedSyntax.Pat * FSyntax.Ty TypedSyntax.VIdMap.map -> FSyntax.Ty TypedSyntax.VIdMap.map * FSyntax.Pat
     and toFExp : Context * Env * TypedSyntax.Exp -> FSyntax.Exp
     and toFDecs : Context * Env * TypedSyntax.Dec list -> Env * FSyntax.Dec list
     and getEquality : Context * Env * TypedSyntax.Ty -> FSyntax.Exp
      *)
-    fun toFPat (_: Context, _: Env, T.WildcardPat span) =
-          (TypedSyntax.VIdMap.empty, F.WildcardPat span)
-      | toFPat (ctx, env, T.SConPat (span, Syntax.IntegerConstant value, ty)) =
-          ( TypedSyntax.VIdMap.empty
+    fun toFPat (_: Context, _: Env, T.WildcardPat span, acc) =
+          (acc, F.WildcardPat span)
+      | toFPat
+          (ctx, env, T.SConPat (span, Syntax.IntegerConstant value, ty), acc) =
+          ( acc
           , F.SConPat
               { sourceSpan = span
               , scon = F.IntegerConstant value
@@ -2231,8 +2232,8 @@ struct
               , cookedValue = cookIntegerConstant (ctx, env, span, value, ty)
               }
           )
-      | toFPat (ctx, env, T.SConPat (span, Syntax.WordConstant value, ty)) =
-          ( TypedSyntax.VIdMap.empty
+      | toFPat (ctx, env, T.SConPat (span, Syntax.WordConstant value, ty), acc) =
+          ( acc
           , F.SConPat
               { sourceSpan = span
               , scon = F.WordConstant value
@@ -2240,16 +2241,17 @@ struct
               , cookedValue = cookWordConstant (ctx, env, span, value, ty)
               }
           )
-      | toFPat (ctx, _, T.SConPat (span, Syntax.RealConstant _, _)) =
+      | toFPat (ctx, _, T.SConPat (span, Syntax.RealConstant _, _), acc) =
           ( emitError (ctx, [span], "invalid real constant in pattern")
-          ; (TypedSyntax.VIdMap.empty, F.WildcardPat span)
+          ; (acc, F.WildcardPat span)
           )
-      | toFPat (ctx, env, T.SConPat (span, Syntax.CharacterConstant value, ty)) =
+      | toFPat
+          (ctx, env, T.SConPat (span, Syntax.CharacterConstant value, ty), acc) =
           let
             val (scon, cookedValue) = cookCharacterConstant
               (ctx, env, span, value, ty)
           in
-            ( TypedSyntax.VIdMap.empty
+            ( acc
             , F.SConPat
                 { sourceSpan = span
                 , scon = scon
@@ -2258,12 +2260,13 @@ struct
                 }
             )
           end
-      | toFPat (ctx, env, T.SConPat (span, Syntax.StringConstant value, ty)) =
+      | toFPat
+          (ctx, env, T.SConPat (span, Syntax.StringConstant value, ty), acc) =
           let
             val (scon, cookedValue) = cookStringConstant
               (ctx, env, span, value, ty)
           in
-            ( TypedSyntax.VIdMap.empty
+            ( acc
             , F.SConPat
                 { sourceSpan = span
                 , scon = scon
@@ -2272,33 +2275,32 @@ struct
                 }
             )
           end
-      | toFPat (ctx, env, T.VarPat (span, vid, ty)) =
-          let val ty = toFTy (ctx, env, ty)
-          in (TypedSyntax.VIdMap.singleton (vid, ty), F.VarPat (span, vid, ty))
+      | toFPat (ctx, env, T.VarPat (span, vid, ty), acc) =
+          let
+            val ty = toFTy (ctx, env, ty)
+          in
+            (TypedSyntax.VIdMap.insert (acc, vid, ty), F.VarPat (span, vid, ty))
           end
       | toFPat
           ( ctx
           , env
           , T.RecordPat {sourceSpan, fields, ellipsis, wholeRecordType}
+          , acc
           ) =
           let
-            val (newEnv, ellipsis) =
+            val (acc, ellipsis) =
               case ellipsis of
-                NONE => (TypedSyntax.VIdMap.empty, NONE)
+                NONE => (acc, NONE)
               | SOME pat =>
-                  let val (m, pat) = toFPat (ctx, env, pat)
+                  let val (m, pat) = toFPat (ctx, env, pat, acc)
                   in (m, SOME pat)
                   end
-            val (newEnv, fields) =
+            val (acc, fields) =
               List.foldr
-                (fn ((label, pat), (newEnv, fields)) =>
-                   let
-                     val (m, pat) = toFPat (ctx, env, pat)
-                   in
-                     ( TypedSyntax.VIdMap.unionWith #2 (newEnv, m)
-                     , (label, pat) :: fields
-                     )
-                   end) (newEnv, []) fields
+                (fn ((label, pat), (acc, fields)) =>
+                   let val (acc, pat) = toFPat (ctx, env, pat, acc)
+                   in (acc, (label, pat) :: fields)
+                   end) (acc, []) fields
             val allFields =
               case wholeRecordType of
                 T.RecordType (_, fieldTypes) =>
@@ -2308,7 +2310,7 @@ struct
               | _ =>
                   emitFatalError (ctx, [sourceSpan], "invalid record pattern")
           in
-            ( newEnv
+            ( acc
             , F.RecordPat
                 { sourceSpan = sourceSpan
                 , fields = fields
@@ -2327,21 +2329,22 @@ struct
               , tyargs = _
               , valueConstructorInfo
               }
+          , acc
           ) =
           let
-            val (m, payload) =
+            val (acc, payload) =
               case payload of
-                NONE => (TypedSyntax.VIdMap.empty, NONE)
+                NONE => (acc, NONE)
               | SOME (payloadTy, payloadPat) =>
                   let
                     val payloadTy = toFTy (ctx, env, payloadTy)
-                    val (m, payloadPat) = toFPat (ctx, env, payloadPat)
+                    val (acc, payloadPat) = toFPat (ctx, env, payloadPat, acc)
                   in
-                    (m, SOME (payloadTy, payloadPat))
+                    (acc, SOME (payloadTy, payloadPat))
                   end
           (* val tyargs = List.map (fn ty => toFTy (ctx, env, ty)) tyargs *)
           in
-            ( m
+            ( acc
             , case valueConstructorInfo of
                 SOME info =>
                   F.ValConPat
@@ -2372,43 +2375,44 @@ struct
                        ))
             )
           end
-      | toFPat (ctx, env, T.TypedPat (_, pat, _)) = toFPat (ctx, env, pat)
-      | toFPat (ctx, env, T.LayeredPat (span, vid, ty, innerPat)) =
+      | toFPat (ctx, env, T.TypedPat (_, pat, _), acc) =
+          toFPat (ctx, env, pat, acc)
+      | toFPat (ctx, env, T.LayeredPat (span, vid, ty, innerPat), acc) =
           let
-            val (m, innerPat') = toFPat (ctx, env, innerPat)
+            val (acc, innerPat') = toFPat (ctx, env, innerPat, acc)
             val ty = toFTy (ctx, env, ty)
           in
-            ( TypedSyntax.VIdMap.insert (m, vid, ty)
+            ( TypedSyntax.VIdMap.insert (acc, vid, ty)
             , F.LayeredPat (span, vid, ty, innerPat')
             )
           end
-      | toFPat (ctx, env, T.VectorPat (span, pats, ellipsis, elemTy)) =
+      | toFPat (ctx, env, T.VectorPat (span, pats, ellipsis, elemTy), acc) =
           let
-            val (m, pats) =
+            val (acc, pats) =
               Vector.foldr
-                (fn (pat, (m, xs)) =>
-                   let val (m', pat) = toFPat (ctx, env, pat)
-                   in (TypedSyntax.VIdMap.unionWith #2 (m, m'), pat :: xs)
-                   end) (TypedSyntax.VIdMap.empty, []) pats
+                (fn (pat, (acc, xs)) =>
+                   let val (acc, pat) = toFPat (ctx, env, pat, acc)
+                   in (acc, pat :: xs)
+                   end) (acc, []) pats
           in
-            ( m
+            ( acc
             , F.VectorPat
                 (span, Vector.fromList pats, ellipsis, toFTy (ctx, env, elemTy))
             )
           end
-      | toFPat (ctx, env, T.BogusPat (span, ty, pats)) =
+      | toFPat (ctx, env, T.BogusPat (span, ty, pats), acc) =
           let
-            val (m, pats) =
+            val (acc, pats) =
               List.foldr
-                (fn ((ty, pat), (m, xs)) =>
+                (fn ((ty, pat), (acc, xs)) =>
                    let
                      val ty = toFTy (ctx, env, ty)
-                     val (m', pat) = toFPat (ctx, env, pat)
+                     val (acc, pat) = toFPat (ctx, env, pat, acc)
                    in
-                     (TypedSyntax.VIdMap.unionWith #2 (m, m'), (ty, pat) :: xs)
-                   end) (TypedSyntax.VIdMap.empty, []) pats
+                     (acc, (ty, pat) :: xs)
+                   end) (acc, []) pats
           in
-            (m, F.BogusPat (span, toFTy (ctx, env, ty), pats))
+            (acc, F.BogusPat (span, toFTy (ctx, env, ty), pats))
           end
     and toFExp
           ( ctx: Context
@@ -2578,9 +2582,8 @@ struct
           let
             fun doMatch (pat, exp) =
               let
-                val (valMap, pat') = toFPat (ctx, env, pat)
-                val env' = updateValMap
-                  (fn m => T.VIdMap.unionWith #2 (m, valMap), env)
+                val (valMap, pat') = toFPat (ctx, env, pat, #valMap env)
+                val env' = updateValMap (fn _ => valMap, env)
               in
                 (pat', toFExp (ctx, env', exp))
               end
@@ -2630,9 +2633,8 @@ struct
             val exnTy = F.TyVar Typing.primTyName_exn
             fun doMatch (pat, exp) =
               let
-                val (valMap, pat') = toFPat (ctx, env, pat)
-                val env' = updateValMap
-                  (fn m => T.VIdMap.unionWith #2 (m, valMap), env)
+                val (valMap, pat') = toFPat (ctx, env, pat, #valMap env)
+                val env' = updateValMap (fn _ => valMap, env)
               in
                 (pat', toFExp (ctx, env', exp))
               end
