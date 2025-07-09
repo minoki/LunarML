@@ -52,9 +52,9 @@ struct
         \"
       )
   datatype dump_mode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-  datatype subcommand = SUBCOMMAND_COMPILE
+  structure Subcommand = struct datatype subcommand = COMPILE | TYPECHECK end
   type options =
-    { subcommand: subcommand option
+    { subcommand: Subcommand.subcommand option
     , output: string option
     , outputMode: OutputMode option
     , dump: dump_mode
@@ -592,6 +592,28 @@ struct
           end
         else
           ()
+      val () =
+        case #subcommand opts of
+          SOME Subcommand.TYPECHECK =>
+            ( if #printTimings opts then
+                let
+                  val {lexTime, parseTime, typecheckTime} = !(#time ctx)
+                in
+                  print
+                    ("[TIME] frontend: " ^ LargeInt.toString frontTime
+                     ^ " us (lex: "
+                     ^ LargeInt.toString (Time.toMicroseconds lexTime)
+                     ^ " us, parse: "
+                     ^ LargeInt.toString (Time.toMicroseconds parseTime)
+                     ^ " us, type check: "
+                     ^ LargeInt.toString (Time.toMicroseconds typecheckTime)
+                     ^ " us)\n")
+                end
+              else
+                ()
+            ; OS.Process.exit OS.Process.success
+            )
+        | _ => ()
       val fexp =
         #doExp (DesugarPatternMatches.desugarPatternMatches toFContext) fexp
       val fexp = DecomposeValRec.doExp fexp
@@ -906,7 +928,11 @@ struct
                     (case arg of
                        "compile" =>
                          parseArgs
-                           (S.set.subcommand (SOME SUBCOMMAND_COMPILE) opts)
+                           (S.set.subcommand (SOME Subcommand.COMPILE) opts)
+                           args'
+                     | "typecheck" =>
+                         parseArgs
+                           (S.set.subcommand (SOME Subcommand.TYPECHECK) opts)
                            args'
                      | "help" =>
                          (showHelp (); OS.Process.exit OS.Process.success)

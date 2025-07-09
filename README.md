@@ -76,6 +76,7 @@ lunarml compile [options] input.(sml|mlb)
 Subcommands:
 
 * `compile`: Compile a program.
+* `typecheck`: Type check only.
 * `help`: Show help.
 * `version`: Show version information.
 

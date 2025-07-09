@@ -12,6 +12,9 @@ Supported subcommands are:
 ``compile``
   Compile a program.
 
+``typecheck``
+  Type check a program and exit.
+
 ``help``
   Show help.
 
