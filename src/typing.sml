@@ -1887,32 +1887,32 @@ struct
       | forceTy ty = ty
 
     (*:
-    val synthTypeOfPat : InferenceContext * Env * S.Pat -> T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat
-    and checkTypeOfPat : InferenceContext * Env * S.Pat * T.Ty -> (T.VId * T.Ty) S.VIdMap.map * T.Pat
+    val synthTypeOfPat : InferenceContext * Env * S.Pat * (T.VId * T.Ty) S.VIdMap.map -> T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat
+    and checkTypeOfPat : InferenceContext * Env * S.Pat * T.Ty * (T.VId * T.Ty) S.VIdMap.map -> (T.VId * T.Ty) S.VIdMap.map * T.Pat
      *)
-    fun synthTypeOfPat (ctx: InferenceContext, _: Env, S.WildcardPat span) :
+    fun synthTypeOfPat (ctx: InferenceContext, _: Env, S.WildcardPat span, vars) :
       T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat =
           let
             val ty = T.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
           in
-            (ty, S.VIdMap.empty, T.WildcardPat span)
+            (ty, vars, T.WildcardPat span)
           end
-      | synthTypeOfPat (ctx, _, S.SConPat (span, scon)) =
+      | synthTypeOfPat (ctx, _, S.SConPat (span, scon), vars) =
           (case scon of
              Syntax.IntegerConstant _ =>
                let
                  val tv = freshTyVar (ctx, span, true, SOME T.Int)
                  val ty = T.AnonymousTyVar (span, tv)
                in
-                 (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
+                 (ty, vars, T.SConPat (span, scon, ty))
                end
            | Syntax.WordConstant _ =>
                let
                  val tv = freshTyVar (ctx, span, true, SOME T.Word)
                  val ty = T.AnonymousTyVar (span, tv)
                in
-                 (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
+                 (ty, vars, T.SConPat (span, scon, ty))
                end
            | Syntax.RealConstant _ =>
                emitFatalTypeError
@@ -1922,16 +1922,17 @@ struct
                  val tv = freshTyVar (ctx, span, true, SOME T.Char)
                  val ty = T.AnonymousTyVar (span, tv)
                in
-                 (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
+                 (ty, vars, T.SConPat (span, scon, ty))
                end
            | Syntax.StringConstant _ =>
                let
                  val tv = freshTyVar (ctx, span, true, SOME T.String)
                  val ty = T.AnonymousTyVar (span, tv)
                in
-                 (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
+                 (ty, vars, T.SConPat (span, scon, ty))
                end)
-      | synthTypeOfPat (ctx, _, S.VarPat (span, vid as S.MkVId "_Prim.ref")) =
+      | synthTypeOfPat
+          (ctx, _, S.VarPat (span, vid as S.MkVId "_Prim.ref"), vars) =
           let
             val payloadTy = TypedSyntax.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
@@ -1939,11 +1940,17 @@ struct
               (span, payloadTy, T.TyCon (span, [payloadTy], primTyName_ref))
           in
             ( ty
-            , S.VIdMap.singleton (vid, (VId_ref, ty))
+            , S.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (VId_ref, ty))
             , T.VarPat (span, VId_ref, ty)
             )
           end
-      | synthTypeOfPat (ctx, _, S.VarPat (span, vid as S.MkVId "_Prim.::")) =
+      | synthTypeOfPat
+          (ctx, _, S.VarPat (span, vid as S.MkVId "_Prim.::"), vars) =
           let
             val elemTy = TypedSyntax.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
@@ -1951,12 +1958,17 @@ struct
             val ty = T.FnType (span, T.PairType (span, elemTy, listTy), listTy)
           in
             ( ty
-            , S.VIdMap.singleton (vid, (VId_DCOLON, ty))
+            , S.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (VId_DCOLON, ty))
             , T.VarPat (span, VId_DCOLON, ty)
             )
           end
       | synthTypeOfPat
-          (_, _, S.VarPat (span, vid as S.MkVId "_Prim.unit.equal")) =
+          (ctx, _, S.VarPat (span, vid as S.MkVId "_Prim.unit.equal"), vars) =
           let
             val ty =
               T.TyCon
@@ -1966,11 +1978,16 @@ struct
                 )
           in
             ( ty
-            , S.VIdMap.singleton (vid, (VId_unit_equal, ty))
+            , S.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (VId_unit_equal, ty))
             , T.VarPat (span, VId_unit_equal, ty)
             )
           end
-      | synthTypeOfPat (ctx, env, S.VarPat (span, vid)) =
+      | synthTypeOfPat (ctx, env, S.VarPat (span, vid), vars) =
           (case Syntax.VIdMap.find (#valMap env, vid) of
              SOME (_, Syntax.ValueConstructor _, _) =>
                emitFatalTypeError (ctx, [span], "VarPat: invalid pattern")
@@ -1983,39 +2000,36 @@ struct
                  val vid' = newVId (#context ctx, vid)
                in
                  ( ty
-                 , S.VIdMap.singleton (vid, (vid', ty))
+                 , S.VIdMap.insertWith
+                     (fn (_, y) =>
+                        ( emitTypeError
+                            (ctx, [span], "duplicate identifier in a pattern")
+                        ; y
+                        )) (vars, vid, (vid', ty))
                  , T.VarPat (span, vid', ty)
                  )
                end)
-      | synthTypeOfPat (ctx, env, S.RecordPat {sourceSpan, fields, ellipsis}) =
+      | synthTypeOfPat
+          (ctx, env, S.RecordPat {sourceSpan, fields, ellipsis}, vars) =
           let
             fun oneField ((label, pat), (fieldTypes, vars, fieldPats)) =
               let
-                val (ty, vars', pat') = synthTypeOfPat (ctx, env, pat)
+                val (ty, vars, pat') = synthTypeOfPat (ctx, env, pat, vars)
               in
                 ( Syntax.LabelMap.insert (fieldTypes, label, ty)
-                , Syntax.VIdMap.unionWith
-                    (fn (_, y) =>
-                       ( emitTypeError
-                           ( ctx
-                           , [sourceSpan]
-                           , "duplicate identifier in a pattern"
-                           )
-                       ; y
-                       )) (vars, vars')
+                , vars
                 , (label, pat') :: fieldPats
                 )
               end
             val (fieldTypes, vars, fieldPats) =
-              List.foldr oneField
-                (Syntax.LabelMap.empty, Syntax.VIdMap.empty, []) fields
+              List.foldr oneField (Syntax.LabelMap.empty, vars, []) fields
           in
             case ellipsis of
               SOME basePat =>
                 let
                   val span = S.getSourceSpanOfPat basePat
-                  val (baseTy, vars', basePat) =
-                    synthTypeOfPat (ctx, env, basePat)
+                  val (baseTy, vars, basePat) =
+                    synthTypeOfPat (ctx, env, basePat, vars)
                   val recordTy =
                     T.RecordExtType (sourceSpan, fieldTypes, baseTy)
                   val () =
@@ -2029,15 +2043,7 @@ struct
                       )
                 in
                   ( recordTy
-                  , Syntax.VIdMap.unionWith
-                      (fn (_, y) =>
-                         ( emitTypeError
-                             ( ctx
-                             , [sourceSpan]
-                             , "duplicate identifier in a pattern"
-                             )
-                         ; y
-                         )) (vars, vars')
+                  , vars
                   , T.RecordPat
                       { sourceSpan = sourceSpan
                       , fields = fieldPats
@@ -2061,7 +2067,7 @@ struct
                   )
                 end
           end
-      | synthTypeOfPat (ctx, env, S.ConPat (span, longvid, optInnerPat)) =
+      | synthTypeOfPat (ctx, env, S.ConPat (span, longvid, optInnerPat), vars) =
           let
             fun makeBogus () =
               let
@@ -2069,18 +2075,14 @@ struct
                   (span, freshTyVar (ctx, span, false, NONE))
               in
                 case optInnerPat of
-                  NONE =>
-                    ( freshTy
-                    , Syntax.VIdMap.empty
-                    , T.BogusPat (span, freshTy, [])
-                    )
+                  NONE => (freshTy, vars, T.BogusPat (span, freshTy, []))
                 | SOME innerPat =>
                     let
-                      val (innerTy, innerVars, innerPat) =
-                        synthTypeOfPat (ctx, env, innerPat)
+                      val (innerTy, vars, innerPat) =
+                        synthTypeOfPat (ctx, env, innerPat, vars)
                     in
                       ( freshTy
-                      , innerVars
+                      , vars
                       , T.BogusPat (span, freshTy, [(innerTy, innerPat)])
                       )
                     end
@@ -2106,7 +2108,7 @@ struct
                       case optInnerPat of
                         NONE =>
                           ( ty
-                          , Syntax.VIdMap.empty
+                          , vars
                           , T.ConPat
                               { sourceSpan = span
                               , longvid = longvid
@@ -2119,11 +2121,11 @@ struct
                           (case ty of
                              T.FnType (_, argTy, resultTy) =>
                                let
-                                 val (innerVars, innerPat') =
-                                   checkTypeOfPat (ctx, env, innerPat, argTy)
+                                 val (vars, innerPat') = checkTypeOfPat
+                                   (ctx, env, innerPat, argTy, vars)
                                in
                                  ( resultTy
-                                 , innerVars
+                                 , vars
                                  , T.ConPat
                                      { sourceSpan = span
                                      , longvid = longvid
@@ -2166,62 +2168,63 @@ struct
                 ; makeBogus ()
                 )
           end
-      | synthTypeOfPat (ctx, env, S.TypedPat (span, pat, ty)) =
+      | synthTypeOfPat (ctx, env, S.TypedPat (span, pat, ty), vars) =
           let
             val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
-            val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty)
+            val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty, vars)
           in
             (ty, vars, T.TypedPat (span, pat, ty))
           end
-      | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, NONE, pat)) =
+      | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, NONE, pat), vars) =
           let
-            val (ty, vars, pat) = synthTypeOfPat (ctx, env, pat)
-            val () =
-              case Syntax.VIdMap.find (vars, vid) of
-                NONE => ()
-              | SOME _ =>
-                  emitTypeError
-                    (ctx, [span], "duplicate identifier in a pattern")
+            val (ty, vars, pat) = synthTypeOfPat (ctx, env, pat, vars)
             val vid' = newVId (#context ctx, vid)
           in
             ( ty
-            , Syntax.VIdMap.insert (vars, vid, (vid', ty))
+            , Syntax.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (vid', ty))
             , T.LayeredPat (span, vid', ty, pat)
             )
           end
-      | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, SOME ty, pat)) =
+      | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, SOME ty, pat), vars) =
           let
             val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
-            val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty)
-            val () =
-              case Syntax.VIdMap.find (vars, vid) of
-                NONE => ()
-              | SOME _ =>
-                  emitTypeError
-                    (ctx, [span], "duplicate identifier in a pattern")
+            val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty, vars)
             val vid' = newVId (#context ctx, vid)
           in
             ( ty
-            , Syntax.VIdMap.insert (vars, vid, (vid', ty))
+            , Syntax.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (vid', ty))
             , T.LayeredPat (span, vid', ty, pat)
             )
           end
-      | synthTypeOfPat (ctx, env, S.VectorPat (span, pats, ellipsis)) =
+      | synthTypeOfPat (ctx, env, S.VectorPat (span, pats, ellipsis), vars) =
           let
-            val results =
-              Vector.map
-                (fn pat =>
-                   ( Syntax.getSourceSpanOfPat pat
-                   , synthTypeOfPat (ctx, env, pat)
-                   )) pats
+            val (revResults, vars) =
+              Vector.foldl
+                (fn (pat, (acc, vars)) =>
+                   let
+                     val (ty, vars, tpat) = synthTypeOfPat (ctx, env, pat, vars)
+                   in
+                     ((Syntax.getSourceSpanOfPat pat, ty, tpat) :: acc, vars)
+                   end) ([], vars) pats
+            val results = Vector.fromList (List.rev revResults)
             val elemTy =
               case VectorSlice.getItem (VectorSlice.full results) of
                 NONE =>
                   TypedSyntax.AnonymousTyVar
                     (span, freshTyVar (ctx, span, false, NONE))
-              | SOME ((_, (elemTy0, _, _)), xs) =>
+              | SOME ((_, elemTy0, _), xs) =>
                   VectorSlice.foldl
-                    (fn ((elemSpan, (elemTy, _, _)), ty) =>
+                    (fn ((elemSpan, elemTy, _), ty) =>
                        commonType
                          ( ctx
                          , env
@@ -2230,25 +2233,17 @@ struct
                          , ty
                          , elemTy
                          )) elemTy0 xs
-            val vars =
-              Vector.foldr
-                (fn ((_, (_, vars, _)), vars') =>
-                   Syntax.VIdMap.unionWith
-                     (fn (_, y) =>
-                        ( emitTypeError
-                            (ctx, [], "duplicate identifier in a pattern")
-                        ; y
-                        )) (vars, vars')) Syntax.VIdMap.empty results
-            val pats = Vector.map (fn (_, (_, _, pat)) => pat) results
+            val pats = Vector.map #3 results
           in
             ( T.TyCon (span, [elemTy], primTyName_vector)
             , vars
             , T.VectorPat (span, pats, ellipsis, elemTy)
             )
           end
-    and checkTypeOfPat (_: InferenceContext, _: Env, S.WildcardPat span, _) :
-      (T.VId * T.Ty) S.VIdMap.map * T.Pat = (S.VIdMap.empty, T.WildcardPat span)
-      | checkTypeOfPat (ctx, env, S.SConPat (span, scon), expectedTy) =
+    and checkTypeOfPat
+          (_: InferenceContext, _: Env, S.WildcardPat span, _, vars) :
+      (T.VId * T.Ty) S.VIdMap.map * T.Pat = (vars, T.WildcardPat span)
+      | checkTypeOfPat (ctx, env, S.SConPat (span, scon), expectedTy, vars) =
           (case scon of
              Syntax.IntegerConstant _ =>
                ( solveUnary
@@ -2267,7 +2262,7 @@ struct
                    , expectedTy
                    , T.IsEqType
                    )
-               ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
+               ; (vars, T.SConPat (span, scon, expectedTy))
                )
            | Syntax.WordConstant _ =>
                ( solveUnary
@@ -2286,7 +2281,7 @@ struct
                    , expectedTy
                    , T.IsEqType
                    )
-               ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
+               ; (vars, T.SConPat (span, scon, expectedTy))
                )
            | Syntax.RealConstant _ =>
                emitFatalTypeError
@@ -2308,7 +2303,7 @@ struct
                    , expectedTy
                    , T.IsEqType
                    )
-               ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
+               ; (vars, T.SConPat (span, scon, expectedTy))
                )
            | Syntax.StringConstant _ =>
                ( solveUnary
@@ -2327,28 +2322,48 @@ struct
                    , expectedTy
                    , T.IsEqType
                    )
-               ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
+               ; (vars, T.SConPat (span, scon, expectedTy))
                ))
       | checkTypeOfPat
-          (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.ref"), expectedTy) =
-          let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-          in checkSubsumption (ctx, env, span, actualTy, expectedTy); (map, pat)
+          ( ctx
+          , env
+          , pat as S.VarPat (span, S.MkVId "_Prim.ref")
+          , expectedTy
+          , vars
+          ) =
+          let
+            val (actualTy, vars, pat) = synthTypeOfPat (ctx, env, pat, vars)
+          in
+            checkSubsumption (ctx, env, span, actualTy, expectedTy);
+            (vars, pat)
           end
       | checkTypeOfPat
-          (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.::"), expectedTy) =
-          let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-          in checkSubsumption (ctx, env, span, actualTy, expectedTy); (map, pat)
+          ( ctx
+          , env
+          , pat as S.VarPat (span, S.MkVId "_Prim.::")
+          , expectedTy
+          , vars
+          ) =
+          let
+            val (actualTy, vars, pat) = synthTypeOfPat (ctx, env, pat, vars)
+          in
+            checkSubsumption (ctx, env, span, actualTy, expectedTy);
+            (vars, pat)
           end
       | checkTypeOfPat
           ( ctx
           , env
           , pat as S.VarPat (span, S.MkVId "_Prim.unit.equal")
           , expectedTy
+          , vars
           ) =
-          let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-          in checkSubsumption (ctx, env, span, actualTy, expectedTy); (map, pat)
+          let
+            val (actualTy, vars, pat) = synthTypeOfPat (ctx, env, pat, vars)
+          in
+            checkSubsumption (ctx, env, span, actualTy, expectedTy);
+            (vars, pat)
           end
-      | checkTypeOfPat (ctx, env, S.VarPat (span, vid), expectedTy) =
+      | checkTypeOfPat (ctx, env, S.VarPat (span, vid), expectedTy, vars) =
           (case Syntax.VIdMap.find (#valMap env, vid) of
              SOME (_, Syntax.ValueConstructor _, _) =>
                emitFatalTypeError (ctx, [span], "VarPat: invalid pattern")
@@ -2358,7 +2373,12 @@ struct
                let
                  val vid' = newVId (#context ctx, vid)
                in
-                 ( S.VIdMap.singleton (vid, (vid', expectedTy))
+                 ( S.VIdMap.insertWith
+                     (fn (_, y) =>
+                        ( emitTypeError
+                            (ctx, [span], "duplicate identifier in a pattern")
+                        ; y
+                        )) (vars, vid, (vid', expectedTy))
                  , T.VarPat (span, vid', expectedTy)
                  )
                end)
@@ -2367,6 +2387,7 @@ struct
           , env
           , pat as S.RecordPat {sourceSpan, fields, ellipsis}
           , expectedTy
+          , vars
           ) =
           (case forceTy expectedTy of
              T.RecordType (span', fieldTypes) =>
@@ -2375,19 +2396,10 @@ struct
                    case Syntax.LabelMap.find (fieldTypes, label) of
                      SOME ty =>
                        let
-                         val (vars', pat') = checkTypeOfPat (ctx, env, pat, ty)
+                         val (vars, pat') = checkTypeOfPat
+                           (ctx, env, pat, ty, vars)
                        in
-                         ( Syntax.VIdMap.unionWith
-                             (fn (_, y) =>
-                                ( emitTypeError
-                                    ( ctx
-                                    , [sourceSpan]
-                                    , "duplicate identifier in a pattern"
-                                    )
-                                ; y
-                                )) (vars, vars')
-                         , (label, pat') :: fieldPats
-                         )
+                         (vars, (label, pat') :: fieldPats)
                        end
                    | NONE =>
                        ( emitTypeError
@@ -2398,8 +2410,7 @@ struct
                            )
                        ; (vars, fieldPats)
                        )
-                 val (vars, fieldPats) =
-                   List.foldr oneField (Syntax.VIdMap.empty, []) fields
+                 val (vars, fieldPats) = List.foldr oneField (vars, []) fields
                  val baseFields =
                    List.foldl
                      (fn ((label, _), map) =>
@@ -2410,20 +2421,15 @@ struct
                  case ellipsis of
                    SOME basePat =>
                      let
-                       val (vars', basePat) = checkTypeOfPat
-                         (ctx, env, basePat, T.RecordType (span', baseFields))
-                       val vars'' =
-                         Syntax.VIdMap.unionWith
-                           (fn (_, y) =>
-                              ( emitTypeError
-                                  ( ctx
-                                  , [sourceSpan]
-                                  , "duplicate identifier in a pattern"
-                                  )
-                              ; y
-                              )) (vars, vars')
+                       val (vars, basePat) = checkTypeOfPat
+                         ( ctx
+                         , env
+                         , basePat
+                         , T.RecordType (span', baseFields)
+                         , vars
+                         )
                      in
-                       ( vars''
+                       ( vars
                        , T.RecordPat
                            { sourceSpan = sourceSpan
                            , fields = fieldPats
@@ -2459,73 +2465,74 @@ struct
            | _ =>
                let
                  val span = S.getSourceSpanOfPat pat
-                 val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
+                 val (actualTy, vars, pat) =
+                   synthTypeOfPat (ctx, env, pat, vars)
                in
                  checkSubsumption (ctx, env, span, actualTy, expectedTy);
-                 (map, pat)
+                 (vars, pat)
                end)
       | checkTypeOfPat
-          (ctx, env, S.LayeredPat (span, vid, NONE, pat), expectedTy) =
+          (ctx, env, S.LayeredPat (span, vid, NONE, pat), expectedTy, vars) =
           let
-            val (vars, pat) = checkTypeOfPat (ctx, env, pat, expectedTy)
-            val () =
-              case Syntax.VIdMap.find (vars, vid) of
-                NONE => ()
-              | SOME _ =>
-                  emitTypeError
-                    (ctx, [span], "duplicate identifier in a pattern")
+            val (vars, pat) = checkTypeOfPat (ctx, env, pat, expectedTy, vars)
             val vid' = newVId (#context ctx, vid)
           in
-            ( Syntax.VIdMap.insert (vars, vid, (vid', expectedTy))
+            ( Syntax.VIdMap.insertWith
+                (fn (_, y) =>
+                   ( emitTypeError
+                       (ctx, [span], "duplicate identifier in a pattern")
+                   ; y
+                   )) (vars, vid, (vid', expectedTy))
             , T.LayeredPat (span, vid', expectedTy, pat)
             )
           end
       | checkTypeOfPat
-          (ctx, env, pat as S.VectorPat (span, pats, ellipsis), expectedTy) =
+          ( ctx
+          , env
+          , pat as S.VectorPat (span, pats, ellipsis)
+          , expectedTy
+          , vars
+          ) =
           (case forceTy expectedTy of
              T.TyCon (_, [elemTy], con) =>
                if T.eqTyName (con, primTyName_vector) then
                  let
-                   val varsAndPats =
-                     Vector.map
-                       (fn pat => checkTypeOfPat (ctx, env, pat, elemTy)) pats
-                   val vars =
-                     Vector.foldr
-                       (fn ((vars, _), vars') =>
-                          Syntax.VIdMap.unionWith
-                            (fn (_, y) =>
-                               ( emitTypeError
-                                   ( ctx
-                                   , []
-                                   , "duplicate identifier in a pattern"
-                                   )
-                               ; y
-                               )) (vars, vars')) Syntax.VIdMap.empty varsAndPats
-                   val pats = Vector.map #2 varsAndPats
+                   val (revPats, vars) =
+                     Vector.foldl
+                       (fn (pat, (acc, vars)) =>
+                          let
+                            val (vars, pat) = checkTypeOfPat
+                              (ctx, env, pat, elemTy, vars)
+                          in
+                            (pat :: acc, vars)
+                          end) ([], vars) pats
+                   val pats = Vector.fromList (List.rev revPats)
                  in
                    (vars, T.VectorPat (span, pats, ellipsis, elemTy))
                  end
                else
                  let
-                   val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
+                   val (actualTy, vars, pat) =
+                     synthTypeOfPat (ctx, env, pat, vars)
                  in
                    checkSubsumption (ctx, env, span, actualTy, expectedTy);
-                   (map, pat)
+                   (vars, pat)
                  end
            | _ =>
                let
-                 val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
+                 val (actualTy, vars, pat) =
+                   synthTypeOfPat (ctx, env, pat, vars)
                in
                  checkSubsumption (ctx, env, span, actualTy, expectedTy);
-                 (map, pat)
+                 (vars, pat)
                end)
-      | checkTypeOfPat (ctx, env, pat, expectedTy) =
+      | checkTypeOfPat (ctx, env, pat, expectedTy, vars) =
           let
             val span = S.getSourceSpanOfPat pat
-            val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
+            val (actualTy, vars, pat) = synthTypeOfPat (ctx, env, pat, vars)
           in
             checkSubsumption (ctx, env, span, actualTy, expectedTy);
-            (map, pat)
+            (vars, pat)
           end
 
     fun doWithtype (ctx, _ (* Env *), typbinds: S.TypBind list) : S.ConBind
@@ -3516,8 +3523,8 @@ struct
                                (ty, checkTypeOfExp (ctx', env, exp, ty))
                              end
                          | _ => synthTypeOfExp (ctx', env, exp)
-                       val (newValEnv, pat) =
-                         checkTypeOfPat (ctx', env, pat, expTy)
+                       val (newValEnv, pat) = checkTypeOfPat
+                         (ctx', env, pat, expTy, Syntax.VIdMap.empty)
                        val generalizable =
                          isExhaustive (ctx', env, pat)
                          andalso isNonexpansive (env, exp)
@@ -3938,7 +3945,10 @@ struct
                  * S.Exp) list =
               List.map
                 (fn S.PatBind (span, pat, exp) =>
-                   (span, synthTypeOfPat (ctx', env, pat), exp)) valbinds
+                   ( span
+                   , synthTypeOfPat (ctx', env, pat, Syntax.VIdMap.empty)
+                   , exp
+                   )) valbinds
             val localValEnv =
               List.foldl
                 (fn ((_, (_, ve, _), _), acc) =>
@@ -5044,7 +5054,8 @@ struct
             fun doBranch (pat, exp) =
               let
                 val patSpan = Syntax.getSourceSpanOfPat pat
-                val (patTy, vars, pat') = synthTypeOfPat (ctx, env, pat)
+                val (patTy, vars, pat') =
+                  synthTypeOfPat (ctx, env, pat, Syntax.VIdMap.empty)
                 val env' = mergeEnv (env, envWithValEnv
                   (Syntax.VIdMap.map
                      (fn (vid, ty) =>
@@ -5083,7 +5094,8 @@ struct
           let
             fun doBranch (pat, exp) =
               let
-                val (vars, pat') = checkTypeOfPat (ctx, env, pat, expectedPatTy)
+                val (vars, pat') = checkTypeOfPat
+                  (ctx, env, pat, expectedPatTy, Syntax.VIdMap.empty)
                 val env' = mergeEnv (env, envWithValEnv
                   (Syntax.VIdMap.map
                      (fn (vid, ty) =>
@@ -5123,7 +5135,8 @@ struct
       let
         fun doBranch (pat, exp) =
           let
-            val (vars, pat') = checkTypeOfPat (ctx, env, pat, expectedPatTy)
+            val (vars, pat') = checkTypeOfPat
+              (ctx, env, pat, expectedPatTy, Syntax.VIdMap.empty)
             val env' = mergeEnv (env, envWithValEnv
               (Syntax.VIdMap.map
                  (fn (vid, ty) =>
