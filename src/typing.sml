@@ -154,6 +154,16 @@ struct
     , boundTyVars = Syntax.TyVarMap.empty
     }
 
+  fun mergeWithValEnv (env1: ('val, 'str) Env', valMap) : ('val, 'str) Env' =
+    { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, valMap)
+    , tyConMap = #tyConMap env1
+    , tyNameMap = #tyNameMap env1
+    , strMap = #strMap env1
+    , sigMap = #sigMap env1
+    , funMap = #funMap env1
+    , boundTyVars = #boundTyVars env1
+    }
+
   fun envWithTyConEnv (tyConMap, tyNameMap) : ('val, 'str) Env' =
     { valMap = Syntax.VIdMap.empty
     , tyConMap = tyConMap
@@ -162,6 +172,18 @@ struct
     , sigMap = Syntax.SigIdMap.empty
     , funMap = Syntax.FunIdMap.empty
     , boundTyVars = Syntax.TyVarMap.empty
+    }
+
+  fun mergeWithTyConEnv (env1: ('val, 'str) Env', {tyConMap, tyNameMap}) :
+    ('val, 'str) Env' =
+    { valMap = #valMap env1
+    , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, tyConMap)
+    , tyNameMap =
+        TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap env1, tyNameMap)
+    , strMap = #strMap env1
+    , sigMap = #sigMap env1
+    , funMap = #funMap env1
+    , boundTyVars = #boundTyVars env1
     }
 
   fun envWithStrMap strMap =
@@ -4280,32 +4302,39 @@ struct
               List.map
                 (fn datbind as S.DatBind (_, _, tycon, _, _) =>
                    (datbind, newTyName (#context ctx, tycon))) datbinds
-            val partialEnv = envWithTyConEnv
-              (List.foldl
-                 (fn ((S.DatBind (span, tyvars, tycon, _, _), tycon'), (m, m')) =>
-                    let
-                      val tyvars =
-                        List.map (fn tv => genTyVar (#context ctx, tv)) tyvars
-                      val tystr =
-                        { typeFunction = T.TypeFunction (tyvars, T.TyCon
-                            ( span
-                            , List.map (fn tv => T.TyVar (span, tv)) tyvars
-                            , tycon'
-                            ))
-                        , valEnv = T.emptyValEnv
-                        }
-                      val tynameattr =
-                        { arity = List.length tyvars
-                        , admitsEquality =
-                            S.TyConMap.lookup (equalityMap, tycon)
-                        , overloadClass = NONE
-                        }
-                    in
-                      ( Syntax.TyConMap.insert (m, tycon, tystr)
-                      , TypedSyntax.TyNameMap.insert (m', tycon', tynameattr)
-                      )
-                    end) (Syntax.TyConMap.empty, TypedSyntax.TyNameMap.empty)
-                 datbinds)
+            val partialEnv =
+              List.foldl
+                (fn ( (S.DatBind (span, tyvars, tycon, _, _), tycon')
+                    , {tyConMap, tyNameMap}
+                    ) =>
+                   let
+                     val tyvars =
+                       List.map (fn tv => genTyVar (#context ctx, tv)) tyvars
+                     val tystr =
+                       { typeFunction = T.TypeFunction (tyvars, T.TyCon
+                           ( span
+                           , List.map (fn tv => T.TyVar (span, tv)) tyvars
+                           , tycon'
+                           ))
+                       , valEnv = T.emptyValEnv
+                       }
+                     val tynameattr =
+                       { arity = List.length tyvars
+                       , admitsEquality = S.TyConMap.lookup (equalityMap, tycon)
+                       , overloadClass = NONE
+                       }
+                   in
+                     { tyConMap =
+                         Syntax.TyConMap.insert (tyConMap, tycon, tystr)
+                     , tyNameMap =
+                         TypedSyntax.TyNameMap.insert
+                           (tyNameMap, tycon', tynameattr)
+                     }
+                   end)
+                { tyConMap = Syntax.TyConMap.empty
+                , tyNameMap = TypedSyntax.TyNameMap.empty
+                } datbinds
+            val conEnv = mergeWithTyConEnv (env, partialEnv)
             val (tyConMap, tyNameMap, valMap, datbinds) =
               let
                 fun doDatBind
@@ -4316,19 +4345,17 @@ struct
                     val tyvars =
                       List.map (fn tv => (tv, genTyVar (#context ctx, tv)))
                         tyvars
-                    val env = mergeEnv
-                      ( env
-                      , { valMap = #valMap partialEnv
-                        , tyConMap = #tyConMap partialEnv
-                        , tyNameMap = #tyNameMap partialEnv
-                        , strMap = #strMap partialEnv
-                        , sigMap = #sigMap partialEnv
-                        , funMap = #funMap partialEnv
-                        , boundTyVars =
-                            List.foldl Syntax.TyVarMap.insert'
-                              (#boundTyVars partialEnv) tyvars
-                        }
-                      )
+                    val conEnv =
+                      { valMap = #valMap conEnv
+                      , tyConMap = #tyConMap conEnv
+                      , tyNameMap = #tyNameMap conEnv
+                      , strMap = #strMap conEnv
+                      , sigMap = #sigMap conEnv
+                      , funMap = #funMap conEnv
+                      , boundTyVars =
+                          List.foldl Syntax.TyVarMap.insert'
+                            (#boundTyVars conEnv) tyvars
+                      }
                     val tyvars = List.map #2 tyvars
                     val allConstructors =
                       List.foldl
@@ -4358,7 +4385,7 @@ struct
                              val vid' = newVId (#context ctx, vid)
                              val optTy =
                                Option.map
-                                 (fn ty => evalPureTy (#context ctx, env, ty))
+                                 (fn ty => evalPureTy (#context ctx, conEnv, ty))
                                  optTy
                              val info =
                                { tag = Syntax.getVIdName vid
@@ -5066,13 +5093,15 @@ struct
                 val patSpan = Syntax.getSourceSpanOfPat pat
                 val (patTy, vars, pat') =
                   synthTypeOfPat (ctx, env, pat, Syntax.VIdMap.empty)
-                val env' = mergeEnv (env, envWithValEnv
-                  (Syntax.VIdMap.map
-                     (fn (vid, ty) =>
-                        ( T.TypeScheme ([], ty)
-                        , Syntax.ValueVariable
-                        , T.MkShortVId vid
-                        )) vars))
+                val env' = mergeWithValEnv
+                  ( env
+                  , Syntax.VIdMap.map
+                      (fn (vid, ty) =>
+                         ( T.TypeScheme ([], ty)
+                         , Syntax.ValueVariable
+                         , T.MkShortVId vid
+                         )) vars
+                  )
                 val expSpan = Syntax.getSourceSpanOfExp exp
                 val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
               in
@@ -5106,13 +5135,15 @@ struct
               let
                 val (vars, pat') = checkTypeOfPat
                   (ctx, env, pat, expectedPatTy, Syntax.VIdMap.empty)
-                val env' = mergeEnv (env, envWithValEnv
-                  (Syntax.VIdMap.map
-                     (fn (vid, ty) =>
-                        ( T.TypeScheme ([], ty)
-                        , Syntax.ValueVariable
-                        , T.MkShortVId vid
-                        )) vars))
+                val env' = mergeWithValEnv
+                  ( env
+                  , Syntax.VIdMap.map
+                      (fn (vid, ty) =>
+                         ( T.TypeScheme ([], ty)
+                         , Syntax.ValueVariable
+                         , T.MkShortVId vid
+                         )) vars
+                  )
                 val expSpan = Syntax.getSourceSpanOfExp exp
                 val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
               in
@@ -5147,13 +5178,15 @@ struct
           let
             val (vars, pat') = checkTypeOfPat
               (ctx, env, pat, expectedPatTy, Syntax.VIdMap.empty)
-            val env' = mergeEnv (env, envWithValEnv
-              (Syntax.VIdMap.map
-                 (fn (vid, ty) =>
-                    ( T.TypeScheme ([], ty)
-                    , Syntax.ValueVariable
-                    , T.MkShortVId vid
-                    )) vars))
+            val env' = mergeWithValEnv
+              ( env
+              , Syntax.VIdMap.map
+                  (fn (vid, ty) =>
+                     ( T.TypeScheme ([], ty)
+                     , Syntax.ValueVariable
+                     , T.MkShortVId vid
+                     )) vars
+              )
           in
             (pat', checkTypeOfExp (ctx, env', exp, expectedExpTy))
           end
@@ -6672,8 +6705,9 @@ struct
                      )
                    end) (Syntax.TyConMap.empty, TypedSyntax.TyNameMap.empty, [])
                 descs
-            val env' = mergeEnv
-              (env, envWithTyConEnv (partialTyConMap, tyNameMap))
+            val env' =
+              mergeWithTyConEnv
+                (env, {tyConMap = partialTyConMap, tyNameMap = tyNameMap})
             val withtypeMap =
               List.foldl
                 (fn (S.TypBind (_, tyvars, tycon, ty), tyConMap) =>
