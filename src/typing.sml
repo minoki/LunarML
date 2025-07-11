@@ -1815,62 +1815,73 @@ struct
       unify
         (ctx, env, ConstraintInfo.ACTUAL_EXPECTED, span, actualTy, expectedTy)
 
-    (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.PureTy *)
-    fun evalTy (ctx: Context, env: ('val, 'str) Env', S.TyVar (span, tv)) :
-      T.PureTy =
-          (case Syntax.TyVarMap.find (#boundTyVars env, tv) of
-             SOME tv => T.TyVar (span, tv)
-           | NONE =>
-               emitFatalError
-                 ( ctx
-                 , [span]
-                 , "unknown type varibale `" ^ Syntax.print_TyVar tv ^ "`"
-                 ))
-      | evalTy (ctx, env, S.RecordType (span, fields, NONE)) =
-          T.RecordType
-            ( span
-            , List.foldl
-                (fn ((label, ty), m) =>
-                   Syntax.LabelMap.insert (m, label, evalTy (ctx, env, ty)))
-                Syntax.LabelMap.empty fields
-            )
-      | evalTy (ctx, env, S.RecordType (span, fields, SOME baseTy)) =
-          (case evalTy (ctx, env, baseTy) of
-             T.RecordType (_, fields') =>
-               T.RecordType
-                 ( span
-                 , List.foldl
-                     (fn ((label, ty), m) =>
-                        ( if Syntax.LabelMap.inDomain (m, label) then
-                            emitError
-                              ( ctx
-                              , [span]
-                              , "duplicate record field: "
-                                ^ Syntax.print_Label label
-                              )
-                          else
-                            ()
-                        ; Syntax.LabelMap.insert
-                            (m, label, evalTy (ctx, env, ty))
-                        )) fields' fields
-                 )
-           | _ => emitFatalError (ctx, [span], "invalid record extension"))
-      | evalTy (ctx, env, S.TyCon (span, args, tycon)) =
-          let
-            val {typeFunction = T.TypeFunction (tyvars, ty), ...} =
-              lookupTyConInEnv (ctx, env, span, tycon)
-            val subst =
-              (ListPair.foldlEq
-                 (fn (tv, arg, m) =>
-                    TypedSyntax.TyVarMap.insert (m, tv, evalTy (ctx, env, arg)))
-                 TypedSyntax.TyVarMap.empty (tyvars, args))
-              handle ListPair.UnequalLengths =>
-                emitFatalError (ctx, [span], "invalid type construction")
-          in
-            T.applySubstPureTy subst ty
-          end
-      | evalTy (ctx, env, S.FnType (span, ty1, ty2)) =
-          T.FnType (span, evalTy (ctx, env, ty1), evalTy (ctx, env, ty2))
+    (*: val evalBaseTy : (('a T.BaseTy) T.TyVarMap.map -> T.PureTy -> 'a T.BaseTy) -> Context * ('val, 'str) Env' * S.Ty -> 'a T.BaseTy *)
+    fun evalBaseTy
+      (applySubst: ('a T.BaseTy) T.TyVarMap.map -> T.PureTy -> 'a T.BaseTy) :
+      Context * ('val, 'str) Env' * S.Ty
+      -> 'a T.BaseTy =
+      let
+        fun evalTy (ctx: Context, env, S.TyVar (span, tv)) : 'a T.BaseTy =
+              (case Syntax.TyVarMap.find (#boundTyVars env, tv) of
+                 SOME tv => T.TyVar (span, tv)
+               | NONE =>
+                   emitFatalError
+                     ( ctx
+                     , [span]
+                     , "unknown type varibale `" ^ Syntax.print_TyVar tv ^ "`"
+                     ))
+          | evalTy (ctx, env, S.RecordType (span, fields, NONE)) =
+              T.RecordType
+                ( span
+                , List.foldl
+                    (fn ((label, ty), m) =>
+                       Syntax.LabelMap.insert (m, label, evalTy (ctx, env, ty)))
+                    Syntax.LabelMap.empty fields
+                )
+          | evalTy (ctx, env, S.RecordType (span, fields, SOME baseTy)) =
+              (case evalTy (ctx, env, baseTy) of
+                 T.RecordType (_, fields') =>
+                   T.RecordType
+                     ( span
+                     , List.foldl
+                         (fn ((label, ty), m) =>
+                            ( if Syntax.LabelMap.inDomain (m, label) then
+                                emitError
+                                  ( ctx
+                                  , [span]
+                                  , "duplicate record field: "
+                                    ^ Syntax.print_Label label
+                                  )
+                              else
+                                ()
+                            ; Syntax.LabelMap.insert
+                                (m, label, evalTy (ctx, env, ty))
+                            )) fields' fields
+                     )
+               | _ => emitFatalError (ctx, [span], "invalid record extension"))
+          | evalTy (ctx, env, S.TyCon (span, args, tycon)) =
+              let
+                val {typeFunction = T.TypeFunction (tyvars, ty), ...} =
+                  lookupTyConInEnv (ctx, env, span, tycon)
+                val subst =
+                  (ListPair.foldlEq
+                     (fn (tv, arg, m) =>
+                        TypedSyntax.TyVarMap.insert
+                          (m, tv, evalTy (ctx, env, arg)))
+                     TypedSyntax.TyVarMap.empty (tyvars, args))
+                  handle ListPair.UnequalLengths =>
+                    emitFatalError (ctx, [span], "invalid type construction")
+              in
+                applySubst subst ty
+              end
+          | evalTy (ctx, env, S.FnType (span, ty1, ty2)) =
+              T.FnType (span, evalTy (ctx, env, ty1), evalTy (ctx, env, ty2))
+      in
+        evalTy
+      end
+
+    fun evalPureTy x = evalBaseTy T.applySubstPureTy x
+    fun evalTy x = evalBaseTy T.applySubstPureTyAsTy x
 
     (*: val forceTy : T.Ty -> T.Ty *)
     fun forceTy (T.AnonymousTyVar (_, ref (T.Link ty))) = forceTy ty
@@ -2170,7 +2181,7 @@ struct
           end
       | synthTypeOfPat (ctx, env, S.TypedPat (span, pat, ty), vars) =
           let
-            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
+            val ty = evalTy (#context ctx, env, ty)
             val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty, vars)
           in
             (ty, vars, T.TypedPat (span, pat, ty))
@@ -2192,7 +2203,7 @@ struct
           end
       | synthTypeOfPat (ctx, env, S.LayeredPat (span, vid, SOME ty, pat), vars) =
           let
-            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
+            val ty = evalTy (#context ctx, env, ty)
             val (vars, pat) = checkTypeOfPat (ctx, env, pat, ty, vars)
             val vid' = newVId (#context ctx, vid)
           in
@@ -2889,7 +2900,7 @@ struct
           end
       | synthTypeOfExp (ctx, env, S.TypedExp (span, exp, ty)) =
           let
-            val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
+            val ty = evalTy (#context ctx, env, ty)
             val exp = checkTypeOfExp (ctx, env, exp, ty)
           in
             (ty, T.TypedExp (span, exp, ty))
@@ -3516,11 +3527,8 @@ struct
                        val (expTy, exp) =
                          case pat of
                            S.TypedPat (_, _, ty) =>
-                             let
-                               val ty = T.thawPureTy
-                                 (evalTy (#context ctx', env, ty))
-                             in
-                               (ty, checkTypeOfExp (ctx', env, exp, ty))
+                             let val ty = evalTy (#context ctx', env, ty)
+                             in (ty, checkTypeOfExp (ctx', env, exp, ty))
                              end
                          | _ => synthTypeOfExp (ctx', env, exp)
                        val (newValEnv, pat) = checkTypeOfPat
@@ -3904,7 +3912,7 @@ struct
                            , funMap = #funMap env
                            , boundTyVars = boundTyVars
                            }
-                         val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
+                         val ty = evalTy (#context ctx, env, ty)
                          fun doTyVar tv =
                            case S.TyVarMap.find (boundTyVars, tv) of
                              SOME tv =>
@@ -4171,7 +4179,7 @@ struct
                            , funMap = #funMap env
                            , boundTyVars = boundTyVars
                            }
-                         val ty = T.thawPureTy (evalTy (#context ctx, env, ty))
+                         val ty = evalTy (#context ctx, env, ty)
                          fun doTyVar tv =
                            case S.TyVarMap.find (boundTyVars, tv) of
                              SOME tv =>
@@ -4220,7 +4228,7 @@ struct
                       List.foldl Syntax.TyVarMap.insert' (#boundTyVars env)
                         tyvars
                   }
-                val ty = evalTy (#context ctx, env', ty)
+                val ty = evalPureTy (#context ctx, env', ty)
                 val tystr: T.TypeStructure =
                   { typeFunction = T.TypeFunction (List.map #2 tyvars, ty)
                   , valEnv = T.emptyValEnv
@@ -4350,7 +4358,8 @@ struct
                              val vid' = newVId (#context ctx, vid)
                              val optTy =
                                Option.map
-                                 (fn ty => evalTy (#context ctx, env, ty)) optTy
+                                 (fn ty => evalPureTy (#context ctx, env, ty))
+                                 optTy
                              val info =
                                { tag = Syntax.getVIdName vid
                                , allConstructors = allConstructors
@@ -4457,7 +4466,7 @@ struct
                           List.foldl Syntax.TyVarMap.insert' (#boundTyVars env)
                             tyvars
                       }
-                    val ty = evalTy (#context ctx, env', ty)
+                    val ty = evalPureTy (#context ctx, env', ty)
                     val tystr: T.TypeStructure =
                       { typeFunction = T.TypeFunction (List.map #2 tyvars, ty)
                       , valEnv = T.emptyValEnv
@@ -4571,7 +4580,8 @@ struct
             fun doExBind (S.ExBind (span, vid, optTy), (valMap, exbinds)) =
                   let
                     val optTy =
-                      Option.map (fn ty => evalTy (#context ctx, env, ty)) optTy
+                      Option.map (fn ty => evalPureTy (#context ctx, env, ty))
+                        optTy
                     val vid' = newVId (#context ctx, vid)
                     val valMap = S.VIdMap.insert
                       ( valMap
@@ -4997,7 +5007,7 @@ struct
                    ( name
                    , vid
                    , newVId (#context ctx, vid)
-                   , T.thawPureTy (evalTy (#context ctx, env, ty))
+                   , evalTy (#context ctx, env, ty)
                    )) specs
             val valMap =
               List.foldl
@@ -6410,7 +6420,7 @@ struct
                         tyvars
                   }
               in
-                evalTy (ctx, env, ty)
+                evalPureTy (ctx, env, ty)
               end
             val tystr = lookupLongTyConInQSignature (ctx, span, s, longtycon)
           in
@@ -6500,7 +6510,7 @@ struct
                            , funMap = #funMap env
                            , boundTyVars = tvs
                            }
-                         val ty = evalTy (ctx, env', ty)
+                         val ty = evalPureTy (ctx, env', ty)
                        in
                          Syntax.VIdMap.insert
                            ( valMap
@@ -6684,7 +6694,7 @@ struct
                                  (#boundTyVars env) tyvars
                            }
                        in
-                         evalTy (ctx, env, ty)
+                         evalPureTy (ctx, env, ty)
                        end
                      val tystr =
                        { typeFunction = T.TypeFunction (List.map #2 tyvars, ty)
@@ -6741,7 +6751,10 @@ struct
                                   NONE => ty
                                 | SOME payloadTy =>
                                     T.FnType
-                                      (span, evalTy (ctx, env'', payloadTy), ty)
+                                      ( span
+                                      , evalPureTy (ctx, env'', payloadTy)
+                                      , ty
+                                      )
                               )
                             val idstatus = Syntax.ValueConstructor
                               { tag = Syntax.getVIdName vid
@@ -6804,7 +6817,7 @@ struct
                              NONE => primTy_exn
                            | SOME ty =>
                                T.FnType
-                                 (span, evalTy (ctx, env, ty), primTy_exn)
+                                 (span, evalPureTy (ctx, env, ty), primTy_exn)
                        in
                          Syntax.VIdMap.insert
                            ( valMap
@@ -6930,7 +6943,7 @@ struct
                                      (#boundTyVars env) tyvars
                                }
                            in
-                             evalTy (ctx, env, ty)
+                             evalPureTy (ctx, env, ty)
                            end
                          val tystr =
                            { typeFunction = T.TypeFunction

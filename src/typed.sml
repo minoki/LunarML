@@ -298,6 +298,7 @@ sig
   val print_Ty: Ty -> string
   val freeTyVarsInTy: TyVarSet.set * Ty -> TyVarSet.set
   val freeAnonymousTyVarsInTy: Ty -> AnonymousTyVar list
+  val applySubstPureTyAsTy: Ty TyVarMap.map -> PureTy -> Ty
   val applySubstTy: Ty TyVarMap.map -> Ty -> Ty
   val applySubstPureTy: PureTy TyVarMap.map -> PureTy -> PureTy
   val applySubstTyInExpOrDec: Ty TyVarMap.map
@@ -1071,6 +1072,42 @@ struct
          Syntax.LabelMap.foldl
            (fn (ty, set) => freeAnonymousTyVarsInTy ty @ set)
            (freeAnonymousTyVarsInTy baseTy) xs)
+
+  (*: val applySubstPureTyAsTy : Ty TyVarMap.map -> PureTy -> Ty *)
+  fun applySubstPureTyAsTy subst =
+    let
+      fun substTy (ty as TyVar (_, tv')) =
+            (case TyVarMap.find (subst, tv') of
+               NONE => ty
+             | SOME replacement => replacement)
+        | substTy (AnonymousTyVar (_, ref (Link ty))) = substTy ty
+        | substTy (ty as AnonymousTyVar (_, ref (Unbound _))) = ty
+        | substTy (RecordType (span, fields)) =
+            RecordType (span, Syntax.LabelMap.map substTy fields)
+        | substTy (TyCon (span, tyargs, tycon)) =
+            TyCon (span, List.map substTy tyargs, tycon)
+        | substTy (FnType (span, ty1, ty2)) =
+            FnType (span, substTy ty1, substTy ty2)
+        | substTy (RecordExtType (span, fields, baseTy)) =
+            RecordExtType
+              (span, Syntax.LabelMap.map substTy fields, substTy baseTy)
+      fun substPureTy (TyVar (span, tv')) =
+            (case TyVarMap.find (subst, tv') of
+               NONE => TyVar (span, tv')
+             | SOME replacement => replacement)
+        | substPureTy (AnonymousTyVar (_, x)) = Void.absurd x
+        | substPureTy (RecordType (span, fields)) =
+            RecordType (span, Syntax.LabelMap.map substPureTy fields)
+        | substPureTy (TyCon (span, tyargs, tycon)) =
+            TyCon (span, List.map substPureTy tyargs, tycon)
+        | substPureTy (FnType (span, ty1, ty2)) =
+            FnType (span, substPureTy ty1, substPureTy ty2)
+        | substPureTy (RecordExtType (span, fields, baseTy)) =
+            RecordExtType
+              (span, Syntax.LabelMap.map substPureTy fields, substPureTy baseTy)
+    in
+      substPureTy
+    end
 
   (*: val applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
   fun applySubstTy subst =
