@@ -2897,10 +2897,49 @@ struct
             (ty, T.LetInExp (span, decs, innerExp))
           end
       | synthTypeOfExp
-          ( ctx
-          , env
-          , S.AppExp (span, f, arg)
-          ) (* TODO: special case for projection *) =
+          (ctx, env, S.AppExp (span, S.ProjectionExp (span', label), record)) =
+          let
+            val (recordTy, record) = synthTypeOfExp (ctx, env, record)
+            val recordTy = forceTy recordTy
+            fun withFieldTy fieldTy =
+              ( fieldTy
+              , T.AppExp
+                  ( span
+                  , T.ProjectionExp
+                      { sourceSpan = span'
+                      , label = label
+                      , recordTy = recordTy
+                      , fieldTy = fieldTy
+                      }
+                  , record
+                  )
+              )
+            fun generalCase () =
+              let
+                val fieldTy = T.AnonymousTyVar
+                  (span, freshTyVar (ctx, span, false, NONE))
+                val baseTy =
+                  T.AnonymousTyVar (span, freshTyVar (ctx, span, false, SOME
+                    (T.Record (Syntax.LabelSet.singleton label))))
+                val recordTy' = T.RecordExtType
+                  (span, Syntax.LabelMap.singleton (label, fieldTy), baseTy)
+                val () = checkSubsumption (ctx, env, span, recordTy, recordTy')
+              in
+                withFieldTy fieldTy
+              end
+          in
+            case recordTy of
+              T.RecordType (_, fieldTypes) =>
+                (case Syntax.LabelMap.find (fieldTypes, label) of
+                   SOME fieldTy => withFieldTy fieldTy
+                 | NONE => generalCase ())
+            | T.RecordExtType (_, fieldTypes, _) =>
+                (case Syntax.LabelMap.find (fieldTypes, label) of
+                   SOME fieldTy => withFieldTy fieldTy
+                 | NONE => generalCase ())
+            | _ => generalCase ()
+          end
+      | synthTypeOfExp (ctx, env, S.AppExp (span, f, arg)) =
           let
             val (funTy, f) = synthTypeOfExp (ctx, env, f)
           in
@@ -3010,10 +3049,7 @@ struct
               T.AnonymousTyVar (span, freshTyVar (ctx, span, false, SOME
                 (T.Record (Syntax.LabelSet.singleton label))))
             val recordTy = T.RecordExtType
-              ( span
-              , Syntax.LabelMap.insert (Syntax.LabelMap.empty, label, fieldTy)
-              , baseTy
-              )
+              (span, Syntax.LabelMap.singleton (label, fieldTy), baseTy)
           in
             ( T.FnType (span, recordTy, fieldTy)
             , T.ProjectionExp
