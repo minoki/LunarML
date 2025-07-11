@@ -3299,7 +3299,7 @@ struct
               | (_, map) => map) TypedSyntax.TyNameMap.empty datbinds
         val env' = updateEqualityForTyNameMap
           ( fn m =>
-              TypedSyntax.TyNameMap.unionWith #2
+              TypedSyntax.TyNameMap.unionWithSecond
                 (m, TypedSyntax.TyNameMap.map T.MkShortVId nameMap)
           , env
           )
@@ -3337,7 +3337,8 @@ struct
                   List.foldl TypedSyntax.TyVarMap.insert'
                     TypedSyntax.TyVarMap.empty tyvars'
                 val env'' = updateEqualityForTyVarMap
-                  ( fn m => TypedSyntax.TyVarMap.unionWith #2 (m, eqForTyVars)
+                  ( fn m =>
+                      TypedSyntax.TyVarMap.unionWithSecond (m, eqForTyVars)
                   , env'
                   )
                 val env'' = updateValMap
@@ -3757,7 +3758,7 @@ struct
             val (env', decs0, exp, packageTy) = strExpToFExp (ctx, env, strexp)
             val env'' = updateEqualityForTyNameMap
               ( fn m =>
-                  TypedSyntax.TyNameMap.unionWith #2
+                  TypedSyntax.TyNameMap.unionWithSecond
                     (m, #equalityForTyNameMap env')
               , env
               )

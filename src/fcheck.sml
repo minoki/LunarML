@@ -668,7 +668,7 @@ struct
               let
                 val ve = checkPat (env, subjectTy, pat)
                 val env' = modifyValEnv
-                  (fn m => TypedSyntax.VIdMap.unionWith #2 (m, ve), env)
+                  (fn m => TypedSyntax.VIdMap.unionWithSecond (m, ve), env)
               in
                 checkExp (env', resultTy, exp)
               end

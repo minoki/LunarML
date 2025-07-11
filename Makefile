@@ -22,6 +22,8 @@ sources = \
   src/compat/ord_map.sig \
   src/compat/red-black-set-fn.sml \
   src/compat/red-black-map-fn.sml \
+  src/util/ord_map_x.sig \
+  src/util/map_extra.fun \
   src/void.sml \
   src/list-util.sml \
   src/vector-util.sml \

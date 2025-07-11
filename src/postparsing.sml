@@ -120,19 +120,21 @@ struct
     }
 
   fun mergeIdStatusMap (env1: IdStatusMap, env2: IdStatusMap) : IdStatusMap =
-    { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
-    , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
-    , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
+    { valMap = Syntax.VIdMap.unionWithSecond (#valMap env1, #valMap env2)
+    , tyConMap =
+        Syntax.TyConMap.unionWithSecond (#tyConMap env1, #tyConMap env2)
+    , strMap = Syntax.StrIdMap.unionWithSecond (#strMap env1, #strMap env2)
     }
 
   fun mergeEnv (env1: Env, env2: Env) : Env =
-    { fixityMap = Syntax.VIdMap.unionWith #2 (#fixityMap env1, #fixityMap env2)
+    { fixityMap =
+        Syntax.VIdMap.unionWithSecond (#fixityMap env1, #fixityMap env2)
     , dottedFixityMap =
-        Syntax.VIdMap.unionWith #2
+        Syntax.VIdMap.unionWithSecond
           (#dottedFixityMap env1, #dottedFixityMap env2)
     , idStatusMap = mergeIdStatusMap (#idStatusMap env1, #idStatusMap env2)
-    , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env1, #sigMap env2)
-    , funMap = Syntax.FunIdMap.unionWith #2 (#funMap env1, #funMap env2)
+    , sigMap = Syntax.SigIdMap.unionWithSecond (#sigMap env1, #sigMap env2)
+    , funMap = Syntax.FunIdMap.unionWithSecond (#funMap env1, #funMap env2)
     }
 
   fun getFixityStatus ({fixityMap, ...}: Env, vid) =
@@ -1551,7 +1553,7 @@ struct
                       Syntax.VIdMap.insert (m, vid, Syntax.ValueConstructor ()))
                    Syntax.VIdMap.empty condescs
              in
-               { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
+               { valMap = Syntax.VIdMap.unionWithSecond (valMap, valMap')
                , tyConMap = Syntax.TyConMap.insert (tyConMap, tycon, valMap')
                , strMap = strMap
                }

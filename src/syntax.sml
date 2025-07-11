@@ -30,21 +30,21 @@ sig
   datatype FixityStatus = Nonfix | Infix of InfixAssociativity
   structure VIdKey: ORD_KEY where type ord_key = VId
   structure VIdSet: ORD_SET where type Key.ord_key = VId
-  structure VIdMap: ORD_MAP where type Key.ord_key = VId
+  structure VIdMap: ORD_MAP_X where type Key.ord_key = VId
   structure StrIdKey: ORD_KEY where type ord_key = StrId
   structure StrIdSet: ORD_SET where type Key.ord_key = StrId
-  structure StrIdMap: ORD_MAP where type Key.ord_key = StrId
+  structure StrIdMap: ORD_MAP_X where type Key.ord_key = StrId
   structure SigIdSet: ORD_SET where type Key.ord_key = SigId
-  structure SigIdMap: ORD_MAP where type Key.ord_key = SigId
+  structure SigIdMap: ORD_MAP_X where type Key.ord_key = SigId
   structure FunIdSet: ORD_SET where type Key.ord_key = FunId
-  structure FunIdMap: ORD_MAP where type Key.ord_key = FunId
-  structure TyVarMap: ORD_MAP where type Key.ord_key = TyVar
+  structure FunIdMap: ORD_MAP_X where type Key.ord_key = FunId
+  structure TyVarMap: ORD_MAP_X where type Key.ord_key = TyVar
   structure TyVarSet: ORD_SET where type Key.ord_key = TyVar
   structure LabelSet: ORD_SET where type Key.ord_key = Label
-  structure LabelMap: ORD_MAP where type Key.ord_key = Label
+  structure LabelMap: ORD_MAP_X where type Key.ord_key = Label
   val LabelMapFromList: (Label * 'a) list -> 'a LabelMap.map
   structure TyConSet: ORD_SET where type Key.ord_key = TyCon
-  structure TyConMap: ORD_MAP where type Key.ord_key = TyCon
+  structure TyConMap: ORD_MAP_X where type Key.ord_key = TyCon
   structure LongTyCon:
   sig
     type t = LongTyCon
@@ -295,34 +295,34 @@ struct
            | t => t)
   end : ORD_KEY
   structure VIdSet = RedBlackSetFn(VIdKey)
-  structure VIdMap = RedBlackMapFn(VIdKey)
+  structure VIdMap = MapExtra(RedBlackMapFn(VIdKey))
   structure StrIdKey =
   struct
     type ord_key = StrId
     fun compare (MkStrId x, MkStrId y) = String.compare (x, y)
   end : ORD_KEY
   structure StrIdSet = RedBlackSetFn(StrIdKey)
-  structure StrIdMap = RedBlackMapFn(StrIdKey)
+  structure StrIdMap = MapExtra(RedBlackMapFn(StrIdKey))
   structure SigIdKey =
   struct
     type ord_key = SigId
     fun compare (MkSigId x, MkSigId y) = String.compare (x, y)
   end
   structure SigIdSet = RedBlackSetFn(SigIdKey)
-  structure SigIdMap = RedBlackMapFn(SigIdKey)
+  structure SigIdMap = MapExtra(RedBlackMapFn(SigIdKey))
   structure FunIdKey =
   struct
     type ord_key = FunId
     fun compare (MkFunId x, MkFunId y) = String.compare (x, y)
   end
   structure FunIdSet = RedBlackSetFn(FunIdKey)
-  structure FunIdMap = RedBlackMapFn(FunIdKey)
+  structure FunIdMap = MapExtra(RedBlackMapFn(FunIdKey))
   structure TyVarKey =
   struct
     type ord_key = TyVar
     fun compare (MkTyVar x, MkTyVar y) = String.compare (x, y)
   end : ORD_KEY
-  structure TyVarMap = RedBlackMapFn(TyVarKey)
+  structure TyVarMap = MapExtra(RedBlackMapFn(TyVarKey))
   structure TyVarSet = RedBlackSetFn(TyVarKey)
   structure LabelKey =
   struct
@@ -334,7 +334,7 @@ struct
       | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x, y)
   end
   structure LabelSet = RedBlackSetFn(LabelKey)
-  structure LabelMap = RedBlackMapFn(LabelKey)
+  structure LabelMap = MapExtra(RedBlackMapFn(LabelKey))
   fun LabelMapFromList (xs: (Label * 'a) list) : 'a LabelMap.map =
     List.foldl LabelMap.insert' LabelMap.empty xs
 
@@ -344,7 +344,7 @@ struct
     fun compare (MkTyCon x, MkTyCon y) = String.compare (x, y)
   end : ORD_KEY
   structure TyConSet = RedBlackSetFn(TyConKey)
-  structure TyConMap = RedBlackMapFn(TyConKey)
+  structure TyConMap = MapExtra(RedBlackMapFn(TyConKey))
 
   structure LongTyCon:
   sig

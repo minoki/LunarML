@@ -71,7 +71,7 @@ struct
     fun envWithBasis bas : Env =
       {bas = bas, fixity = Fixity.emptyEnv, typing = Typing.emptyEnv}
     fun mergeEnv (e1: Env, e2: Env) =
-      { bas = M.BasMap.unionWith #2 (#bas e1, #bas e2)
+      { bas = M.BasMap.unionWithSecond (#bas e1, #bas e2)
       , fixity = Fixity.mergeEnv (#fixity e1, #fixity e2)
       , typing = Typing.mergeEnv (#typing e1, #typing e2)
       }
@@ -204,7 +204,7 @@ struct
             val typingEnv =
               { valMap = #valMap (#typing env'')
               , tyConMap = #tyConMap (#typing env'')
-              , tyNameMap = TypedSyntax.TyNameMap.unionWith #2
+              , tyNameMap = TypedSyntax.TyNameMap.unionWithSecond
                   (#tyNameMap (#typing env'), #tyNameMap (#typing env''))
               , strMap = #strMap (#typing env'')
               , sigMap = #sigMap (#typing env'')

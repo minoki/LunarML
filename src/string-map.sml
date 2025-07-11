@@ -3,4 +3,4 @@
  * This file is part of LunarML.
  *)
 structure StringMap =
-  RedBlackMapFn (type ord_key = string; val compare = String.compare);
+  MapExtra(RedBlackMapFn (type ord_key = string; val compare = String.compare));

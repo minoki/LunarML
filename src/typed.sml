@@ -19,17 +19,17 @@ sig
   val eqVId: VId * VId -> bool
   val tyVarAdmitsEquality: TyVar -> bool
   structure TyVarSet: ORD_SET where type Key.ord_key = TyVar
-  structure TyVarMap: ORD_MAP where type Key.ord_key = TyVar
+  structure TyVarMap: ORD_MAP_X where type Key.ord_key = TyVar
   structure VIdKey: ORD_KEY where type ord_key = VId
   structure VIdSet: ORD_SET where type Key.ord_key = VId
-  structure VIdMap: ORD_MAP where type Key.ord_key = VId
+  structure VIdMap: ORD_MAP_X where type Key.ord_key = VId
   structure VIdTable: MONO_HASH_TABLE where type Key.hash_key = VId
   structure VIdSCC:
   sig
     val components: ('node -> VIdSet.set) * 'node VIdMap.map -> VIdSet.set list
   end
   structure TyNameSet: ORD_SET where type Key.ord_key = TyName
-  structure TyNameMap: ORD_MAP where type Key.ord_key = TyName
+  structure TyNameMap: ORD_MAP_X where type Key.ord_key = TyName
   type level = int
   datatype UnaryConstraint =
     IsRecord of (* excluded fields *) Syntax.Label list
@@ -357,7 +357,7 @@ struct
        | ord => ord)
   end : ORD_KEY
   structure TyVarSet = RedBlackSetFn(TyVarKey)
-  structure TyVarMap = RedBlackMapFn(TyVarKey)
+  structure TyVarMap = MapExtra(RedBlackMapFn(TyVarKey))
 
   structure VIdKey =
   struct
@@ -368,7 +368,7 @@ struct
       | ord => ord
   end : ORD_KEY
   structure VIdSet = RedBlackSetFn(VIdKey)
-  structure VIdMap = RedBlackMapFn(VIdKey)
+  structure VIdMap = MapExtra(RedBlackMapFn(VIdKey))
   structure VIdTable =
     HashTableFn
       (struct
@@ -392,7 +392,7 @@ struct
       | ord => ord
   end : ORD_KEY
   (* structure StrIdSet = RedBlackSetFn(StrIdKey) *)
-  (* structure StrIdMap = RedBlackMapFn(StrIdKey) *)
+  (* structure StrIdMap = MapExtra(RedBlackMapFn(StrIdKey)) *)
 
   type level = int
 

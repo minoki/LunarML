@@ -21,7 +21,7 @@ sig
     BasisExp of BasDec list
   | BasIdExp of BasId
   | LetExp of BasDec list * BasExp
-  structure BasMap: ORD_MAP where type Key.ord_key = BasId
+  structure BasMap: ORD_MAP_X where type Key.ord_key = BasId
   val evalPath: string StringMap.map -> string -> string
 end =
 struct

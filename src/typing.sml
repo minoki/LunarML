@@ -133,15 +133,16 @@ struct
   (*: val mergeEnv : ('val, 'str) Env' * ('val, 'str) Env' -> ('val, 'str) Env' *)
   fun mergeEnv (env1: ('val, 'str) Env', env2: ('val, 'str) Env') :
     ('val, 'str) Env' =
-    { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
-    , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
+    { valMap = Syntax.VIdMap.unionWithSecond (#valMap env1, #valMap env2)
+    , tyConMap =
+        Syntax.TyConMap.unionWithSecond (#tyConMap env1, #tyConMap env2)
     , tyNameMap =
-        TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap env1, #tyNameMap env2)
-    , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
-    , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env1, #sigMap env2)
-    , funMap = Syntax.FunIdMap.unionWith #2 (#funMap env1, #funMap env2)
+        TypedSyntax.TyNameMap.unionWithSecond (#tyNameMap env1, #tyNameMap env2)
+    , strMap = Syntax.StrIdMap.unionWithSecond (#strMap env1, #strMap env2)
+    , sigMap = Syntax.SigIdMap.unionWithSecond (#sigMap env1, #sigMap env2)
+    , funMap = Syntax.FunIdMap.unionWithSecond (#funMap env1, #funMap env2)
     , boundTyVars =
-        Syntax.TyVarMap.unionWith #2 (#boundTyVars env1, #boundTyVars env2)
+        Syntax.TyVarMap.unionWithSecond (#boundTyVars env1, #boundTyVars env2)
     }
 
   fun envWithValEnv valMap : Env =
@@ -155,7 +156,7 @@ struct
     }
 
   fun mergeWithValEnv (env1: ('val, 'str) Env', valMap) : ('val, 'str) Env' =
-    { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, valMap)
+    { valMap = Syntax.VIdMap.unionWithSecond (#valMap env1, valMap)
     , tyConMap = #tyConMap env1
     , tyNameMap = #tyNameMap env1
     , strMap = #strMap env1
@@ -177,9 +178,9 @@ struct
   fun mergeWithTyConEnv (env1: ('val, 'str) Env', {tyConMap, tyNameMap}) :
     ('val, 'str) Env' =
     { valMap = #valMap env1
-    , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, tyConMap)
+    , tyConMap = Syntax.TyConMap.unionWithSecond (#tyConMap env1, tyConMap)
     , tyNameMap =
-        TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap env1, tyNameMap)
+        TypedSyntax.TyNameMap.unionWithSecond (#tyNameMap env1, tyNameMap)
     , strMap = #strMap env1
     , sigMap = #sigMap env1
     , funMap = #funMap env1
@@ -4041,7 +4042,7 @@ struct
                   , boundTyVars
                   } = env
               in
-                { valMap = Syntax.VIdMap.unionWith #2 (valMap, localValMap)
+                { valMap = Syntax.VIdMap.unionWithSecond (valMap, localValMap)
                 , tyConMap = tyConMap
                 , tyNameMap = tyNameMap
                 , strMap = strMap
@@ -4489,7 +4490,7 @@ struct
                     ( Syntax.TyConMap.insert (tyConMap, tycon, tystr)
                     , TypedSyntax.TyNameMap.insert
                         (tyNameMap, tyname, tynameattr)
-                    , Syntax.VIdMap.unionWith #2
+                    , Syntax.VIdMap.unionWithSecond
                         (accValEnv, valEnv) (* TODO: check for duplicate *)
                     , datbind :: datbinds
                     )
@@ -4516,11 +4517,12 @@ struct
                         tyvars
                     val env' =
                       { valMap =
-                          Syntax.VIdMap.unionWith #2 (#valMap env, valMap)
+                          Syntax.VIdMap.unionWithSecond (#valMap env, valMap)
                       , tyConMap =
-                          Syntax.TyConMap.unionWith #2 (#tyConMap env, tyConMap)
+                          Syntax.TyConMap.unionWithSecond
+                            (#tyConMap env, tyConMap)
                       , tyNameMap =
-                          TypedSyntax.TyNameMap.unionWith #2
+                          TypedSyntax.TyNameMap.unionWithSecond
                             (#tyNameMap env, tyNameMap)
                       , strMap = #strMap env
                       , sigMap = #sigMap env
@@ -4619,18 +4621,18 @@ struct
                   , #tyConMap env''
                   )
               , tyNameMap =
-                  TypedSyntax.TyNameMap.unionWith #2
+                  TypedSyntax.TyNameMap.unionWithSecond
                     (#tyNameMap env', #tyNameMap env'') (* should be disjoint *)
               , strMap =
-                  Syntax.StrIdMap.unionWith #2
+                  Syntax.StrIdMap.unionWithSecond
                     (#strMap env', #strMap env'') (* should be empty *)
               , sigMap =
-                  Syntax.SigIdMap.unionWith #2
+                  Syntax.SigIdMap.unionWithSecond
                     (#sigMap env', #sigMap env'') (* should be empty *)
               , funMap =
-                  Syntax.FunIdMap.unionWith #2 (#funMap env', #funMap env'')
+                  Syntax.FunIdMap.unionWithSecond (#funMap env', #funMap env'')
               , boundTyVars =
-                  Syntax.TyVarMap.unionWith #2
+                  Syntax.TyVarMap.unionWithSecond
                     ( #boundTyVars env'
                     , #boundTyVars env''
                     ) (* should be empty *)
@@ -4747,7 +4749,7 @@ struct
               { valMap = #valMap env''
               , tyConMap = #tyConMap env''
               , tyNameMap =
-                  TypedSyntax.TyNameMap.unionWith #2
+                  TypedSyntax.TyNameMap.unionWithSecond
                     (#tyNameMap env', #tyNameMap env'')
               , strMap = #strMap env''
               , sigMap = #sigMap env''
@@ -6059,13 +6061,13 @@ struct
 
     fun mergeSignature (s1: 'link T.BaseSignature, s2: 'link T.BaseSignature) :
       'link T.BaseSignature =
-      { valMap = Syntax.VIdMap.unionWith #2 (#valMap s1, #valMap s2)
-      , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap s1, #tyConMap s2)
-      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap s1, #strMap s2)
+      { valMap = Syntax.VIdMap.unionWithSecond (#valMap s1, #valMap s2)
+      , tyConMap = Syntax.TyConMap.unionWithSecond (#tyConMap s1, #tyConMap s2)
+      , strMap = Syntax.StrIdMap.unionWithSecond (#strMap s1, #strMap s2)
       }
     fun mergeQSignature (s1: T.QSignature, s2: T.QSignature) : T.QSignature =
       { s = mergeSignature (#s s1, #s s2)
-      , bound = T.TyNameMap.unionWith #2 (#bound s1, #bound s2)
+      , bound = T.TyNameMap.unionWithSecond (#bound s1, #bound s2)
       }
 
     fun canonicalOrderForQSignature ({s, bound}: T.QSignature) : T.TyName list =
@@ -6125,11 +6127,11 @@ struct
       , tyNameMap: TyNameAttr T.TyNameMap.map
       ) : SigEnv =
       { valMap = #valMap env (* not used *)
-      , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env, #tyConMap s)
+      , tyConMap = Syntax.TyConMap.unionWithSecond (#tyConMap env, #tyConMap s)
       , tyNameMap =
-          T.TyNameMap.unionWith #2
+          T.TyNameMap.unionWithSecond
             (#tyNameMap env, tyNameMap) (* should not overlap *)
-      , strMap = Syntax.StrIdMap.unionWith #2
+      , strMap = Syntax.StrIdMap.unionWithSecond
           ( #strMap env
           , Syntax.StrIdMap.map
               (fn T.MkSignature s => (T.thawWrittenSignature s, ())) (#strMap s)
@@ -6373,7 +6375,7 @@ struct
         , resultSig =
             { s =
                 refreshTyNameInSig
-                  (ctx, T.TyNameMap.unionWith #2 (substA, substE)) s
+                  (ctx, T.TyNameMap.unionWithSecond (substA, substE)) s
             , bound =
                 List.map
                   (fn {tyname, arity, admitsEquality} =>
@@ -6839,7 +6841,7 @@ struct
                    val tystr = {typeFunction = typeFunction, valEnv = valEnv}
                  in
                    { s =
-                       { valMap = Syntax.VIdMap.unionWith #2
+                       { valMap = Syntax.VIdMap.unionWithSecond
                            (#valMap (#s s), valEnv)
                        , tyConMap = Syntax.TyConMap.insert
                            (#tyConMap (#s s), tycon, tystr)
@@ -6921,7 +6923,7 @@ struct
             , bound =
                 Syntax.StrIdMap.foldli
                   (fn (strid, {bound, ...}, map) =>
-                     TypedSyntax.TyNameMap.unionWith #2
+                     TypedSyntax.TyNameMap.unionWithSecond
                        ( map
                        , TypedSyntax.TyNameMap.map
                            (fn { arity
@@ -7559,7 +7561,8 @@ struct
               { valMap = #valMap env
               , tyConMap = #tyConMap env
               , tyNameMap =
-                  TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap env, tyNameMap)
+                  TypedSyntax.TyNameMap.unionWithSecond
+                    (#tyNameMap env, tyNameMap)
               , strMap = #strMap env
               , sigMap = #sigMap env
               , funMap = #funMap env
@@ -7583,7 +7586,8 @@ struct
               { valMap = #valMap env
               , tyConMap = #tyConMap env
               , tyNameMap =
-                  TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap env, tyNameMap)
+                  TypedSyntax.TyNameMap.unionWithSecond
+                    (#tyNameMap env, tyNameMap)
               , strMap = #strMap env
               , sigMap = #sigMap env
               , funMap = #funMap env
@@ -7663,7 +7667,7 @@ struct
                    { valMap = #valMap env
                    , tyConMap = #tyConMap env
                    , tyNameMap =
-                       TypedSyntax.TyNameMap.unionWith #2
+                       TypedSyntax.TyNameMap.unionWithSecond
                          (#tyNameMap env, tyNameMap)
                    , strMap = #strMap env
                    , sigMap = #sigMap env
@@ -7781,7 +7785,7 @@ struct
               (ctx, mergeEnv (env, env'), strexp)
           in
             ( s
-            , T.TyNameMap.unionWith #2 (#tyNameMap env', tyNameMap)
+            , T.TyNameMap.unionWithSecond (#tyNameMap env', tyNameMap)
             , strdecs @ strdecs'
             , strexp
             )
@@ -7806,7 +7810,7 @@ struct
                          , strid
                          , (#s packedSignature, T.MkLongStrId (strid', []))
                          )
-                     , TypedSyntax.TyNameMap.unionWith #2 (tyNameMap, tc)
+                     , TypedSyntax.TyNameMap.unionWithSecond (tyNameMap, tc)
                      , (strid', strdecs, strexp, packedSignature) :: binds
                      )
                    end) (Syntax.StrIdMap.empty, TypedSyntax.TyNameMap.empty, [])
@@ -7839,7 +7843,7 @@ struct
               { valMap = #valMap env''
               , tyConMap = #tyConMap env''
               , tyNameMap =
-                  TypedSyntax.TyNameMap.unionWith #2
+                  TypedSyntax.TyNameMap.unionWithSecond
                     (#tyNameMap env', #tyNameMap env'')
               , strMap = #strMap env''
               , sigMap = #sigMap env''
@@ -7957,7 +7961,8 @@ struct
             val paramEnv =
               { valMap = #valMap env
               , tyConMap = #tyConMap env
-              , tyNameMap = T.TyNameMap.unionWith #2 (#tyNameMap env, tyNameMap)
+              , tyNameMap =
+                  T.TyNameMap.unionWithSecond (#tyNameMap env, tyNameMap)
               , strMap = S.StrIdMap.insert
                   ( #strMap env
                   , strid
