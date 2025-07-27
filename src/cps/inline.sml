@@ -1432,7 +1432,7 @@ struct
                   [C.ValDec
                      { exp = C.PrimOp
                          { primOp = FSyntax.ConstructExnWithPayloadOp
-                         , tyargs = [FSyntax.TyVar Typing.primTyName_string]
+                         , tyargs = [FSyntax.Types.string]
                          , args = [C.Var InitialEnv.VId_Fail_tag, C.Var message]
                          }
                      , results = [SOME result]
@@ -1456,7 +1456,7 @@ struct
                   [C.ValDec
                      { exp = C.PrimOp
                          { primOp = FSyntax.ExnPayloadOp
-                         , tyargs = [FSyntax.TyVar Typing.primTyName_string]
+                         , tyargs = [FSyntax.Types.string]
                          , args = [C.Var e]
                          }
                      , results = [SOME result]

@@ -374,7 +374,7 @@ struct
                 , [elemTy]
                 , [exp]
                 )
-              val intTy = F.TyCon ([], Typing.primTyName_int)
+              val intTy = F.Types.int
               val expectedLengthExp = F.IntConstExp
                 (Int.toLarge (Vector.length pats), intTy)
               val e0 =
@@ -506,7 +506,7 @@ struct
             (vid, SOME ty, exp) :: genBinders exp ty pat
         | genBinders exp _ (F.VectorPat (_, pats, _, elemTy)) =
             let
-              val intTy = F.TyCon ([], Typing.primTyName_int)
+              val intTy = F.Types.int
             in
               Vector.foldri
                 (fn (i, pat, acc) =>

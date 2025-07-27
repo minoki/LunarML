@@ -156,6 +156,30 @@ sig
   val TuplePat: SourcePos.span * Pat list -> Pat
   val TupleExp: Exp list -> Exp
   val TyCon: Ty list * TypedSyntax.TyName -> Ty
+  structure Types:
+  sig
+    val unit: Ty
+    val bool: Ty
+    val int: Ty
+    val int32: Ty
+    val int54: Ty
+    val int64: Ty
+    val intInf: Ty
+    val word32: Ty
+    val word64: Ty
+    val real: Ty
+    val char: Ty
+    val char16: Ty
+    val string: Ty
+    val string16: Ty
+    val exn: Ty
+    val exntag: Ty
+    val lua_value: Ty
+    val js_value: Ty
+    val list: Ty -> Ty
+    val vector: Ty -> Ty
+    val array: Ty -> Ty
+  end
   val AsciiStringAsDatatypeTag: TargetInfo.target_info * string -> Exp
   val strIdToVId: TypedSyntax.StrId -> TypedSyntax.VId
   val SimplifyingAndalsoExp: Exp * Exp -> Exp
@@ -338,6 +362,33 @@ struct
     PrimExp (ListOp, [elemTy], Vector.foldr (op::) [] exps)
   fun VectorExp (exps, elemTy) =
     PrimExp (VectorOp, [elemTy], Vector.foldr (op::) [] exps)
+  structure Types =
+  struct
+    val unit = RecordType Syntax.LabelMap.empty
+    val bool = TyVar Typing.primTyName_bool
+    val int = TyVar Typing.primTyName_int
+    val int32 = TyVar Typing.primTyName_int32
+    val int54 = TyVar Typing.primTyName_int54
+    val int64 = TyVar Typing.primTyName_int64
+    val intInf = TyVar Typing.primTyName_intInf
+    val word32 = TyVar Typing.primTyName_word32
+    val word64 = TyVar Typing.primTyName_word64
+    val real = TyVar Typing.primTyName_real
+    val char = TyVar Typing.primTyName_char
+    val char16 = TyVar Typing.primTyName_char16
+    val string = TyVar Typing.primTyName_string
+    val string16 = TyVar Typing.primTyName_string16
+    val exn = TyVar Typing.primTyName_exn
+    val exntag = TyVar Typing.primTyName_exntag
+    val lua_value = TyVar Typing.primTyName_Lua_value
+    val js_value = TyVar Typing.primTyName_JavaScript_value
+    fun list ty =
+      AppType {applied = TyVar Typing.primTyName_list, arg = ty}
+    fun vector ty =
+      AppType {applied = TyVar Typing.primTyName_vector, arg = ty}
+    fun array ty =
+      AppType {applied = TyVar Typing.primTyName_array, arg = ty}
+  end
   fun FnType (param, result) =
     MultiFnType ([param], result)
   fun TupleType xs =
@@ -383,14 +434,10 @@ struct
       (TyVar tyname) tyargs
   fun AsciiStringAsDatatypeTag (targetInfo: TargetInfo.target_info, s: string) =
     (case #datatypeTag targetInfo of
-       TargetInfo.STRING8 =>
-         PrimExp (String8ConstOp s, [TyCon ([], Typing.primTyName_string)], [])
+       TargetInfo.STRING8 => PrimExp (String8ConstOp s, [Types.string], [])
      | TargetInfo.STRING16 =>
          PrimExp
-           ( String16ConstOp (StringElement.encodeAscii s)
-           , [TyCon ([], Typing.primTyName_string16)]
-           , []
-           ))
+           (String16ConstOp (StringElement.encodeAscii s), [Types.string16], []))
   fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
   fun AndalsoExp (a, b) =
     IfThenElseExp (a, b, VarExp InitialEnv.VId_false)
@@ -403,7 +450,7 @@ struct
         else AndalsoExp (a, b)
     | SimplifyingAndalsoExp (a, b) = AndalsoExp (a, b)
   fun EqualityType t =
-    MultiFnType ([t, t], TyVar Typing.primTyName_bool) (* [t, t] -> bool *)
+    MultiFnType ([t, t], Types.bool) (* [t, t] -> bool *)
   fun arityToKind 0 = TypeKind
     | arityToKind n =
         ArrowKind (TypeKind, arityToKind (n - 1))
@@ -2632,7 +2679,6 @@ struct
       | toFExp (ctx, env, T.HandleExp (span, exp, matches, resultTy)) =
           let
             val exnName = freshVId (ctx, "exn")
-            val exnTy = F.TyVar Typing.primTyName_exn
             fun doMatch (pat, exp) =
               let
                 val (valMap, pat') = toFPat (ctx, env, pat, #valMap env)
@@ -2648,7 +2694,7 @@ struct
               , handler = F.CaseExp
                   { sourceSpan = span
                   , subjectExp = F.VarExp exnName
-                  , subjectTy = exnTy
+                  , subjectTy = F.Types.exn
                   , matches = matches'
                   , matchType = T.HANDLE
                   , resultTy = toFTy (ctx, env, resultTy)
@@ -3070,7 +3116,6 @@ struct
           end
       | toFDecs (ctx, env as {exnMap, ...}, T.ExceptionDec (_, exbinds) :: decs) =
           let
-            val exnTy = FSyntax.TyCon ([], Typing.primTyName_exn)
             val (env, exnMap, revExbinds) =
               List.foldl
                 (fn ( T.ExBind
@@ -3085,7 +3130,7 @@ struct
                      val (ty, exp, getPayloadExp, getPayloadDec) =
                        case optPayloadTy of
                          NONE =>
-                           ( exnTy
+                           ( F.Types.exn
                            , F.PrimExp (F.ConstructExnOp, [], [F.VarExp tag])
                            , NONE
                            , []
@@ -3093,7 +3138,7 @@ struct
                        | SOME payloadTy =>
                            let
                              val payloadId = freshVId (ctx, "payload")
-                             val ty = F.FnType (payloadTy, exnTy)
+                             val ty = F.FnType (payloadTy, F.Types.exn)
                              val getPayloadId =
                                freshVId (ctx, name ^ "_payload")
                              val exnId = freshVId (ctx, "e")
@@ -3107,8 +3152,8 @@ struct
                              , SOME (F.VarExp getPayloadId)
                              , [F.ValDec
                                   ( getPayloadId
-                                  , SOME (F.FnType (exnTy, payloadTy))
-                                  , F.FnExp (exnId, exnTy, F.PrimExp
+                                  , SOME (F.FnType (F.Types.exn, payloadTy))
+                                  , F.FnExp (exnId, F.Types.exn, F.PrimExp
                                       ( F.ExnPayloadOp
                                       , [payloadTy]
                                       , [F.VarExp exnId]
@@ -3126,9 +3171,8 @@ struct
                        in
                          F.ValDec
                            ( predicateId
-                           , SOME
-                               (F.FnType (exnTy, F.TyVar Typing.primTyName_bool))
-                           , F.FnExp (exnId, exnTy, F.PrimExp
+                           , SOME (F.FnType (F.Types.exn, F.Types.bool))
+                           , F.FnExp (exnId, F.Types.exn, F.PrimExp
                                ( F.PrimCall Primitives.Exception_instanceof
                                , []
                                , [F.VarExp exnId, F.VarExp tag]
@@ -3165,8 +3209,8 @@ struct
                             case optTy of
                               SOME payloadTy =>
                                 F.FnType
-                                  (toFTyPure (ctx, env, payloadTy), exnTy)
-                            | NONE => exnTy
+                                  (toFTyPure (ctx, env, payloadTy), F.Types.exn)
+                            | NONE => F.Types.exn
                           val env = updateValMap
                             (fn m => T.VIdMap.insert (m, vid, conTy), env)
                           val dec = F.ValDec (vid, SOME conTy, #1
@@ -3426,7 +3470,7 @@ struct
                              else
                                []) conbinds
                       , matchType = T.CASE
-                      , resultTy = F.TyVar Typing.primTyName_bool
+                      , resultTy = F.Types.bool
                       })
                   end
                 val body =
@@ -3455,10 +3499,7 @@ struct
                  val fields = Syntax.LabelMap.insert
                    ( fields
                    , F.ExnPredicateLabel vid
-                   , F.FnType
-                       ( F.TyVar Typing.primTyName_exn
-                       , F.TyVar Typing.primTyName_bool
-                       )
+                   , F.FnType (F.Types.exn, F.Types.bool)
                    )
                in
                  case typeSchemeToTy (ctx, env, tysc) of
@@ -3466,7 +3507,7 @@ struct
                      Syntax.LabelMap.insert
                        ( fields
                        , F.ExnPayloadLabel vid
-                       , F.FnType (F.TyVar Typing.primTyName_exn, payloadTy)
+                       , F.FnType (F.Types.exn, payloadTy)
                        )
                  | _ => fields
                end
@@ -3532,10 +3573,7 @@ struct
                            val fieldTypes = Syntax.LabelMap.insert
                              ( fieldTypes
                              , label
-                             , F.FnType
-                                 ( F.TyVar Typing.primTyName_exn
-                                 , F.TyVar Typing.primTyName_bool
-                                 )
+                             , F.FnType (F.Types.exn, F.Types.bool)
                              )
                            val fields = (label, predicate) :: fields
                          in
@@ -3547,8 +3585,7 @@ struct
                                  val fieldTypes = Syntax.LabelMap.insert
                                    ( fieldTypes
                                    , alabel
-                                   , F.FnType
-                                       (F.TyVar Typing.primTyName_exn, ty)
+                                   , F.FnType (F.Types.exn, ty)
                                    )
                                in
                                  (fieldTypes, (alabel, get) :: fields)
@@ -4136,23 +4173,19 @@ struct
                 (fn ((tysc, _, vid), m) =>
                    TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
                 TypedSyntax.VIdMap.empty initialValEnv
-            val exnTagTy = FSyntax.TyVar Typing.primTyName_exntag
             val exnPredicateTy =
-              FSyntax.FnType
-                ( FSyntax.TyVar Typing.primTyName_exn
-                , FSyntax.TyVar Typing.primTyName_bool
-                )
+              FSyntax.FnType (FSyntax.Types.exn, FSyntax.Types.bool)
             fun exnPayloadTy payloadTy =
-              FSyntax.FnType (FSyntax.TyVar Typing.primTyName_exn, payloadTy)
+              FSyntax.FnType (FSyntax.Types.exn, payloadTy)
           in
             List.foldl TypedSyntax.VIdMap.insert' initialValMap
-              [ (VId_Match_tag, exnTagTy)
-              , (VId_Bind_tag, exnTagTy)
-              , (VId_Div_tag, exnTagTy)
-              , (VId_Overflow_tag, exnTagTy)
-              , (VId_Size_tag, exnTagTy)
-              , (VId_Subscript_tag, exnTagTy)
-              , (VId_Fail_tag, exnTagTy)
+              [ (VId_Match_tag, FSyntax.Types.exntag)
+              , (VId_Bind_tag, FSyntax.Types.exntag)
+              , (VId_Div_tag, FSyntax.Types.exntag)
+              , (VId_Overflow_tag, FSyntax.Types.exntag)
+              , (VId_Size_tag, FSyntax.Types.exntag)
+              , (VId_Subscript_tag, FSyntax.Types.exntag)
+              , (VId_Fail_tag, FSyntax.Types.exntag)
               , (VId_Match_predicate, exnPredicateTy)
               , (VId_Bind_predicate, exnPredicateTy)
               , (VId_Div_predicate, exnPredicateTy)
@@ -4162,15 +4195,10 @@ struct
               , (VId_Fail_predicate, exnPredicateTy)
               , (VId_Lua_Error_predicate, exnPredicateTy)
               , (VId_JavaScript_Error_predicate, exnPredicateTy)
-              , ( VId_Fail_payload
-                , exnPayloadTy (FSyntax.TyVar Typing.primTyName_string)
-                )
-              , ( VId_Lua_Error_payload
-                , exnPayloadTy (FSyntax.TyVar Typing.primTyName_Lua_value)
-                )
+              , (VId_Fail_payload, exnPayloadTy FSyntax.Types.string)
+              , (VId_Lua_Error_payload, exnPayloadTy FSyntax.Types.lua_value)
               , ( VId_JavaScript_Error_payload
-                , exnPayloadTy (FSyntax.TyVar
-                    Typing.primTyName_JavaScript_value)
+                , exnPayloadTy FSyntax.Types.js_value
                 )
               ]
           end
