@@ -29,17 +29,17 @@ sig
   | ListOp (* type argument: element type, value arguments: the elements *)
   | VectorOp (* type argument: element type, value arguments: the elements *)
   | DataTagAsStringOp of
-      Syntax.ValueConstructorInfo (* value argument: the data *)
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataTagAsString16Op of
-      Syntax.ValueConstructorInfo (* value argument: the data *)
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataPayloadOp of
-      Syntax.ValueConstructorInfo (* type argument: payload, value argument: the data *)
+      Syntax.ValueConstructorInfo (* type argument: data type, payload, value argument: the data *)
   | ExnPayloadOp (* type argument: payload, value argument: the data *)
   | ConstructValOp of Syntax.ValueConstructorInfo (* type argument: data type *)
   | ConstructValWithPayloadOp of
       Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: payload *)
   | ConstructExnOp (* value argument: exception tag *)
-  | ConstructExnWithPayloadOp (* type argument: payload, value argument: exception tag, value argument: payload *)
+  | ConstructExnWithPayloadOp (* type argument: payload, value arguments: exception tag, payload *)
   | PrimCall of Primitives.PrimOp
   | JsCallOp (* value argument: function, arguments *)
   | JsMethodOp (* value argument: object, name, arguments *)
@@ -231,9 +231,9 @@ struct
   | ListOp (* type argument: element type, value arguments: the elements *)
   | VectorOp (* type argument: element type, value arguments: the elements *)
   | DataTagAsStringOp of
-      Syntax.ValueConstructorInfo (* type arguments: data type, value argument: the data *)
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataTagAsString16Op of
-      Syntax.ValueConstructorInfo (* type arguments: data type, value argument: the data *)
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataPayloadOp of
       Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: the data *)
   | ExnPayloadOp (* type argument: payload, value argument: the data *)

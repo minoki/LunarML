@@ -306,7 +306,7 @@ struct
                      ( F.PrimExp
                          ( F.PrimCall equalTag
                          , [ty]
-                         , [ F.PrimExp (dataTagOp info, [], [exp])
+                         , [ F.PrimExp (dataTagOp info, [ty], [exp])
                            , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                            ]
                          )
@@ -345,7 +345,7 @@ struct
                    F.PrimExp
                      ( F.PrimCall equalTag
                      , []
-                     , [ F.PrimExp (dataTagOp info, [], [exp])
+                     , [ F.PrimExp (dataTagOp info, [ty], [exp])
                        , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                        ]
                      )

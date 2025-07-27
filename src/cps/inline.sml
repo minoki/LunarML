@@ -1471,7 +1471,6 @@ struct
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "a"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
           { contParam = k
@@ -1482,7 +1481,7 @@ struct
                      { exp = C.PrimOp
                          { primOp = FSyntax.PrimCall
                              Primitives.JavaScript_function
-                         , tyargs = [ty]
+                         , tyargs = []
                          , args = [C.Var xs]
                          }
                      , results = [SOME result]
@@ -1497,7 +1496,6 @@ struct
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "a"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
           { contParam = k
@@ -1508,7 +1506,7 @@ struct
                      { exp = C.PrimOp
                          { primOp = FSyntax.PrimCall
                              Primitives.JavaScript_encodeUtf8
-                         , tyargs = [ty]
+                         , tyargs = []
                          , args = [C.Var xs]
                          }
                      , results = [SOME result]
@@ -1523,7 +1521,6 @@ struct
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "a"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
         C.Abs
           { contParam = k
@@ -1534,7 +1531,7 @@ struct
                      { exp = C.PrimOp
                          { primOp = FSyntax.PrimCall
                              Primitives.JavaScript_decodeUtf8
-                         , tyargs = [ty]
+                         , tyargs = []
                          , args = [C.Var xs]
                          }
                      , results = [SOME result]
