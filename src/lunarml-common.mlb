@@ -34,6 +34,7 @@ syntax.grm.sml
 parser.sml
 postparsing.sml
 typed.sml
+prim-types.sml
 typing.sml
 initialenv.sml
 printer.sml

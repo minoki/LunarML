@@ -109,6 +109,7 @@ sig
   val initialTyNameSet: TypedSyntax.TyNameSet.set
 end =
 struct
+  structure PT = PrimTypes
   val initialFixityEnv: Fixity.Env =
     let
       fun mkValConMap xs =
@@ -351,22 +352,7 @@ struct
     val tyC: TypedSyntax.PureTy = mkTyVar tyVarC
     val tyD: TypedSyntax.PureTy = mkTyVar tyVarD
     infixr -->
-    fun mkFnType (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
-    val op--> = mkFnType
-    fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
-    fun mkTyCon (a, b) = TypedSyntax.TyCon (SourcePos.nullSpan, a, b)
-    fun refOf t =
-      mkTyCon ([t], primTyName_ref)
-    fun listOf t =
-      mkTyCon ([t], primTyName_list)
-    fun arrayOf t =
-      mkTyCon ([t], primTyName_array)
-    fun vectorOf t =
-      mkTyCon ([t], primTyName_vector)
-    fun function2 (arg1Ty, arg2Ty, resultTy) =
-      mkTyCon ([arg1Ty, arg2Ty, resultTy], primTyName_function2)
-    fun function3 (arg1Ty, arg2Ty, arg3Ty, resultTy) =
-      mkTyCon ([arg1Ty, arg2Ty, arg3Ty, resultTy], primTyName_function3)
+    fun a --> b = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
   in
     val
       initialValEnv:
@@ -377,26 +363,26 @@ struct
         [ mkTopValConMap
             ( [( "ref"
                , VId_ref
-               , TypeScheme ([(tyVarA, NONE)], tyA --> refOf tyA)
+               , TypeScheme ([(tyVarA, NONE)], tyA --> PT.ref_ tyA)
                ) (* forall 'a. 'a -> 'a ref *)]
             , Syntax.REP_REF
             )
         , mkTopValConMap
-            ( [ ("true", VId_true, TypeScheme ([], primTy_bool))
-              , ("false", VId_false, TypeScheme ([], primTy_bool))
+            ( [ ("true", VId_true, TypeScheme ([], PT.bool))
+              , ("false", VId_false, TypeScheme ([], PT.bool))
               ]
             , Syntax.REP_BOOL
             )
         , mkTopValConMap
             ( [ ( "nil"
                 , VId_nil
-                , TypeScheme ([(tyVarA, NONE)], listOf tyA)
+                , TypeScheme ([(tyVarA, NONE)], PT.list tyA)
                 ) (* forall 'a. 'a list *)
               , ( "::"
                 , VId_DCOLON
                 , TypeScheme
                     ( [(tyVarA, NONE)]
-                    , mkPairType (tyA, listOf tyA) --> listOf tyA
+                    , PT.pair (tyA, PT.list tyA) --> PT.list tyA
                     )
                 ) (* forall 'a. 'a * 'a list -> 'a list *)
               ]
@@ -409,20 +395,20 @@ struct
                  , Syntax.MkVId name
                  , (tysc, Syntax.ExceptionConstructor, vid)
                  )) Syntax.VIdMap.empty
-            [ ("Match", VId_Match, TypeScheme ([], primTy_exn))
-            , ("Bind", VId_Bind, TypeScheme ([], primTy_exn))
-            , ("Div", VId_Div, TypeScheme ([], primTy_exn))
-            , ("Overflow", VId_Overflow, TypeScheme ([], primTy_exn))
-            , ("Size", VId_Size, TypeScheme ([], primTy_exn))
-            , ("Subscript", VId_Subscript, TypeScheme ([], primTy_exn))
-            , ("Fail", VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
+            [ ("Match", VId_Match, TypeScheme ([], PT.exn))
+            , ("Bind", VId_Bind, TypeScheme ([], PT.exn))
+            , ("Div", VId_Div, TypeScheme ([], PT.exn))
+            , ("Overflow", VId_Overflow, TypeScheme ([], PT.exn))
+            , ("Size", VId_Size, TypeScheme ([], PT.exn))
+            , ("Subscript", VId_Subscript, TypeScheme ([], PT.exn))
+            , ("Fail", VId_Fail, TypeScheme ([], PT.string --> PT.exn))
             , ( "_Prim.Lua.Error"
               , VId_Lua_Error
-              , TypeScheme ([], primTy_Lua_value --> primTy_exn)
+              , TypeScheme ([], PT.lua_value --> PT.exn)
               )
             , ( "_Prim.JavaScript.Error"
               , VId_JavaScript_Error
-              , TypeScheme ([], primTy_JavaScript_value --> primTy_exn)
+              , TypeScheme ([], PT.js_value --> PT.exn)
               )
             ]
         , List.foldl
@@ -430,315 +416,291 @@ struct
                Syntax.VIdMap.insert
                  (m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
             Syntax.VIdMap.empty
-            [ ("_Prim.Match.tag", VId_Match_tag, TypeScheme ([], primTy_exntag))
-            , ("_Prim.Bind.tag", VId_Bind_tag, TypeScheme ([], primTy_exntag))
-            , ("_Prim.Div.tag", VId_Div_tag, TypeScheme ([], primTy_exntag))
+            [ ("_Prim.Match.tag", VId_Match_tag, TypeScheme ([], PT.exntag))
+            , ("_Prim.Bind.tag", VId_Bind_tag, TypeScheme ([], PT.exntag))
+            , ("_Prim.Div.tag", VId_Div_tag, TypeScheme ([], PT.exntag))
             , ( "_Prim.Overflow.tag"
               , VId_Overflow_tag
-              , TypeScheme ([], primTy_exntag)
+              , TypeScheme ([], PT.exntag)
               )
-            , ("_Prim.Size.tag", VId_Size_tag, TypeScheme ([], primTy_exntag))
+            , ("_Prim.Size.tag", VId_Size_tag, TypeScheme ([], PT.exntag))
             , ( "_Prim.Subscript.tag"
               , VId_Subscript_tag
-              , TypeScheme ([], primTy_exntag)
+              , TypeScheme ([], PT.exntag)
               )
-            , ("_Prim.Fail.tag", VId_Fail_tag, TypeScheme ([], primTy_exntag))
+            , ("_Prim.Fail.tag", VId_Fail_tag, TypeScheme ([], PT.exntag))
             , ( "_Prim.isMatch"
               , VId_Match_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isBind"
               , VId_Bind_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isDiv"
               , VId_Div_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isOverflow"
               , VId_Overflow_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isSize"
               , VId_Size_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isSubscript"
               , VId_Subscript_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.isFail"
               , VId_Fail_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.Lua.isError"
               , VId_Lua_Error_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.JavaScript.isError"
               , VId_JavaScript_Error_predicate
-              , TypeScheme ([], primTy_exn --> primTy_bool)
+              , TypeScheme ([], PT.exn --> PT.bool)
               )
             , ( "_Prim.Fail.payload"
               , VId_Fail_payload
-              , TypeScheme ([], primTy_exn --> primTy_string)
+              , TypeScheme ([], PT.exn --> PT.string)
               )
             , ( "_Prim.Lua.Error.payload"
               , VId_Lua_Error_payload
-              , TypeScheme ([], primTy_exn --> primTy_Lua_value)
+              , TypeScheme ([], PT.exn --> PT.lua_value)
               )
             , ( "_Prim.JavaScript.Error.payload"
               , VId_JavaScript_Error_payload
-              , TypeScheme ([], primTy_exn --> primTy_JavaScript_value)
+              , TypeScheme ([], PT.exn --> PT.js_value)
               )
             , ( "_Prim.General.exnName"
               , VId_exnName
-              , TypeScheme ([], primTy_exn --> primTy_string)
+              , TypeScheme ([], PT.exn --> PT.string)
               )
             , ( "_Prim.Vector.fromList"
               , VId_Vector_fromList
-              , TypeScheme ([(tyVarA, NONE)], listOf tyA --> vectorOf tyA)
+              , TypeScheme ([(tyVarA, NONE)], PT.list tyA --> PT.vector tyA)
               )
-            , ( "_Prim.Int.~"
-              , VId_Int_TILDE
-              , TypeScheme ([], primTy_int --> primTy_int)
-              )
-            , ( "_Prim.Int.abs"
-              , VId_Int_abs
-              , TypeScheme ([], primTy_int --> primTy_int)
-              )
+            , ("_Prim.Int.~", VId_Int_TILDE, TypeScheme ([], PT.int --> PT.int))
+            , ("_Prim.Int.abs", VId_Int_abs, TypeScheme ([], PT.int --> PT.int))
             , ( "_Prim.Real.abs"
               , VId_Real_abs
-              , TypeScheme ([], primTy_real --> primTy_real)
+              , TypeScheme ([], PT.real --> PT.real)
               )
             , ( "_Prim.String.concat"
               , VId_String_concat
-              , TypeScheme ([], listOf primTy_string --> primTy_string)
+              , TypeScheme ([], PT.list PT.string --> PT.string)
               )
             , ( "_Prim.String.concatWith"
               , VId_String_concatWith
               , TypeScheme
-                  ( []
-                  , function2
-                      (primTy_string, listOf primTy_string, primTy_string)
-                  )
+                  ([], PT.function2 (PT.string, PT.list PT.string) PT.string)
               )
             , ( "_Prim.String.implode"
               , VId_String_implode
-              , TypeScheme ([], listOf primTy_char --> primTy_string)
+              , TypeScheme ([], PT.list PT.char --> PT.string)
               )
             , ( "_Prim.String.translate"
               , VId_String_translate
               , TypeScheme
                   ( []
-                  , function2
-                      ( primTy_char --> primTy_string
-                      , primTy_string
-                      , primTy_string
-                      )
+                  , PT.function2 (PT.char --> PT.string, PT.string) PT.string
                   )
               )
             , ( "_Prim.Vector.tabulate"
               , VId_Vector_tabulate
               , TypeScheme
                   ( [(tyVarA, NONE)]
-                  , mkPairType (primTy_int, primTy_int --> tyA) --> vectorOf tyA
+                  , PT.pair (PT.int, PT.int --> tyA) --> PT.vector tyA
                   )
               )
             , ( "_Prim.Vector.concat"
               , VId_Vector_concat
               , TypeScheme
-                  ([(tyVarA, NONE)], listOf (vectorOf tyA) --> vectorOf tyA)
+                  ([(tyVarA, NONE)], PT.list (PT.vector tyA) --> PT.vector tyA)
               )
             , ( "_Prim.Array.fromList"
               , VId_Array_fromList
-              , TypeScheme ([(tyVarA, NONE)], listOf tyA --> arrayOf tyA)
+              , TypeScheme ([(tyVarA, NONE)], PT.list tyA --> PT.array tyA)
               )
             , ( "_Prim.Array.tabulate"
               , VId_Array_tabulate
               , TypeScheme
                   ( [(tyVarA, NONE)]
-                  , mkPairType (primTy_int, primTy_int --> tyA) --> arrayOf tyA
+                  , PT.pair (PT.int, PT.int --> tyA) --> PT.array tyA
                   )
               )
-            , ("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], primTy_Lua_value))
+            , ("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], PT.lua_value))
             , ( "_Prim.Lua.function"
               , VId_Lua_function
               , TypeScheme
                   ( []
-                  , (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value)
-                    --> primTy_Lua_value
+                  , (PT.vector PT.lua_value --> PT.vector PT.lua_value)
+                    --> PT.lua_value
                   )
               )
             , ( "_Prim.Lua.Lib.assert"
               , VId_Lua_Lib_assert
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.error"
               , VId_Lua_Lib_error
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.getmetatable"
               , VId_Lua_Lib_getmetatable
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.pairs"
               , VId_Lua_Lib_pairs
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.pcall"
               , VId_Lua_Lib_pcall
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.setmetatable"
               , VId_Lua_Lib_setmetatable
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math"
               , VId_Lua_Lib_math
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.string"
               , VId_Lua_Lib_string
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.table"
               , VId_Lua_Lib_table
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math.abs"
               , VId_Lua_Lib_math_abs
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math.type'"
               , VId_Lua_Lib_math_type
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math.maxinteger"
               , VId_Lua_Lib_math_maxinteger
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math.mininteger"
               , VId_Lua_Lib_math_mininteger
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.math.ult"
               , VId_Lua_Lib_math_ult
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.string.char"
               , VId_Lua_Lib_string_char
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.string.format"
               , VId_Lua_Lib_string_format
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.table.concat"
               , VId_Lua_Lib_table_concat
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.table.pack"
               , VId_Lua_Lib_table_pack
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.table.unpack"
               , VId_Lua_Lib_table_unpack
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit"
               , VId_Lua_Lib_bit
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.bnot"
               , VId_Lua_Lib_bit_bnot
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.band"
               , VId_Lua_Lib_bit_band
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.bor"
               , VId_Lua_Lib_bit_bor
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.bxor"
               , VId_Lua_Lib_bit_bxor
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.lshift"
               , VId_Lua_Lib_bit_lshift
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.Lua.Lib.bit.rshift"
               , VId_Lua_Lib_bit_rshift
-              , TypeScheme ([], primTy_Lua_value)
+              , TypeScheme ([], PT.lua_value)
               )
             , ( "_Prim.JavaScript.undefined"
               , VId_JavaScript_undefined
-              , TypeScheme ([], primTy_JavaScript_value)
+              , TypeScheme ([], PT.js_value)
               )
             , ( "_Prim.JavaScript.null"
               , VId_JavaScript_null
-              , TypeScheme ([], primTy_JavaScript_value)
+              , TypeScheme ([], PT.js_value)
               )
             , ( "_Prim.JavaScript.function"
               , VId_JavaScript_function
               , TypeScheme
-                  ( []
-                  , (vectorOf primTy_JavaScript_value
-                     --> primTy_JavaScript_value) --> primTy_JavaScript_value
-                  )
+                  ([], (PT.vector PT.js_value --> PT.js_value) --> PT.js_value)
               )
             , ( "_Prim.JavaScript.encodeUtf8"
               , VId_JavaScript_encodeUtf8
-              , TypeScheme ([], primTy_string16 --> primTy_string)
+              , TypeScheme ([], PT.string16 --> PT.string)
               )
             , ( "_Prim.JavaScript.decodeUtf8"
               , VId_JavaScript_decodeUtf8
-              , TypeScheme ([], primTy_string --> primTy_string16)
+              , TypeScheme ([], PT.string --> PT.string16)
               )
             , ( "_Prim.JavaScript.wrapThenable"
               , VId_JavaScript_wrapThenable
-              , TypeScheme ([], primTy_JavaScript_value)
+              , TypeScheme ([], PT.js_value)
               )
             , ( "_Prim.JavaScript.unwrapThenable"
               , VId_JavaScript_unwrapThenable
-              , TypeScheme ([], primTy_JavaScript_value)
+              , TypeScheme ([], PT.js_value)
               )
             , ( "_Prim.DelimCont.pushPrompt"
               , VId_DelimCont_pushPrompt
-              , TypeScheme ([(tyVarA, NONE)], mkTyCon
-                  ( [ mkTyCon ([tyA], primTyName_prompt_tag)
-                    , primTy_unit --> tyA
-                    , tyA
-                    ]
-                  , primTyName_function2
-                  ))
+              , TypeScheme
+                  ( [(tyVarA, NONE)]
+                  , PT.function2 (PT.prompt_tag tyA, PT.unit --> tyA) tyA
+                  )
               )
             , ( "_Prim.DelimCont.withSubCont"
               , VId_DelimCont_withSubCont
-              , TypeScheme ([(tyVarA, NONE), (tyVarB, NONE)], mkTyCon
-                  ( [ mkTyCon ([tyB], primTyName_prompt_tag)
-                    , mkTyCon ([tyA, tyB], primTyName_subcont) --> tyB
-                    , tyA
-                    ]
-                  , primTyName_function2
-                  ))
+              , TypeScheme
+                  ( [(tyVarA, NONE), (tyVarB, NONE)]
+                  , PT.function2
+                      (PT.prompt_tag tyB, PT.subcont (tyA, tyB) --> tyB) tyA
+                  )
               )
             , ( "_Prim.DelimCont.pushSubCont"
               , VId_DelimCont_pushSubCont
-              , TypeScheme ([(tyVarA, NONE), (tyVarB, NONE)], mkTyCon
-                  ( [ mkTyCon ([tyA, tyB], primTyName_subcont)
-                    , primTy_unit --> tyA
-                    , tyB
-                    ]
-                  , primTyName_function2
-                  ))
+              , TypeScheme
+                  ( [(tyVarA, NONE), (tyVarB, NONE)]
+                  , PT.function2 (PT.subcont (tyA, tyB), PT.unit --> tyA) tyB
+                  )
               )
             , ( "_Prim.DelimCont.topLevel"
               , VId_DelimCont_topLevel
-              , TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt_tag))
+              , TypeScheme ([], PT.prompt_tag PT.unit)
               )
             ]
         ]
@@ -748,46 +710,38 @@ struct
            Syntax.TyConMap.insert (m, Syntax.MkTyCon name, tystr))
         Syntax.TyConMap.empty
         [ ( "bool"
-          , { typeFunction = TypeFunction ([], primTy_bool)
+          , { typeFunction = TypeFunction ([], PT.bool)
             , valEnv = mkValConMap
-                ( [ ("true", TypeScheme ([], primTy_bool))
-                  , ("false", TypeScheme ([], primTy_bool))
+                ( [ ("true", TypeScheme ([], PT.bool))
+                  , ("false", TypeScheme ([], PT.bool))
                   ]
                 , Syntax.REP_BOOL
                 )
             }
           )
         , ( "int"
-          , {typeFunction = TypeFunction ([], primTy_int), valEnv = emptyValEnv}
+          , {typeFunction = TypeFunction ([], PT.int), valEnv = emptyValEnv}
           )
         , ( "word"
-          , { typeFunction = TypeFunction ([], primTy_word)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.word), valEnv = emptyValEnv}
           )
         , ( "real"
-          , { typeFunction = TypeFunction ([], primTy_real)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.real), valEnv = emptyValEnv}
           )
         , ( "string"
-          , { typeFunction = TypeFunction ([], primTy_string)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.string), valEnv = emptyValEnv}
           )
         , ( "char"
-          , { typeFunction = TypeFunction ([], primTy_char)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.char), valEnv = emptyValEnv}
           )
         , ( "list"
-          , { typeFunction = TypeFunction ([tyVarA], listOf tyA)
+          , { typeFunction = TypeFunction ([tyVarA], PT.list tyA)
             , valEnv = mkValConMap
-                ( [ ("nil", TypeScheme ([(tyVarA, NONE)], listOf tyA))
+                ( [ ("nil", TypeScheme ([(tyVarA, NONE)], PT.list tyA))
                   , ( "::"
                     , TypeScheme
                         ( [(tyVarA, NONE)]
-                        , mkPairType (tyA, listOf tyA) --> listOf tyA
+                        , PT.pair (tyA, PT.list tyA) --> PT.list tyA
                         )
                     )
                   ]
@@ -796,223 +750,208 @@ struct
             }
           )
         , ( "ref"
-          , { typeFunction = TypeFunction ([tyVarA], refOf tyA)
+          , { typeFunction = TypeFunction ([tyVarA], PT.ref_ tyA)
             , valEnv = mkValConMap
-                ( [("ref", TypeScheme ([(tyVarA, NONE)], tyA --> refOf tyA))]
+                ( [("ref", TypeScheme ([(tyVarA, NONE)], tyA --> PT.ref_ tyA))]
                 , Syntax.REP_REF
                 )
             }
           )
         , ( "exn"
-          , {typeFunction = TypeFunction ([], primTy_exn), valEnv = emptyValEnv}
+          , {typeFunction = TypeFunction ([], PT.exn), valEnv = emptyValEnv}
           )
         , ( "array"
-          , { typeFunction = TypeFunction ([tyVarA], arrayOf tyA)
+          , { typeFunction = TypeFunction ([tyVarA], PT.array tyA)
             , valEnv = emptyValEnv
             }
           )
         , ( "vector"
-          , { typeFunction = TypeFunction ([tyVarA], vectorOf tyA)
+          , { typeFunction = TypeFunction ([tyVarA], PT.vector tyA)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.Char16.char"
-          , { typeFunction = TypeFunction ([], primTy_char16)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.char16), valEnv = emptyValEnv}
           )
         , ( "_Prim.String16.string"
-          , { typeFunction = TypeFunction ([], primTy_string16)
+          , { typeFunction = TypeFunction ([], PT.string16)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.Int32.int"
-          , { typeFunction = TypeFunction ([], primTy_int32)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.int32), valEnv = emptyValEnv}
           )
         , ( "_Prim.Int54.int"
-          , { typeFunction = TypeFunction ([], primTy_int54)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.int54), valEnv = emptyValEnv}
           )
         , ( "_Prim.Int64.int"
-          , { typeFunction = TypeFunction ([], primTy_int64)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.int64), valEnv = emptyValEnv}
           )
         , ( "_Prim.IntInf.int"
-          , { typeFunction = TypeFunction ([], primTy_intInf)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.intInf), valEnv = emptyValEnv}
           )
         , ( "_Prim.Word32.word"
-          , { typeFunction = TypeFunction ([], primTy_word32)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.word32), valEnv = emptyValEnv}
           )
         , ( "_Prim.Word64.word"
-          , { typeFunction = TypeFunction ([], primTy_word64)
-            , valEnv = emptyValEnv
-            }
+          , {typeFunction = TypeFunction ([], PT.word64), valEnv = emptyValEnv}
           )
         , ( "_Prim.Function2.function2"
           , { typeFunction = TypeFunction
-                ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
+                ([tyVarA, tyVarB, tyVarC], PT.function2 (tyA, tyB) tyC)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.Function3.function3"
           , { typeFunction = TypeFunction
                 ( [tyVarA, tyVarB, tyVarC, tyVarD]
-                , function3 (tyA, tyB, tyC, tyD)
+                , PT.function3 (tyA, tyB, tyC) tyD
                 )
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.Lua.value"
-          , { typeFunction = TypeFunction ([], primTy_Lua_value)
+          , { typeFunction = TypeFunction ([], PT.lua_value)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.JavaScript.value"
-          , { typeFunction = TypeFunction ([], primTy_JavaScript_value)
+          , { typeFunction = TypeFunction ([], PT.js_value)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.DelimCont.prompt_tag"
-          , { typeFunction = TypeFunction
-                ([tyVarA], mkTyCon ([tyA], primTyName_prompt_tag))
+          , { typeFunction = TypeFunction ([tyVarA], PT.prompt_tag tyA)
             , valEnv = emptyValEnv
             }
           )
         , ( "_Prim.DelimCont.subcont"
           , { typeFunction = TypeFunction
-                ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont))
+                ([tyVarA, tyVarB], PT.subcont (tyA, tyB))
             , valEnv = emptyValEnv
             }
           )
         ]
     val initialTyNameMap: Typing.TyNameAttr TypedSyntax.TyNameMap.map =
       List.foldl TypedSyntax.TyNameMap.insert' TypedSyntax.TyNameMap.empty
-        [ ( primTyName_bool
+        [ ( PT.Names.bool
           , {arity = 0, admitsEquality = false (* true *), overloadClass = NONE}
           )
-        , ( primTyName_int
+        , ( PT.Names.int
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
             }
           )
-        , ( primTyName_int32
+        , ( PT.Names.int32
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
             }
           )
-        , ( primTyName_int54
+        , ( PT.Names.int54
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
             }
           )
-        , ( primTyName_int64
+        , ( PT.Names.int64
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
             }
           )
-        , ( primTyName_intInf
+        , ( PT.Names.intInf
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_INT *)
             }
           )
-        , ( primTyName_word
+        , ( PT.Names.word
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
             }
           )
-        , ( primTyName_word32
+        , ( PT.Names.word32
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
             }
           )
-        , ( primTyName_word64
+        , ( PT.Names.word64
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_WORD *)
             }
           )
-        , ( primTyName_real
+        , ( PT.Names.real
           , { arity = 0
             , admitsEquality = false
             , overloadClass = NONE (* SOME Syntax.CLASS_REAL *)
             }
           )
-        , ( primTyName_char
+        , ( PT.Names.char
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
             }
           )
-        , ( primTyName_char16
+        , ( PT.Names.char16
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
             }
           )
-        , ( primTyName_string
+        , ( PT.Names.string
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
             }
           )
-        , ( primTyName_string16
+        , ( PT.Names.string16
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
             }
           )
-        , ( primTyName_list
+        , ( PT.Names.list
           , {arity = 1, admitsEquality = false (* true *), overloadClass = NONE}
           )
-        , ( primTyName_ref
+        , ( PT.Names.ref_
           , { arity = 1
             , admitsEquality = false (* must be handled specially *)
             , overloadClass = NONE
             }
           )
-        , ( primTyName_exn
+        , ( PT.Names.exn
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_array
+        , ( PT.Names.array
           , { arity = 1
             , admitsEquality = false (* must be handled specially *)
             , overloadClass = NONE
             }
           )
-        , ( primTyName_vector
+        , ( PT.Names.vector
           , {arity = 1, admitsEquality = false (* true *), overloadClass = NONE}
           )
-        , ( primTyName_Lua_value
+        , ( PT.Names.lua_value
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_JavaScript_value
+        , ( PT.Names.js_value
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_function2
+        , ( PT.Names.function2
           , {arity = 3, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_function3
+        , ( PT.Names.function3
           , {arity = 4, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_prompt_tag
+        , ( PT.Names.prompt_tag
           , {arity = 1, admitsEquality = false, overloadClass = NONE}
           )
-        , ( primTyName_subcont
+        , ( PT.Names.subcont
           , {arity = 2, admitsEquality = false, overloadClass = NONE}
           )
         ]
@@ -1042,7 +981,6 @@ struct
       val tyA = mkTyVar tyVarA
       infixr -->
       fun a --> b = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
-      fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
     in
       { valMap =
           List.foldl
@@ -1065,70 +1003,70 @@ struct
               , VId_div
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsIntegral)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
             , ( "mod"
               , VId_mod
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsIntegral)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
             , ( "*"
               , VId_TIMES
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsRing)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
             , ( "/"
               , VId_DIVIDE
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsReal)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
             , ( "+"
               , VId_PLUS
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsRing)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
             , ( "-"
               , VId_MINUS
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsRing)]
-                  , mkPairType (tyA, tyA) --> tyA
+                  , PT.pair (tyA, tyA) --> tyA
                   )
               ) (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
             , ( "<"
               , VId_LT
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsOrdered)]
-                  , mkPairType (tyA, tyA) --> primTy_bool
+                  , PT.pair (tyA, tyA) --> PT.bool
                   )
               ) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
             , ( ">"
               , VId_GT
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsOrdered)]
-                  , mkPairType (tyA, tyA) --> primTy_bool
+                  , PT.pair (tyA, tyA) --> PT.bool
                   )
               ) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
             , ( "<="
               , VId_LE
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsOrdered)]
-                  , mkPairType (tyA, tyA) --> primTy_bool
+                  , PT.pair (tyA, tyA) --> PT.bool
                   )
               ) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
             , ( ">="
               , VId_GE
               , TypeScheme
                   ( [(tyVarA, SOME TypedSyntax.IsOrdered)]
-                  , mkPairType (tyA, tyA) --> primTy_bool
+                  , PT.pair (tyA, tyA) --> PT.bool
                   )
               ) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
             ]
@@ -1146,31 +1084,31 @@ struct
       open Typing
     in
       TypedSyntax.TyNameSet.fromList
-        [ primTyName_int
-        , primTyName_int32
-        , primTyName_int54
-        , primTyName_int64
-        , primTyName_intInf
-        , primTyName_word
-        , primTyName_word32
-        , primTyName_word64
-        , primTyName_real
-        , primTyName_char
-        , primTyName_char16
-        , primTyName_string
-        , primTyName_string16
-        , primTyName_exn
-        , primTyName_bool
-        , primTyName_ref
-        , primTyName_list
-        , primTyName_array
-        , primTyName_vector
-        , primTyName_Lua_value
-        , primTyName_JavaScript_value
-        , primTyName_function2
-        , primTyName_function3
-        , primTyName_prompt_tag
-        , primTyName_subcont
+        [ PT.Names.int
+        , PT.Names.int32
+        , PT.Names.int54
+        , PT.Names.int64
+        , PT.Names.intInf
+        , PT.Names.word
+        , PT.Names.word32
+        , PT.Names.word64
+        , PT.Names.real
+        , PT.Names.char
+        , PT.Names.char16
+        , PT.Names.string
+        , PT.Names.string16
+        , PT.Names.exn
+        , PT.Names.bool
+        , PT.Names.ref_
+        , PT.Names.list
+        , PT.Names.array
+        , PT.Names.vector
+        , PT.Names.lua_value
+        , PT.Names.js_value
+        , PT.Names.function2
+        , PT.Names.function3
+        , PT.Names.prompt_tag
+        , PT.Names.subcont
         ]
     end
 end

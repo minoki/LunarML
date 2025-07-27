@@ -4,51 +4,6 @@
  *)
 structure Typing :>
 sig
-  val primTyName_int: TypedSyntax.TyName
-  val primTyName_word: TypedSyntax.TyName
-  val primTyName_real: TypedSyntax.TyName
-  val primTyName_string: TypedSyntax.TyName
-  val primTyName_char: TypedSyntax.TyName
-  val primTyName_exn: TypedSyntax.TyName
-  val primTyName_bool: TypedSyntax.TyName
-  val primTyName_ref: TypedSyntax.TyName
-  val primTyName_list: TypedSyntax.TyName
-  val primTyName_array: TypedSyntax.TyName
-  val primTyName_vector: TypedSyntax.TyName
-  val primTyName_exntag: TypedSyntax.TyName
-  val primTyName_function2: TypedSyntax.TyName
-  val primTyName_function3: TypedSyntax.TyName
-  val primTyName_char16: TypedSyntax.TyName
-  val primTyName_string16: TypedSyntax.TyName
-  val primTyName_intInf: TypedSyntax.TyName
-  val primTyName_Lua_value: TypedSyntax.TyName
-  val primTyName_JavaScript_value: TypedSyntax.TyName
-  val primTyName_prompt_tag: TypedSyntax.TyName
-  val primTyName_subcont: TypedSyntax.TyName
-  val primTyName_int32: TypedSyntax.TyName
-  val primTyName_int54: TypedSyntax.TyName
-  val primTyName_int64: TypedSyntax.TyName
-  val primTyName_word32: TypedSyntax.TyName
-  val primTyName_word64: TypedSyntax.TyName
-  val primTy_unit: 'l TypedSyntax.BaseTy
-  val primTy_int: 'l TypedSyntax.BaseTy
-  val primTy_word: 'l TypedSyntax.BaseTy
-  val primTy_real: 'l TypedSyntax.BaseTy
-  val primTy_string: 'l TypedSyntax.BaseTy
-  val primTy_char: 'l TypedSyntax.BaseTy
-  val primTy_exn: 'l TypedSyntax.BaseTy
-  val primTy_exntag: 'l TypedSyntax.BaseTy
-  val primTy_bool: 'l TypedSyntax.BaseTy
-  val primTy_char16: 'l TypedSyntax.BaseTy
-  val primTy_string16: 'l TypedSyntax.BaseTy
-  val primTy_intInf: 'l TypedSyntax.BaseTy
-  val primTy_Lua_value: 'l TypedSyntax.BaseTy
-  val primTy_JavaScript_value: 'l TypedSyntax.BaseTy
-  val primTy_int32: 'l TypedSyntax.BaseTy
-  val primTy_int54: 'l TypedSyntax.BaseTy
-  val primTy_int64: 'l TypedSyntax.BaseTy
-  val primTy_word32: 'l TypedSyntax.BaseTy
-  val primTy_word64: 'l TypedSyntax.BaseTy
   val VId_Bind: TypedSyntax.VId
   val VId_ref: TypedSyntax.VId
   val VId_DCOLON: TypedSyntax.VId
@@ -505,65 +460,6 @@ struct
         ellipsis andalso Vector.length pats = 0
     | isExhaustive (_, _, TypedSyntax.BogusPat _) = false
 
-  val primTyName_int = TypedSyntax.MkTyName ("int", 0)
-  val primTyName_word = TypedSyntax.MkTyName ("word", 1)
-  val primTyName_real = TypedSyntax.MkTyName ("real", 2)
-  val primTyName_string = TypedSyntax.MkTyName ("string", 3)
-  val primTyName_char = TypedSyntax.MkTyName ("char", 4)
-  val primTyName_exn = TypedSyntax.MkTyName ("exn", 5)
-  val primTyName_bool = TypedSyntax.MkTyName ("bool", 6)
-  val primTyName_ref = TypedSyntax.MkTyName ("ref", 7)
-  val primTyName_list = TypedSyntax.MkTyName ("list", 8)
-  val primTyName_array = TypedSyntax.MkTyName ("array", 9)
-  val primTyName_vector = TypedSyntax.MkTyName ("vector", 10)
-  val primTyName_exntag = TypedSyntax.MkTyName ("exntag", 11)
-  val primTyName_function2 = TypedSyntax.MkTyName ("function2", 12)
-  val primTyName_function3 = TypedSyntax.MkTyName ("function3", 13)
-  val primTyName_char16 = TypedSyntax.MkTyName ("Char16.char", 14)
-  val primTyName_string16 = TypedSyntax.MkTyName ("String16.string", 15)
-  val primTyName_intInf = TypedSyntax.MkTyName ("IntInf.int", 16)
-  val primTyName_Lua_value = TypedSyntax.MkTyName ("Lua.value", 17)
-  val primTyName_JavaScript_value =
-    TypedSyntax.MkTyName ("JavaScript.value", 18)
-  val primTyName_prompt_tag = TypedSyntax.MkTyName ("DelimCont.prompt_tag", 19)
-  val primTyName_subcont = TypedSyntax.MkTyName ("DelimCont.subcont", 20)
-  val primTyName_int32 = TypedSyntax.MkTyName ("Int32.int", 21)
-  val primTyName_int54 = TypedSyntax.MkTyName ("Int54.int", 22)
-  val primTyName_int64 = TypedSyntax.MkTyName ("Int64.int", 23)
-  val primTyName_word32 = TypedSyntax.MkTyName ("Word32.word", 24)
-  val primTyName_word64 = TypedSyntax.MkTyName ("Word64.word", 25)
-  val primTy_unit =
-    TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
-  val primTy_int = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int)
-  val primTy_word = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word)
-  val primTy_real = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_real)
-  val primTy_string =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_string)
-  val primTy_char = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_char)
-  val primTy_exn = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_exn)
-  val primTy_exntag =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_exntag)
-  val primTy_bool = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_bool)
-  val primTy_char16 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_char16)
-  val primTy_string16 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_string16)
-  val primTy_intInf =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_intInf)
-  val primTy_Lua_value =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_Lua_value)
-  val primTy_JavaScript_value =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_JavaScript_value)
-  val primTy_int32 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int32)
-  val primTy_int54 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int54)
-  val primTy_int64 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int64)
-  val primTy_word32 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word32)
-  val primTy_word64 =
-    TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word64)
   val VId_Bind = TypedSyntax.MkVId ("Bind", ~1)
 
   (* Index of user-defined identifiers start with 100 *)
@@ -572,8 +468,8 @@ struct
   val VId_unit_equal = TypedSyntax.MkVId ("unit_equal", 2)
 
   fun isRefOrArray (tyname: TypedSyntax.TyName) =
-    TypedSyntax.eqTyName (tyname, primTyName_ref)
-    orelse TypedSyntax.eqTyName (tyname, primTyName_array)
+    TypedSyntax.eqTyName (tyname, PrimTypes.Names.ref_)
+    orelse TypedSyntax.eqTyName (tyname, PrimTypes.Names.array)
 
   structure TypeOfPrimitives =
     TypeOfPrimitives
@@ -590,33 +486,33 @@ struct
        val tyC = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarC)
        val tyD = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarD)
        val tyEqA = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarEqA)
-       val unit = primTy_unit
-       val bool = primTy_bool
-       val int = primTy_int
-       val word = primTy_word
-       val real = primTy_real
-       val char = primTy_char
-       val char16 = primTy_char16
-       val string = primTy_string
-       val string16 = primTy_string16
-       val intInf = primTy_intInf
-       val int32 = primTy_int32
-       val int54 = primTy_int54
-       val int64 = primTy_int64
-       val word32 = primTy_word32
-       val word64 = primTy_word64
-       val exn = primTy_exn
-       val exntag = primTy_exntag
-       val LuaValue = primTy_Lua_value
-       val JavaScriptValue = primTy_JavaScript_value
+       val unit = PrimTypes.unit
+       val bool = PrimTypes.bool
+       val int = PrimTypes.int
+       val word = PrimTypes.word
+       val real = PrimTypes.real
+       val char = PrimTypes.char
+       val char16 = PrimTypes.char16
+       val string = PrimTypes.string
+       val string16 = PrimTypes.string16
+       val intInf = PrimTypes.intInf
+       val int32 = PrimTypes.int32
+       val int54 = PrimTypes.int54
+       val int64 = PrimTypes.int64
+       val word32 = PrimTypes.word32
+       val word64 = PrimTypes.word64
+       val exn = PrimTypes.exn
+       val exntag = PrimTypes.exntag
+       val LuaValue = PrimTypes.lua_value
+       val JavaScriptValue = PrimTypes.js_value
        fun refOf ty =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_ref)
+         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], PrimTypes.Names.ref_)
        fun listOf ty =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_list)
+         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], PrimTypes.Names.list)
        fun vectorOf ty =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_vector)
+         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], PrimTypes.Names.vector)
        fun arrayOf ty =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
+         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], PrimTypes.Names.array)
        fun pairOf (ty1, ty2) =
          TypedSyntax.PairType (SourcePos.nullSpan, ty1, ty2)
        fun tupleOf types = TypedSyntax.TupleType (SourcePos.nullSpan, types)
@@ -624,14 +520,15 @@ struct
          TypedSyntax.FnType (SourcePos.nullSpan, a, result)
        fun function2Of (a, b, result) =
          TypedSyntax.TyCon
-           (SourcePos.nullSpan, [a, b, result], primTyName_function2)
+           (SourcePos.nullSpan, [a, b, result], PrimTypes.Names.function2)
        fun function3Of (a, b, c, result) =
          TypedSyntax.TyCon
-           (SourcePos.nullSpan, [a, b, c, result], primTyName_function3)
+           (SourcePos.nullSpan, [a, b, c, result], PrimTypes.Names.function3)
        fun promptTagOf ty =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_prompt_tag)
+         TypedSyntax.TyCon
+           (SourcePos.nullSpan, [ty], PrimTypes.Names.prompt_tag)
        fun subcontOf (a, b) =
-         TypedSyntax.TyCon (SourcePos.nullSpan, [a, b], primTyName_subcont)
+         TypedSyntax.TyCon (SourcePos.nullSpan, [a, b], PrimTypes.Names.subcont)
        val Unconstrained = false
        val IsEqType = true) :
       sig
@@ -1522,15 +1419,15 @@ struct
               if isOrdered then () (* do nothing *) else mismatch ()
             end
         | (T.TyCon (span2, _, tyname), T.IsInt) =>
-            if TypedSyntax.eqTyName (tyname, primTyName_int) then
+            if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_intInf) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.intInf) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_int32) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int32) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_int54) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int54) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_int64) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int64) then
               () (* do nothing *)
             else
               let
@@ -1543,11 +1440,11 @@ struct
                   mismatch ()
               end
         | (T.TyCon (span2, _, tyname), T.IsWord) =>
-            if TypedSyntax.eqTyName (tyname, primTyName_word) then
+            if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_word32) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word32) then
               () (* do nothing *)
-            else if TypedSyntax.eqTyName (tyname, primTyName_word64) then
+            else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word64) then
               () (* do nothing *)
             else
               let
@@ -1560,7 +1457,7 @@ struct
                   mismatch ()
               end
         | (T.TyCon (span2, _, tyname), T.IsReal) =>
-            if TypedSyntax.eqTyName (tyname, primTyName_real) then
+            if TypedSyntax.eqTyName (tyname, PrimTypes.Names.real) then
               () (* do nothing *)
             else
               let
@@ -1573,7 +1470,7 @@ struct
                   mismatch ()
               end
         | (T.TyCon (span2, _, tyname), T.IsChar) =>
-            if TypedSyntax.eqTyName (tyname, primTyName_char) then
+            if TypedSyntax.eqTyName (tyname, PrimTypes.Names.char) then
               () (* do nothing *)
             else
               let
@@ -1586,7 +1483,7 @@ struct
                   mismatch ()
               end
         | (T.TyCon (span2, _, tyname), T.IsString) =>
-            if TypedSyntax.eqTyName (tyname, primTyName_string) then
+            if TypedSyntax.eqTyName (tyname, PrimTypes.Names.string) then
               () (* do nothing *)
             else
               let
@@ -1971,7 +1868,10 @@ struct
             val payloadTy = TypedSyntax.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
             val ty = T.FnType
-              (span, payloadTy, T.TyCon (span, [payloadTy], primTyName_ref))
+              ( span
+              , payloadTy
+              , T.TyCon (span, [payloadTy], PrimTypes.Names.ref_)
+              )
           in
             ( ty
             , S.VIdMap.insertWith
@@ -1988,7 +1888,7 @@ struct
           let
             val elemTy = TypedSyntax.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
-            val listTy = T.TyCon (span, [elemTy], primTyName_list)
+            val listTy = T.TyCon (span, [elemTy], PrimTypes.Names.list)
             val ty = T.FnType (span, T.PairType (span, elemTy, listTy), listTy)
           in
             ( ty
@@ -2007,8 +1907,8 @@ struct
             val ty =
               T.TyCon
                 ( span
-                , [primTy_unit, primTy_unit, primTy_bool]
-                , primTyName_function2
+                , [PrimTypes.unit, PrimTypes.unit, PrimTypes.bool]
+                , PrimTypes.Names.function2
                 )
           in
             ( ty
@@ -2269,7 +2169,7 @@ struct
                          )) elemTy0 xs
             val pats = Vector.map #3 results
           in
-            ( T.TyCon (span, [elemTy], primTyName_vector)
+            ( T.TyCon (span, [elemTy], PrimTypes.Names.vector)
             , vars
             , T.VectorPat (span, pats, ellipsis, elemTy)
             )
@@ -2529,7 +2429,7 @@ struct
           ) =
           (case forceTy expectedTy of
              T.TyCon (_, [elemTy], con) =>
-               if T.eqTyName (con, primTyName_vector) then
+               if T.eqTyName (con, PrimTypes.Names.vector) then
                  let
                    val (revPats, vars) =
                      Vector.foldl
@@ -2789,7 +2689,7 @@ struct
                   in T.AnonymousTyVar (span, tv)
                   end
               | Syntax.RealConstant _ =>
-                  primTy_real (* TODO: overloaded literals *)
+                  PrimTypes.real (* TODO: overloaded literals *)
               | Syntax.CharacterConstant _ =>
                   let val tv = freshTyVar (ctx, span, false, SOME T.Char)
                   in T.AnonymousTyVar (span, tv)
@@ -2975,13 +2875,13 @@ struct
           let
             val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
             val matches = checkTypeOfMatch
-              (ctx, env, matches, primTy_exn, expTy)
+              (ctx, env, matches, PrimTypes.exn, expTy)
           in
             (expTy, T.HandleExp (span, exp, matches, expTy))
           end
       | synthTypeOfExp (ctx, env, S.RaiseExp (span, exp)) =
           let
-            val exp = checkTypeOfExp (ctx, env, exp, primTy_exn)
+            val exp = checkTypeOfExp (ctx, env, exp, PrimTypes.exn)
             val resultTy = T.AnonymousTyVar
               (span, freshTyVar (ctx, span, false, NONE))
           in
@@ -2991,7 +2891,7 @@ struct
           (ctx, env, S.IfThenElseExp (span, cond, thenPart, elsePart)) =
           let
             val elseSpan = S.getSourceSpanOfExp elsePart
-            val cond = checkTypeOfExp (ctx, env, cond, primTy_bool)
+            val cond = checkTypeOfExp (ctx, env, cond, PrimTypes.bool)
             val (thenTy, thenPart) = synthTypeOfExp (ctx, env, thenPart)
             val (elseTy, elsePart) = synthTypeOfExp (ctx, env, elsePart)
             val resultTy = commonType
@@ -3087,7 +2987,7 @@ struct
                          )) elemTy0 rest
             val xs' = Vector.map (#2 o #2) ys
           in
-            ( T.TyCon (span, [elemTy], primTyName_list)
+            ( T.TyCon (span, [elemTy], PrimTypes.Names.list)
             , T.ListExp (span, xs', elemTy)
             )
           end
@@ -3117,7 +3017,7 @@ struct
                          )) elemTy0 rest
             val xs' = Vector.map (#2 o #2) ys
           in
-            ( T.TyCon (span, [elemTy], primTyName_vector)
+            ( T.TyCon (span, [elemTy], PrimTypes.Names.vector)
             , T.VectorExp (span, xs', elemTy)
             )
           end
@@ -3187,7 +3087,7 @@ struct
                        ::
                        T.ValDescDec
                          { sourceSpan = span
-                         , expected = T.TypeScheme ([], primTy_unit)
+                         , expected = T.TypeScheme ([], PrimTypes.unit)
                          , actual = T.TypeScheme ([], ty)
                          , origin = T.VALDESC_SEQUENCE
                          } :: decs
@@ -3222,7 +3122,7 @@ struct
                   ( ctx
                   , env
                   , span
-                  , primTy_real
+                  , PrimTypes.real
                   , expectedTy
                   ) (* TODO: overloaded literals *)
             | Syntax.CharacterConstant _ =>
@@ -3356,12 +3256,12 @@ struct
           let
             val exp = checkTypeOfExp (ctx, env, exp, expectedTy)
             val matches = checkTypeOfMatch
-              (ctx, env, matches, primTy_exn, expectedTy)
+              (ctx, env, matches, PrimTypes.exn, expectedTy)
           in
             T.HandleExp (span, exp, matches, expectedTy)
           end
       | checkTypeOfExp (ctx, env, S.RaiseExp (span, exp), expectedTy) =
-          let val exp = checkTypeOfExp (ctx, env, exp, primTy_exn)
+          let val exp = checkTypeOfExp (ctx, env, exp, PrimTypes.exn)
           in T.RaiseExp (span, expectedTy, exp)
           end
       | checkTypeOfExp
@@ -3371,7 +3271,7 @@ struct
           , expectedTy
           ) =
           let
-            val cond = checkTypeOfExp (ctx, env, cond, primTy_bool)
+            val cond = checkTypeOfExp (ctx, env, cond, PrimTypes.bool)
             val thenPart = checkTypeOfExp (ctx, env, thenPart, expectedTy)
             val elsePart = checkTypeOfExp (ctx, env, elsePart, expectedTy)
           in
@@ -3469,7 +3369,7 @@ struct
       | checkTypeOfExp (ctx, env, exp as S.ListExp (span, xs), expectedTy) =
           (case forceTy expectedTy of
              T.TyCon (_, [elemTy], con) =>
-               if T.eqTyName (con, primTyName_list) then
+               if T.eqTyName (con, PrimTypes.Names.list) then
                  let
                    val xs =
                      Vector.map
@@ -3496,7 +3396,7 @@ struct
       | checkTypeOfExp (ctx, env, exp as S.VectorExp (span, xs), expectedTy) =
           (case forceTy expectedTy of
              T.TyCon (_, [elemTy], con) =>
-               if T.eqTyName (con, primTyName_vector) then
+               if T.eqTyName (con, PrimTypes.Names.vector) then
                  let
                    val xs =
                      Vector.map
@@ -3539,7 +3439,7 @@ struct
                        ::
                        T.ValDescDec
                          { sourceSpan = span
-                         , expected = T.TypeScheme ([], primTy_unit)
+                         , expected = T.TypeScheme ([], PrimTypes.unit)
                          , actual = T.TypeScheme ([], ty)
                          , origin = T.VALDESC_SEQUENCE
                          } :: decs
@@ -4654,9 +4554,10 @@ struct
                       , ( T.TypeScheme
                             ( []
                             , case optTy of
-                                NONE => primTy_exn
+                                NONE => PrimTypes.exn
                               | SOME ty =>
-                                  T.FnType (span, T.thawPureTy ty, primTy_exn)
+                                  T.FnType
+                                    (span, T.thawPureTy ty, PrimTypes.exn)
                             )
                         , Syntax.ExceptionConstructor
                         , T.MkShortVId vid'
@@ -4893,42 +4794,42 @@ struct
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption (ctx, env, span, ty', T.FnType
-                    (span, T.PairType (span, ty, ty), primTy_bool))
+                    (span, T.PairType (span, ty, ty), PrimTypes.bool))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_LE) of
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption (ctx, env, span, ty', T.FnType
-                    (span, T.PairType (span, ty, ty), primTy_bool))
+                    (span, T.PairType (span, ty, ty), PrimTypes.bool))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_GT) of
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption (ctx, env, span, ty', T.FnType
-                    (span, T.PairType (span, ty, ty), primTy_bool))
+                    (span, T.PairType (span, ty, ty), PrimTypes.bool))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_GE) of
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption (ctx, env, span, ty', T.FnType
-                    (span, T.PairType (span, ty, ty), primTy_bool))
+                    (span, T.PairType (span, ty, ty), PrimTypes.bool))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_fromInt) of
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption
-                    (ctx, env, span, ty', T.FnType (span, primTy_int, ty))
+                    (ctx, env, span, ty', T.FnType (span, PrimTypes.int, ty))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_fromWord) of
                 NONE => ()
               | SOME (ty', _) =>
                   checkSubsumption
-                    (ctx, env, span, ty', T.FnType (span, primTy_word, ty))
+                    (ctx, env, span, ty', T.FnType (span, PrimTypes.word, ty))
             val () =
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_minInt) of
                 NONE => ()
               | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) =>
-                  checkSubsumption (ctx, env, span, ty', primTy_intInf)
+                  checkSubsumption (ctx, env, span, ty', PrimTypes.intInf)
               | SOME (_, _) =>
                   emitTypeError
                     (ctx, [span], "overload: minInt must be literal")
@@ -4936,7 +4837,7 @@ struct
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxInt) of
                 NONE => ()
               | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) =>
-                  checkSubsumption (ctx, env, span, ty', primTy_intInf)
+                  checkSubsumption (ctx, env, span, ty', PrimTypes.intInf)
               | SOME (_, _) =>
                   emitTypeError
                     (ctx, [span], "overload: maxInt must be literal")
@@ -4944,7 +4845,7 @@ struct
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_wordSize) of
                 NONE => ()
               | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) =>
-                  checkSubsumption (ctx, env, span, ty', primTy_int)
+                  checkSubsumption (ctx, env, span, ty', PrimTypes.int)
               | SOME (_, _) =>
                   emitTypeError
                     (ctx, [span], "overload: wordSize must be literal")
@@ -4952,7 +4853,7 @@ struct
               case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxOrd) of
                 NONE => ()
               | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) =>
-                  checkSubsumption (ctx, env, span, ty', primTy_intInf)
+                  checkSubsumption (ctx, env, span, ty', PrimTypes.intInf)
               | SOME (_, _) =>
                   emitTypeError
                     (ctx, [span], "overload: maxOrd must be literal")
@@ -5053,7 +4954,7 @@ struct
                     typarams'
               }
             val exp = checkTypeOfExp (ctx, innerEnv, exp, T.FnType
-              (span, T.PairType (span, ty, ty), primTy_bool)) (* allow recursion *)
+              (span, T.PairType (span, ty, ty), PrimTypes.bool)) (* allow recursion *)
           in
             (env', [T.EqualityDec (span, List.map #2 typarams', tyname, exp)])
           end
@@ -5063,11 +4964,7 @@ struct
             val specs' =
               List.map
                 (fn (name, vid, NONE) =>
-                   ( name
-                   , vid
-                   , newVId (#context ctx, vid)
-                   , primTy_JavaScript_value
-                   )
+                   (name, vid, newVId (#context ctx, vid), PrimTypes.js_value)
                   | (name, vid, SOME ty) =>
                    ( name
                    , vid
@@ -5279,7 +5176,7 @@ struct
                  | TypedSyntax.IsString =>
                      emitError
                        (ctx, [span1, span2], "type mismatch: int vs string")) xs
-          ; primTy_int
+          ; PrimTypes.int
           )
         fun doWord (span1, xs) =
           ( List.app
@@ -5308,7 +5205,7 @@ struct
                      emitError
                        (ctx, [span1, span2], "type mismatch: word vs string"))
               xs
-          ; primTy_word
+          ; PrimTypes.word
           )
         fun doReal (span1, xs) =
           ( List.app
@@ -5340,7 +5237,7 @@ struct
                      emitError
                        (ctx, [span1, span2], "type mismatch: real vs string"))
               xs
-          ; primTy_real
+          ; PrimTypes.real
           )
         fun doChar (span1, xs) =
           ( List.app
@@ -5374,7 +5271,7 @@ struct
                      emitError
                        (ctx, [span1, span2], "type mismatch: char vs string"))
               xs
-          ; primTy_char
+          ; PrimTypes.char
           )
         fun doString (span1, xs) =
           ( List.app
@@ -5407,9 +5304,9 @@ struct
                      emitError
                        (ctx, [span1, span2], "type mismatch: string vs char")
                  | TypedSyntax.IsString => ()) xs
-          ; primTy_string
+          ; PrimTypes.string
           )
-        fun doIntOrReal (_, []) = primTy_int
+        fun doIntOrReal (_, []) = PrimTypes.int
           | doIntOrReal (span1, (span2, c) :: xs) =
               case c of
                 TypedSyntax.IsRecord _ =>
@@ -5427,7 +5324,7 @@ struct
               | TypedSyntax.IsChar => doIntOrReal (span1, xs) (* cannot occur *)
               | TypedSyntax.IsString =>
                   doIntOrReal (span1, xs) (* cannot occur *)
-        fun defaultTyForConstraints (_, _, []) = primTy_unit
+        fun defaultTyForConstraints (_, _, []) = PrimTypes.unit
           | defaultTyForConstraints (eq, spans, (span1, c) :: xs) =
               case c of
                 TypedSyntax.IsRecord _ =>
@@ -5463,20 +5360,20 @@ struct
               let
                 val ty =
                   case class of
-                    SOME T.Int => primTy_int
-                  | SOME T.Word => primTy_word
-                  | SOME T.Real => primTy_real
-                  | SOME T.Char => primTy_char
-                  | SOME T.String => primTy_string
-                  | SOME T.NumTxt => primTy_int
-                  | SOME T.IntWordReal => primTy_int
-                  | SOME T.IntWord => primTy_int
-                  | SOME T.IntReal => primTy_int
+                    SOME T.Int => PrimTypes.int
+                  | SOME T.Word => PrimTypes.word
+                  | SOME T.Real => PrimTypes.real
+                  | SOME T.Char => PrimTypes.char
+                  | SOME T.String => PrimTypes.string
+                  | SOME T.NumTxt => PrimTypes.int
+                  | SOME T.IntWordReal => PrimTypes.int
+                  | SOME T.IntWord => PrimTypes.int
+                  | SOME T.IntReal => PrimTypes.int
                   | SOME (T.Record _) =>
                       ( emitError (ctx, [sourceSpan], "unresolved flex record")
-                      ; primTy_unit
+                      ; PrimTypes.unit
                       )
-                  | NONE => primTy_unit
+                  | NONE => PrimTypes.unit
               in
                 tv := T.Link ty
               end
@@ -6886,10 +6783,13 @@ struct
                        let
                          val ty =
                            case optTy of
-                             NONE => primTy_exn
+                             NONE => PrimTypes.exn
                            | SOME ty =>
                                T.FnType
-                                 (span, evalPureTy (ctx, env, ty), primTy_exn)
+                                 ( span
+                                 , evalPureTy (ctx, env, ty)
+                                 , PrimTypes.exn
+                                 )
                        in
                          Syntax.VIdMap.insert
                            ( valMap

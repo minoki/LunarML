@@ -224,32 +224,32 @@ struct
          val tyD = F.TyVar tyVarD
          val tyEqA = F.TyVar tyVarEqA
          val unit = F.RecordType Syntax.LabelMap.empty
-         val bool = F.TyVar Typing.primTyName_bool
-         val int = F.TyVar Typing.primTyName_int
-         val word = F.TyVar Typing.primTyName_word
-         val real = F.TyVar Typing.primTyName_real
-         val char = F.TyVar Typing.primTyName_char
-         val char16 = F.TyVar Typing.primTyName_char16
-         val string = F.TyVar Typing.primTyName_string
-         val string16 = F.TyVar Typing.primTyName_string16
-         val intInf = F.TyVar Typing.primTyName_intInf
-         val int32 = F.TyVar Typing.primTyName_int32
-         val int54 = F.TyVar Typing.primTyName_int54
-         val int64 = F.TyVar Typing.primTyName_int64
-         val word32 = F.TyVar Typing.primTyName_word32
-         val word64 = F.TyVar Typing.primTyName_word64
-         val exn = F.TyVar Typing.primTyName_exn
-         val exntag = F.TyVar Typing.primTyName_exntag
-         val LuaValue = F.TyVar Typing.primTyName_Lua_value
-         val JavaScriptValue = F.TyVar Typing.primTyName_JavaScript_value
+         val bool = F.TyVar PrimTypes.Names.bool
+         val int = F.TyVar PrimTypes.Names.int
+         val word = F.TyVar PrimTypes.Names.word
+         val real = F.TyVar PrimTypes.Names.real
+         val char = F.TyVar PrimTypes.Names.char
+         val char16 = F.TyVar PrimTypes.Names.char16
+         val string = F.TyVar PrimTypes.Names.string
+         val string16 = F.TyVar PrimTypes.Names.string16
+         val intInf = F.TyVar PrimTypes.Names.intInf
+         val int32 = F.TyVar PrimTypes.Names.int32
+         val int54 = F.TyVar PrimTypes.Names.int54
+         val int64 = F.TyVar PrimTypes.Names.int64
+         val word32 = F.TyVar PrimTypes.Names.word32
+         val word64 = F.TyVar PrimTypes.Names.word64
+         val exn = F.TyVar PrimTypes.Names.exn
+         val exntag = F.TyVar PrimTypes.Names.exntag
+         val LuaValue = F.TyVar PrimTypes.Names.lua_value
+         val JavaScriptValue = F.TyVar PrimTypes.Names.js_value
          fun refOf ty =
-           F.AppType {applied = F.TyVar Typing.primTyName_ref, arg = ty}
+           F.AppType {applied = F.TyVar PrimTypes.Names.ref_, arg = ty}
          fun listOf ty =
-           F.AppType {applied = F.TyVar Typing.primTyName_list, arg = ty}
+           F.AppType {applied = F.TyVar PrimTypes.Names.list, arg = ty}
          fun vectorOf ty =
-           F.AppType {applied = F.TyVar Typing.primTyName_vector, arg = ty}
+           F.AppType {applied = F.TyVar PrimTypes.Names.vector, arg = ty}
          fun arrayOf ty =
-           F.AppType {applied = F.TyVar Typing.primTyName_array, arg = ty}
+           F.AppType {applied = F.TyVar PrimTypes.Names.array, arg = ty}
          val pairOf = F.PairType
          val tupleOf = F.TupleType
          fun function1Of (a, result) = F.FnType (a, result)
@@ -258,12 +258,11 @@ struct
          fun function3Of (a, b, c, result) =
            F.MultiFnType ([a, b, c], result)
          fun promptTagOf ty =
-           F.AppType {applied = F.TyVar Typing.primTyName_prompt_tag, arg = ty}
+           F.AppType {applied = F.TyVar PrimTypes.Names.prompt_tag, arg = ty}
          fun subcontOf (a, b) =
            F.AppType
              { applied =
-                 F.AppType
-                   {applied = F.TyVar Typing.primTyName_subcont, arg = a}
+                 F.AppType {applied = F.TyVar PrimTypes.Names.subcont, arg = a}
              , arg = b
              }
          val Unconstrained = ()
@@ -363,23 +362,13 @@ struct
       | checkPat
           (env, expectedTy, F.ExnConPat {sourceSpan = _, predicate, payload}) =
           ( checkSame (#aliasEnv env, fn () => "ExnConPat", expectedTy)
-              (F.TyVar Typing.primTyName_exn)
-          ; checkExp
-              ( env
-              , F.FnType
-                  ( F.TyVar Typing.primTyName_exn
-                  , F.TyVar Typing.primTyName_bool
-                  )
-              , predicate
-              )
+              (F.Types.exn)
+          ; checkExp (env, F.FnType (F.Types.exn, F.Types.bool), predicate)
           (* TODO: check if the constructor has a payload *)
           ; case payload of
               SOME (payloadTy, getPayloadExp, payloadPat) =>
                 ( checkExp
-                    ( env
-                    , F.FnType (F.TyVar Typing.primTyName_exn, payloadTy)
-                    , getPayloadExp
-                    )
+                    (env, F.FnType (F.Types.exn, payloadTy), getPayloadExp)
                 ; checkPat (env, payloadTy, payloadPat)
                 )
             | NONE => emptyValEnv
@@ -396,9 +385,9 @@ struct
       | checkPat (env, expectedTy, F.VectorPat (_, pats, _, elemTy)) =
           let
             val elemTy = normalizeType (#aliasEnv env) elemTy
-            val () = checkSame (#aliasEnv env, fn () => "VectorPat", expectedTy)
-              (F.AppType
-                 {applied = F.TyVar Typing.primTyName_vector, arg = elemTy})
+            val () =
+              checkSame (#aliasEnv env, fn () => "VectorPat", expectedTy)
+                (F.Types.vector elemTy)
           in
             Vector.foldl
               (fn (pat, newEnv) =>
@@ -448,25 +437,25 @@ struct
       | inferExp (_, F.PrimExp (F.String8ConstOp _, [ty], [])) = ty
       | inferExp (_, F.PrimExp (F.String16ConstOp _, [ty], [])) = ty
       | inferExp (env, F.PrimExp (F.RaiseOp _, [ty], [e])) =
-          (checkExp (env, F.TyVar Typing.primTyName_exn, e); ty)
+          (checkExp (env, F.Types.exn, e); ty)
       | inferExp (env, F.PrimExp (F.ListOp, [elemTy], elements)) =
           ( List.app (fn elem => checkExp (env, elemTy, elem)) elements
-          ; F.AppType {applied = F.TyVar Typing.primTyName_list, arg = elemTy}
+          ; F.Types.list elemTy
           )
       | inferExp (env, F.PrimExp (F.VectorOp, [elemTy], elements)) =
           ( List.app (fn elem => checkExp (env, elemTy, elem)) elements
-          ; F.AppType {applied = F.TyVar Typing.primTyName_vector, arg = elemTy}
+          ; F.Types.vector elemTy
           )
       | inferExp
           ( env
           , F.PrimExp (F.DataTagAsStringOp _, [dataTy], [data])
           ) (* TODO: Check constructor info *) =
-          (checkExp (env, dataTy, data); F.TyVar Typing.primTyName_string)
+          (checkExp (env, dataTy, data); F.Types.string)
       | inferExp
           ( env
           , F.PrimExp (F.DataTagAsString16Op _, [dataTy], [data])
           ) (* TODO: Check constructor info *) =
-          (checkExp (env, dataTy, data); F.TyVar Typing.primTyName_string16)
+          (checkExp (env, dataTy, data); F.Types.string16)
       | inferExp
           ( env
           , F.PrimExp (F.DataPayloadOp _, [dataTy, payloadTy], [data])
@@ -476,7 +465,7 @@ struct
           ( env
           , F.PrimExp (F.ExnPayloadOp, [payloadTy], [data])
           ) (* TODO: Check constructor info *) =
-          (checkExp (env, F.TyVar Typing.primTyName_exn, data); payloadTy)
+          (checkExp (env, F.Types.exn, data); payloadTy)
       | inferExp
           ( env
           , F.PrimExp (F.ConstructValOp _, [dataTy], [])
@@ -488,62 +477,44 @@ struct
           ) =
           (checkExp (env, payloadTy, payload); dataTy)
       | inferExp (env, F.PrimExp (F.ConstructExnOp, [], [tag])) =
-          ( checkExp (env, F.TyVar Typing.primTyName_exntag, tag)
-          ; F.TyVar Typing.primTyName_exn
-          )
+          (checkExp (env, F.Types.exntag, tag); F.Types.exn)
       | inferExp
           ( env
           , F.PrimExp (F.ConstructExnWithPayloadOp, [payloadTy], [tag, payload])
           ) =
-          ( checkExp (env, F.TyVar Typing.primTyName_exntag, tag)
+          ( checkExp (env, F.Types.exntag, tag)
           ; checkExp (env, payloadTy, payload)
-          ; F.TyVar Typing.primTyName_exn
+          ; F.Types.exn
           )
       | inferExp (env, F.PrimExp (F.JsCallOp, [], f :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, f)
-          ; List.app
-              (fn a =>
-                 checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, a))
-              args
-          ; F.TyVar Typing.primTyName_JavaScript_value
+          ( checkExp (env, F.Types.js_value, f)
+          ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
+          ; F.Types.js_value
           )
       | inferExp (env, F.PrimExp (F.JsMethodOp, [], f :: name :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, f)
-          ; checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, name)
-          ; List.app
-              (fn a =>
-                 checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, a))
-              args
-          ; F.TyVar Typing.primTyName_JavaScript_value
+          ( checkExp (env, F.Types.js_value, f)
+          ; checkExp (env, F.Types.js_value, name)
+          ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
+          ; F.Types.js_value
           )
       | inferExp (env, F.PrimExp (F.JsNewOp, [], f :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, f)
-          ; List.app
-              (fn a =>
-                 checkExp (env, F.TyVar Typing.primTyName_JavaScript_value, a))
-              args
-          ; F.TyVar Typing.primTyName_JavaScript_value
+          ( checkExp (env, F.Types.js_value, f)
+          ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
+          ; F.Types.js_value
           )
       | inferExp (env, F.PrimExp (F.LuaCallOp, [], f :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_Lua_value, f)
-          ; List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args
-          ; F.AppType
-              { applied = F.TyVar Typing.primTyName_vector
-              , arg = F.TyVar Typing.primTyName_Lua_value
-              }
+          ( checkExp (env, F.Types.lua_value, f)
+          ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
+          ; F.Types.vector F.Types.lua_value
           )
       | inferExp (env, F.PrimExp (F.LuaCall1Op, [], f :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_Lua_value, f)
-          ; List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args
-          ; F.TyVar Typing.primTyName_Lua_value
+          ( checkExp (env, F.Types.lua_value, f)
+          ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
+          ; F.Types.lua_value
           )
       | inferExp (env, F.PrimExp (F.LuaCallNOp n, [], f :: args)) =
           let
-            val valueTy = F.TyVar Typing.primTyName_Lua_value
+            val valueTy = F.Types.lua_value
             fun loop (0, acc) = F.RecordType acc
               | loop (i, acc) =
                   loop
@@ -552,32 +523,23 @@ struct
                         (acc, Syntax.NumericLabel i, valueTy)
                     )
           in
-            checkExp (env, F.TyVar Typing.primTyName_Lua_value, f);
-            List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args;
+            checkExp (env, F.Types.lua_value, f);
+            List.app (fn a => checkExp (env, F.Types.lua_value, a)) args;
             loop (n, Syntax.LabelMap.empty)
           end
       | inferExp (env, F.PrimExp (F.LuaMethodOp _, [], obj :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_Lua_value, obj)
-          ; List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args
-          ; F.AppType
-              { applied = F.TyVar Typing.primTyName_vector
-              , arg = F.TyVar Typing.primTyName_Lua_value
-              }
+          ( checkExp (env, F.Types.lua_value, obj)
+          ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
+          ; F.Types.vector F.Types.lua_value
           )
       | inferExp (env, F.PrimExp (F.LuaMethod1Op _, [], obj :: args)) =
-          ( checkExp (env, F.TyVar Typing.primTyName_Lua_value, obj)
-          ; List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args
-          ; F.TyVar Typing.primTyName_Lua_value
+          ( checkExp (env, F.Types.lua_value, obj)
+          ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
+          ; F.Types.lua_value
           )
       | inferExp (env, F.PrimExp (F.LuaMethodNOp (_, n), [], obj :: args)) =
           let
-            val valueTy = F.TyVar Typing.primTyName_Lua_value
+            val valueTy = F.Types.lua_value
             fun loop (0, acc) = F.RecordType acc
               | loop (i, acc) =
                   loop
@@ -586,10 +548,8 @@ struct
                         (acc, Syntax.NumericLabel i, valueTy)
                     )
           in
-            checkExp (env, F.TyVar Typing.primTyName_Lua_value, obj);
-            List.app
-              (fn a => checkExp (env, F.TyVar Typing.primTyName_Lua_value, a))
-              args;
+            checkExp (env, F.Types.lua_value, obj);
+            List.app (fn a => checkExp (env, F.Types.lua_value, a)) args;
             loop (n, Syntax.LabelMap.empty)
           end
       | inferExp (_, F.PrimExp (p, _, _)) =
@@ -634,18 +594,14 @@ struct
           let
             val ty = inferExp (env, body)
             val handlerEnv = modifyValEnv
-              ( fn m =>
-                  TypedSyntax.VIdMap.insert
-                    (m, exnName, F.TyVar Typing.primTyName_exn)
-              , env
-              )
+              (fn m => TypedSyntax.VIdMap.insert (m, exnName, F.Types.exn), env)
           in
             checkExp (handlerEnv, ty, handler);
             ty
           end
       | inferExp (env, F.IfThenElseExp (cond, then', else')) =
           let
-            val () = checkExp (env, F.TyVar Typing.primTyName_bool, cond)
+            val () = checkExp (env, F.Types.bool, cond)
             val ty = inferExp (env, then')
           in
             checkExp (env, ty, else');
@@ -769,17 +725,13 @@ struct
       | checkExp (env, expectedTy, F.HandleExp {body, exnName, handler}) =
           let
             val handlerEnv = modifyValEnv
-              ( fn m =>
-                  TypedSyntax.VIdMap.insert
-                    (m, exnName, F.TyVar Typing.primTyName_exn)
-              , env
-              )
+              (fn m => TypedSyntax.VIdMap.insert (m, exnName, F.Types.exn), env)
           in
             checkExp (env, expectedTy, body);
             checkExp (handlerEnv, expectedTy, handler)
           end
       | checkExp (env, expectedTy, F.IfThenElseExp (cond, then', else')) =
-          ( checkExp (env, F.TyVar Typing.primTyName_bool, cond)
+          ( checkExp (env, F.Types.bool, cond)
           ; checkExp (env, expectedTy, then')
           ; checkExp (env, expectedTy, else')
           )
@@ -913,8 +865,7 @@ struct
       | inferDec (F.ExceptionDec {name = _, tagName, payloadTy = _}, env) =
           modifyValEnv
             ( fn valEnv =>
-                TypedSyntax.VIdMap.insert
-                  (valEnv, tagName, F.TyVar Typing.primTyName_exntag)
+                TypedSyntax.VIdMap.insert (valEnv, tagName, F.Types.exntag)
             , env
             )
       | inferDec (F.ESImportDec {pure = _, specs, moduleName = _}, env) =

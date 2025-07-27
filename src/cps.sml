@@ -541,26 +541,16 @@ struct
                  F.IntConstOp x =>
                    (case tyargs of
                       [F.TyVar tv] =>
-                        if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int)
-                        then
+                        if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int) then
                           apply revDecs k (C.IntConst
                             (#defaultInt (#targetInfo ctx), x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int32)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int32) then
                           apply revDecs k (C.IntConst (Primitives.I32, x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int54)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int54) then
                           apply revDecs k (C.IntConst (Primitives.I54, x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_int64)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int64) then
                           apply revDecs k (C.IntConst (Primitives.I64, x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_intInf)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.intInf) then
                           apply revDecs k (C.IntConst (Primitives.INT_INF, x))
                         else
                           raise Fail "IntConstOp: invalid type"
@@ -568,18 +558,12 @@ struct
                | F.WordConstOp x =>
                    (case tyargs of
                       [F.TyVar tv] =>
-                        if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word)
-                        then
+                        if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word) then
                           apply revDecs k (C.WordConst
                             (#defaultWord (#targetInfo ctx), x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word32)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word32) then
                           apply revDecs k (C.WordConst (Primitives.W32, x))
-                        else if
-                          TypedSyntax.eqTyVar (tv, Typing.primTyName_word64)
-                        then
+                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word64) then
                           apply revDecs k (C.WordConst (Primitives.W64, x))
                         else
                           raise Fail "WordConstOp: invalid type"

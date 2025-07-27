@@ -45,6 +45,7 @@ sources = \
   src/parser.sml \
   src/postparsing.sml \
   src/typed.sml \
+  src/prim-types.sml \
   src/typing.sml \
   src/initialenv.sml \
   src/printer.sml \

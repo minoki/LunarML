@@ -165,6 +165,7 @@ sig
     val int54: Ty
     val int64: Ty
     val intInf: Ty
+    val word: Ty
     val word32: Ty
     val word64: Ty
     val real: Ty
@@ -365,29 +366,30 @@ struct
   structure Types =
   struct
     val unit = RecordType Syntax.LabelMap.empty
-    val bool = TyVar Typing.primTyName_bool
-    val int = TyVar Typing.primTyName_int
-    val int32 = TyVar Typing.primTyName_int32
-    val int54 = TyVar Typing.primTyName_int54
-    val int64 = TyVar Typing.primTyName_int64
-    val intInf = TyVar Typing.primTyName_intInf
-    val word32 = TyVar Typing.primTyName_word32
-    val word64 = TyVar Typing.primTyName_word64
-    val real = TyVar Typing.primTyName_real
-    val char = TyVar Typing.primTyName_char
-    val char16 = TyVar Typing.primTyName_char16
-    val string = TyVar Typing.primTyName_string
-    val string16 = TyVar Typing.primTyName_string16
-    val exn = TyVar Typing.primTyName_exn
-    val exntag = TyVar Typing.primTyName_exntag
-    val lua_value = TyVar Typing.primTyName_Lua_value
-    val js_value = TyVar Typing.primTyName_JavaScript_value
+    val bool = TyVar PrimTypes.Names.bool
+    val int = TyVar PrimTypes.Names.int
+    val int32 = TyVar PrimTypes.Names.int32
+    val int54 = TyVar PrimTypes.Names.int54
+    val int64 = TyVar PrimTypes.Names.int64
+    val intInf = TyVar PrimTypes.Names.intInf
+    val word = TyVar PrimTypes.Names.word
+    val word32 = TyVar PrimTypes.Names.word32
+    val word64 = TyVar PrimTypes.Names.word64
+    val real = TyVar PrimTypes.Names.real
+    val char = TyVar PrimTypes.Names.char
+    val char16 = TyVar PrimTypes.Names.char16
+    val string = TyVar PrimTypes.Names.string
+    val string16 = TyVar PrimTypes.Names.string16
+    val exn = TyVar PrimTypes.Names.exn
+    val exntag = TyVar PrimTypes.Names.exntag
+    val lua_value = TyVar PrimTypes.Names.lua_value
+    val js_value = TyVar PrimTypes.Names.js_value
     fun list ty =
-      AppType {applied = TyVar Typing.primTyName_list, arg = ty}
+      AppType {applied = TyVar PrimTypes.Names.list, arg = ty}
     fun vector ty =
-      AppType {applied = TyVar Typing.primTyName_vector, arg = ty}
+      AppType {applied = TyVar PrimTypes.Names.vector, arg = ty}
     fun array ty =
-      AppType {applied = TyVar Typing.primTyName_array, arg = ty}
+      AppType {applied = TyVar PrimTypes.Names.array, arg = ty}
   end
   fun FnType (param, result) =
     MultiFnType ([param], result)
@@ -1711,7 +1713,7 @@ struct
       | toFTyPure (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
       | toFTyPure (ctx, env, T.TyCon (span, tyargs, tyname)) =
-          if TypedSyntax.eqTyName (tyname, Typing.primTyName_function2) then
+          if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2) then
             case List.map (fn ty => toFTyPure (ctx, env, ty)) tyargs of
               [a, b, result] => F.MultiFnType ([a, b], result)
             | xs =>
@@ -1721,7 +1723,7 @@ struct
                   , "arity mismatch: expected 3, but got "
                     ^ Int.toString (List.length xs)
                   )
-          else if TypedSyntax.eqTyName (tyname, Typing.primTyName_function3) then
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3) then
             case List.map (fn ty => toFTyPure (ctx, env, ty)) tyargs of
               [a, b, c, result] => F.MultiFnType ([a, b, c], result)
             | xs =>
@@ -1752,7 +1754,7 @@ struct
       | toFTy (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
       | toFTy (ctx, env, T.TyCon (span, tyargs, tyname)) =
-          if TypedSyntax.eqTyName (tyname, Typing.primTyName_function2) then
+          if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2) then
             case List.map (fn ty => toFTy (ctx, env, ty)) tyargs of
               [a, b, result] => F.MultiFnType ([a, b], result)
             | xs =>
@@ -1762,7 +1764,7 @@ struct
                   , "arity mismatch: expected 3, but got "
                     ^ Int.toString (List.length xs)
                   )
-          else if TypedSyntax.eqTyName (tyname, Typing.primTyName_function3) then
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3) then
             case List.map (fn ty => toFTy (ctx, env, ty)) tyargs of
               [a, b, c, result] => F.MultiFnType ([a, b, c], result)
             | xs =>
@@ -1784,7 +1786,7 @@ struct
       (ctx: Context, env: Env, span, value: IntInf.int, ty) =
       (case ty of
          T.TyCon (_, [], tycon) =>
-           if T.eqTyName (tycon, Typing.primTyName_int) then
+           if T.eqTyName (tycon, PrimTypes.Names.int) then
              let
                val {minInt, maxInt, ...} = #targetInfo ctx
                val lower =
@@ -1803,7 +1805,7 @@ struct
                  ; F.IntConstExp (0, toFTy (ctx, env, ty))
                  )
              end
-           else if T.eqTyName (tycon, Typing.primTyName_int32) then
+           else if T.eqTyName (tycon, PrimTypes.Names.int32) then
              let
                val lower = TargetInfo.minInt32 <= value
                val upper = value <= TargetInfo.maxInt32
@@ -1815,7 +1817,7 @@ struct
                  ; F.IntConstExp (0, toFTy (ctx, env, ty))
                  )
              end
-           else if T.eqTyName (tycon, Typing.primTyName_int54) then
+           else if T.eqTyName (tycon, PrimTypes.Names.int54) then
              let
                val lower = TargetInfo.minInt54 <= value
                val upper = value <= TargetInfo.maxInt54
@@ -1827,7 +1829,7 @@ struct
                  ; F.IntConstExp (0, toFTy (ctx, env, ty))
                  )
              end
-           else if T.eqTyName (tycon, Typing.primTyName_int64) then
+           else if T.eqTyName (tycon, PrimTypes.Names.int64) then
              let
                val lower = TargetInfo.minInt64 <= value
                val upper = value <= TargetInfo.maxInt64
@@ -1839,7 +1841,7 @@ struct
                  ; F.IntConstExp (0, toFTy (ctx, env, ty))
                  )
              end
-           else if T.eqTyName (tycon, Typing.primTyName_intInf) then
+           else if T.eqTyName (tycon, PrimTypes.Names.intInf) then
              F.IntConstExp (value, toFTy (ctx, env, ty))
            else
              let
@@ -1906,10 +1908,9 @@ struct
                  case maxInt of
                    NONE => true
                  | SOME m => value <= m
-               val intTy = toFTy (ctx, env, Typing.primTy_int)
                fun decompose x =
                  if ~0x80000000 <= x andalso x <= 0x7fffffff then
-                   F.AppExp (fromInt, F.IntConstExp (x, intTy))
+                   F.AppExp (fromInt, F.IntConstExp (x, F.Types.int))
                  else
                    let
                      val (q, r) = IntInf.quotRem (x, ~0x80000000)
@@ -1917,22 +1918,24 @@ struct
                        case q of
                          1 =>
                            F.AppExp
-                             (fromInt, F.IntConstExp (~0x80000000, intTy))
+                             (fromInt, F.IntConstExp (~0x80000000, F.Types.int))
                        | ~1 =>
                            F.AppExp (TILDE, F.AppExp
-                             (fromInt, F.IntConstExp (~0x80000000, intTy)))
+                             (fromInt, F.IntConstExp (~0x80000000, F.Types.int)))
                        | _ =>
                            F.AppExp (TIMES, F.TupleExp
                              [ decompose q
                              , F.AppExp
-                                 (fromInt, F.IntConstExp (~0x80000000, intTy))
+                                 ( fromInt
+                                 , F.IntConstExp (~0x80000000, F.Types.int)
+                                 )
                              ])
                    in
                      if r = 0 then
                        y
                      else
                        F.AppExp (PLUS, F.TupleExp
-                         [y, F.AppExp (fromInt, F.IntConstExp (r, intTy))])
+                         [y, F.AppExp (fromInt, F.IntConstExp (r, F.Types.int))])
                    end
              in
                if lower andalso upper then
@@ -1946,7 +1949,7 @@ struct
     fun cookWordConstant (ctx: Context, env: Env, span, value: IntInf.int, ty) =
       (case ty of
          T.TyCon (_, [], tycon) =>
-           if T.eqTyName (tycon, Typing.primTyName_word) then
+           if T.eqTyName (tycon, PrimTypes.Names.word) then
              let
                val {wordSize, ...} = #targetInfo ctx
              in
@@ -1957,14 +1960,14 @@ struct
                  ; F.WordConstExp (0, toFTy (ctx, env, ty))
                  )
              end
-           else if T.eqTyName (tycon, Typing.primTyName_word32) then
+           else if T.eqTyName (tycon, PrimTypes.Names.word32) then
              if IntInf.~>> (value, 0w32) = 0 then
                F.WordConstExp (value, toFTy (ctx, env, ty))
              else
                ( emitError (ctx, [span], "word constant out of range")
                ; F.WordConstExp (0, toFTy (ctx, env, ty))
                )
-           else if T.eqTyName (tycon, Typing.primTyName_word64) then
+           else if T.eqTyName (tycon, PrimTypes.Names.word64) then
              if IntInf.~>> (value, 0w64) = 0 then
                F.WordConstExp (value, toFTy (ctx, env, ty))
              else
@@ -2025,10 +2028,9 @@ struct
                        , [span]
                        , "invalid word constant: wordSize is not defined"
                        )
-               val wordTy = toFTy (ctx, env, Typing.primTy_word)
                fun decompose x =
                  if x <= 0xffffffff then
-                   F.AppExp (fromWord, F.WordConstExp (x, wordTy))
+                   F.AppExp (fromWord, F.WordConstExp (x, F.Types.word))
                  else
                    let
                      val (q, r) = IntInf.quotRem (x, 0xffffffff)
@@ -2036,19 +2038,25 @@ struct
                        case q of
                          1 =>
                            F.AppExp
-                             (fromWord, F.WordConstExp (0xffffffff, wordTy))
+                             ( fromWord
+                             , F.WordConstExp (0xffffffff, F.Types.word)
+                             )
                        | _ =>
                            F.AppExp (TIMES, F.TupleExp
                              [ decompose q
                              , F.AppExp
-                                 (fromWord, F.WordConstExp (0xffffffff, wordTy))
+                                 ( fromWord
+                                 , F.WordConstExp (0xffffffff, F.Types.word)
+                                 )
                              ])
                    in
                      if r = 0 then
                        y
                      else
                        F.AppExp (PLUS, F.TupleExp
-                         [y, F.AppExp (fromWord, F.WordConstExp (r, wordTy))])
+                         [ y
+                         , F.AppExp (fromWord, F.WordConstExp (r, F.Types.word))
+                         ])
                    end
              in
                if IntInf.~>> (value, Word.fromLargeInt wordSize) = 0 then
@@ -2064,7 +2072,7 @@ struct
       (ctx: Context, env: Env, span, value: Numeric.float_notation, ty) =
       (case ty of
          T.TyCon (_, [], tycon) =>
-           if T.eqTyName (tycon, Typing.primTyName_real) then
+           if T.eqTyName (tycon, PrimTypes.Names.real) then
              ( if not (Numeric.checkExactness Numeric.binary64 value) then
                  emitError
                    ( ctx
@@ -2085,9 +2093,9 @@ struct
          T.TyCon (_, [], tycon) =>
            let
              val w =
-               if T.eqTyName (tycon, Typing.primTyName_char) then
+               if T.eqTyName (tycon, PrimTypes.Names.char) then
                  C8
-               else if T.eqTyName (tycon, Typing.primTyName_char16) then
+               else if T.eqTyName (tycon, PrimTypes.Names.char16) then
                  C16
                else
                  let
@@ -2190,9 +2198,9 @@ struct
          T.TyCon (_, [], tycon) =>
            let
              val w =
-               if T.eqTyName (tycon, Typing.primTyName_string) then
+               if T.eqTyName (tycon, PrimTypes.Names.string) then
                  C8
-               else if T.eqTyName (tycon, Typing.primTyName_string16) then
+               else if T.eqTyName (tycon, PrimTypes.Names.string16) then
                  C16
                else
                  let

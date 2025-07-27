@@ -507,13 +507,13 @@ struct
                   raise Fail "unexpected record extension"
               | toFTy (TypedSyntax.TyCon (_, tyargs, tyname)) =
                   if
-                    TypedSyntax.eqTyName (tyname, Typing.primTyName_function2)
+                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2)
                   then
                     case List.map toFTy tyargs of
                       [a, b, result] => FSyntax.MultiFnType ([a, b], result)
                     | _ => raise Fail "invalid use of function2"
                   else if
-                    TypedSyntax.eqTyName (tyname, Typing.primTyName_function3)
+                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3)
                   then
                     case List.map toFTy tyargs of
                       [a, b, c, result] =>
