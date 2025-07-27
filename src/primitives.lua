@@ -897,6 +897,7 @@ do
       mayraise = false,
       discardable = true,
     },
+    --[[
     {
       name = "DelimCont.pushPrompt",
       srcname = "DelimCont_pushPrompt",
@@ -918,6 +919,7 @@ do
       mayraise = true,
       discardable = false,
     },
+    ]]
     {
       name = "assumeDiscardable",
       srcname = "assumeDiscardable",

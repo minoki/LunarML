@@ -706,6 +706,36 @@ struct
               , VId_JavaScript_unwrapThenable
               , TypeScheme ([], primTy_JavaScript_value)
               )
+            , ( "_Prim.DelimCont.pushPrompt"
+              , VId_DelimCont_pushPrompt
+              , TypeScheme ([(tyVarA, NONE)], mkTyCon
+                  ( [ mkTyCon ([tyA], primTyName_prompt_tag)
+                    , primTy_unit --> tyA
+                    , tyA
+                    ]
+                  , primTyName_function2
+                  ))
+              )
+            , ( "_Prim.DelimCont.withSubCont"
+              , VId_DelimCont_withSubCont
+              , TypeScheme ([(tyVarA, NONE), (tyVarB, NONE)], mkTyCon
+                  ( [ mkTyCon ([tyB], primTyName_prompt_tag)
+                    , mkTyCon ([tyA, tyB], primTyName_subcont) --> tyB
+                    , tyA
+                    ]
+                  , primTyName_function2
+                  ))
+              )
+            , ( "_Prim.DelimCont.pushSubCont"
+              , VId_DelimCont_pushSubCont
+              , TypeScheme ([(tyVarA, NONE), (tyVarB, NONE)], mkTyCon
+                  ( [ mkTyCon ([tyA, tyB], primTyName_subcont)
+                    , primTy_unit --> tyA
+                    , tyB
+                    ]
+                  , primTyName_function2
+                  ))
+              )
             , ( "_Prim.DelimCont.topLevel"
               , VId_DelimCont_topLevel
               , TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt_tag))

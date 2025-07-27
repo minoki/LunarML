@@ -524,55 +524,7 @@ struct
     and transformX (ctx: Context, env) (exp: F.Exp)
       (revDecs: C.Dec list, k: cont) : C.Stat =
       case exp of
-        F.PrimExp
-          ( F.PrimCall Primitives.DelimCont_pushPrompt
-          , _
-          , [p (* 'a prompt_tag *), f (* unit -> 'a *)]
-          ) =>
-          transform (ctx, env) p {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, p) =>
-               transform (ctx, env) f {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, f) =>
-                    reify (ctx, revDecs, k) (fn kk =>
-                      C.App
-                        { applied = C.Var InitialEnv.VId_DelimCont_pushPrompt
-                        , cont = kk
-                        , args = [p, f]
-                        , attr = {}
-                        })))
-      | F.PrimExp
-          ( F.PrimCall Primitives.DelimCont_withSubCont
-          , _
-          , [p (* 'b prompt_tag *), f (* ('a,'b) subcont -> 'b *)]
-          ) =>
-          transform (ctx, env) p {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, p) =>
-               transform (ctx, env) f {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, f) =>
-                    reify (ctx, revDecs, k) (fn kk =>
-                      C.App
-                        { applied = C.Var InitialEnv.VId_DelimCont_withSubCont
-                        , cont = kk
-                        , args = [p, f]
-                        , attr = {}
-                        })))
-      | F.PrimExp
-          ( F.PrimCall Primitives.DelimCont_pushSubCont
-          , _
-          , [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]
-          ) =>
-          transform (ctx, env) subcont {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, subcont) =>
-               transform (ctx, env) f {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, f) =>
-                    reify (ctx, revDecs, k) (fn kk =>
-                      C.App
-                        { applied = C.Var InitialEnv.VId_DelimCont_pushSubCont
-                        , cont = kk
-                        , args = [subcont, f]
-                        , attr = {}
-                        })))
-      | F.PrimExp (F.PrimCall Primitives.Unsafe_cast, _, [arg]) =>
+        F.PrimExp (F.PrimCall Primitives.Unsafe_cast, _, [arg]) =>
           transformX (ctx, env) arg (revDecs, k)
       | F.PrimExp (F.RaiseOp span, _, [arg]) =>
           transform (ctx, env) arg {revDecs = revDecs, resultHint = NONE}

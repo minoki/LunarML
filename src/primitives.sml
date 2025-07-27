@@ -122,9 +122,6 @@ datatype PrimOp = EQUAL (* = *)
                 | Unsafe_Array_update of int_width (* Unsafe.Array.update{.i} *)
                 | Exception_instanceof (* Exception.instanceof *)
                 | DelimCont_newPromptTag (* DelimCont.newPromptTag *)
-                | DelimCont_pushPrompt (* DelimCont.pushPrompt *)
-                | DelimCont_withSubCont (* DelimCont.withSubCont *)
-                | DelimCont_pushSubCont (* DelimCont.pushSubCont *)
                 | assumeDiscardable (* assumeDiscardable *)
                 | unreachable (* unreachable *)
                 | Lua_sub (* Lua.sub *)
@@ -546,9 +543,6 @@ fun toString EQUAL = "="
   | toString (Unsafe_Array_update INT_INF) = "Unsafe.Array.update.intInf"
   | toString Exception_instanceof = "Exception.instanceof"
   | toString DelimCont_newPromptTag = "DelimCont.newPromptTag"
-  | toString DelimCont_pushPrompt = "DelimCont.pushPrompt"
-  | toString DelimCont_withSubCont = "DelimCont.withSubCont"
-  | toString DelimCont_pushSubCont = "DelimCont.pushSubCont"
   | toString assumeDiscardable = "assumeDiscardable"
   | toString unreachable = "unreachable"
   | toString Lua_sub = "Lua.sub"
@@ -970,9 +964,6 @@ fun fromString "=" = SOME EQUAL
   | fromString "Unsafe.Array.update.intInf" = SOME (Unsafe_Array_update INT_INF)
   | fromString "Exception.instanceof" = SOME Exception_instanceof
   | fromString "DelimCont.newPromptTag" = SOME DelimCont_newPromptTag
-  | fromString "DelimCont.pushPrompt" = SOME DelimCont_pushPrompt
-  | fromString "DelimCont.withSubCont" = SOME DelimCont_withSubCont
-  | fromString "DelimCont.pushSubCont" = SOME DelimCont_pushSubCont
   | fromString "assumeDiscardable" = SOME assumeDiscardable
   | fromString "unreachable" = SOME unreachable
   | fromString "Lua.sub" = SOME Lua_sub
@@ -1182,9 +1173,6 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Unsafe_Array_update _) = false
   | mayRaise Exception_instanceof = false
   | mayRaise DelimCont_newPromptTag = false
-  | mayRaise DelimCont_pushPrompt = true
-  | mayRaise DelimCont_withSubCont = true
-  | mayRaise DelimCont_pushSubCont = true
   | mayRaise assumeDiscardable = true
   | mayRaise unreachable = true
   | mayRaise Lua_sub = true
@@ -1393,9 +1381,6 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Unsafe_Array_update _) = false
   | isDiscardable Exception_instanceof = true
   | isDiscardable DelimCont_newPromptTag = true
-  | isDiscardable DelimCont_pushPrompt = false
-  | isDiscardable DelimCont_withSubCont = false
-  | isDiscardable DelimCont_pushSubCont = false
   | isDiscardable assumeDiscardable = true
   | isDiscardable unreachable = false
   | isDiscardable Lua_sub = false
@@ -1662,9 +1647,6 @@ fun returnArity EQUAL = 1
   | returnArity (Unsafe_Array_update _) = 0
   | returnArity Exception_instanceof = 1
   | returnArity DelimCont_newPromptTag = 1
-  | returnArity DelimCont_pushPrompt = 1
-  | returnArity DelimCont_withSubCont = 1
-  | returnArity DelimCont_pushSubCont = 1
   | returnArity assumeDiscardable = 1
   | returnArity unreachable = 1
   | returnArity Lua_sub = 1
@@ -2136,9 +2118,6 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf, tyA], results = [] }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], results = [bool] }
   | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
-  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (unit, tyA)], results = [tyA] }
-  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (subcontOf (tyA, tyB), tyB)], results = [tyA] }
-  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (unit, tyA)], results = [tyB] }
   | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyA, tyB), tyA], results = [tyB] }
   | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [tyA] }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }

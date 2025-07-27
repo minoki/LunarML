@@ -17,9 +17,9 @@ datatype prompt_tag = datatype _Prim.DelimCont.prompt_tag
 datatype subcont = datatype _Prim.DelimCont.subcont
 val supportsMultishot = false
 fun newPromptTag () = _primCall "DelimCont.newPromptTag" ()
-fun pushPrompt (p, f) = _primCall "DelimCont.pushPrompt" (p, f)
-fun withSubCont (p, f) = _primCall "DelimCont.withSubCont" (p, f)
-fun pushSubCont (sk, f) = _primCall "DelimCont.pushSubCont" (sk, f)
+fun pushPrompt (p, f) = _primCall "call2" (_Prim.DelimCont.pushPrompt, p, f)
+fun withSubCont (p, f) = _primCall "call2" (_Prim.DelimCont.withSubCont, p, f)
+fun pushSubCont (sk, f) = _primCall "call2" (_Prim.DelimCont.pushSubCont, sk, f)
 fun reifyP (p : 'a prompt_tag, sk : ('b,'a) subcont) : 'b -> 'a = fn v => pushPrompt (p, fn () => pushSubCont (sk, fn () => v))
 fun shift (p : 'a prompt_tag, f : ('b -> 'a) -> 'a) : 'b = withSubCont (p, fn sk : ('b,'a) subcont => pushPrompt (p, fn () => f (reifyP (p, sk))))
 fun control (p : 'a prompt_tag, f : ('b -> 'a) -> 'a) : 'b = withSubCont (p, fn sk : ('b,'a) subcont => pushPrompt (p, fn () => f (fn v : 'b => pushSubCont (sk, fn () => v))))
