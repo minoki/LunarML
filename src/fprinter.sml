@@ -41,8 +41,15 @@ struct
           (doTy 1 param @ P.Fragment " -> " :: doTy 0 result)
     | doTy prec (F.MultiFnType (params, result)) =
         showParen (prec >= 1)
-          (List.foldr (fn (param, acc) => doTy 1 param @ acc)
-             (P.Fragment " -> " :: doTy 0 result) params)
+          (P.Fragment "("
+           ::
+           #2
+             (List.foldr
+                (fn (param, (first, acc)) =>
+                   ( false
+                   , doTy 1 param
+                     @ (if first then acc else P.Fragment ", " :: acc)
+                   )) (true, P.Fragment ") -> " :: doTy 0 result) params))
     | doTy prec (F.ForallType (tv, kind, ty)) =
         showParen (prec >= 1)
           (P.Fragment "forall "
