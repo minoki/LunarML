@@ -14,6 +14,7 @@ sig
   | ForallType of TyVar * Kind * Ty
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
+  | AnyType of Kind (* erased type *)
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
   datatype PrimOp =
@@ -93,7 +94,8 @@ sig
   | RecordExp of (Syntax.Label * Exp) list
   | LetExp of Dec list * Exp
   | MultiAppExp of Exp * Exp list
-  | HandleExp of {body: Exp, exnName: TypedSyntax.VId, handler: Exp}
+  | HandleExp of
+      {body: Exp, exnName: TypedSyntax.VId, handler: Exp, resultTy: Ty}
   | IfThenElseExp of Exp * Exp * Exp
   | CaseExp of
       { sourceSpan: SourcePos.span
@@ -197,6 +199,7 @@ sig
        , doDec: Dec -> Dec
        , doDecs: Dec list -> Dec list
        }
+  val weakNormalizeTy: Ty -> Ty
   val freeVarsInExp: TypedSyntax.VIdSet.set * Exp
                      -> TypedSyntax.VIdSet.set
                      -> TypedSyntax.VIdSet.set
@@ -204,6 +207,8 @@ sig
   structure PrettyPrint:
   sig
     val print_Ty: Ty -> string
+    val print_PrimOp: PrimOp -> string
+    val print_Exp: Exp -> string
   end
 end =
 struct
@@ -217,6 +222,7 @@ struct
   | ForallType of TyVar * Kind * Ty
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
+  | AnyType of Kind (* erased type *)
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
   datatype PrimOp =
@@ -296,7 +302,8 @@ struct
   | RecordExp of (Syntax.Label * Exp) list
   | LetExp of Dec list * Exp
   | MultiAppExp of Exp * Exp list
-  | HandleExp of {body: Exp, exnName: TypedSyntax.VId, handler: Exp}
+  | HandleExp of
+      {body: Exp, exnName: TypedSyntax.VId, handler: Exp, resultTy: Ty}
   | IfThenElseExp of Exp * Exp * Exp
   | CaseExp of
       { sourceSpan: SourcePos.span
@@ -471,6 +478,7 @@ struct
             if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (TypeFn (tv', _, ty)) =
             if TypedSyntax.eqTyVar (tv, tv') then false else check ty
+        | check (AnyType _) = false
     in
       check
     end
@@ -525,6 +533,7 @@ struct
               end
             else
               TypeFn (tv', kind, go ty')
+        | go (ty as AnyType _) = ty
     in
       go
     end
@@ -542,6 +551,7 @@ struct
         | isRelevant (ForallType (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (ExistsType (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (TypeFn (_, _, ty)) = isRelevant ty (* approximation *)
+        | isRelevant (AnyType _) = false
       fun doTy (ty as TyVar tv) =
             (case TypedSyntax.TyVarMap.find (subst, tv) of
                NONE => ty
@@ -579,6 +589,7 @@ struct
                    , #doTy (substTy subst) ty
                    ) (* TODO: use fresh tyvar if necessary *)
              | NONE => TypeFn (tv, kind, doTy ty))
+        | doTy (ty as AnyType _) = ty
       val doTy = fn ty =>
         if isRelevant ty then doTy ty else ty (* optimization *)
       fun doConBind (ConBind (vid, optTy)) =
@@ -648,9 +659,13 @@ struct
             LetExp (List.map doDec decs, doExp exp)
         | doExp (MultiAppExp (f, args)) =
             MultiAppExp (doExp f, List.map doExp args)
-        | doExp (HandleExp {body, exnName, handler}) =
+        | doExp (HandleExp {body, exnName, handler, resultTy}) =
             HandleExp
-              {body = doExp body, exnName = exnName, handler = doExp handler}
+              { body = doExp body
+              , exnName = exnName
+              , handler = doExp handler
+              , resultTy = doTy resultTy
+              }
         | doExp (IfThenElseExp (exp1, exp2, exp3)) =
             IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
         | doExp
@@ -737,6 +752,19 @@ struct
       }
     end
 
+  fun weakNormalizeTy (ty as TyVar _) = ty
+    | weakNormalizeTy (ty as RecordType _) = ty
+    | weakNormalizeTy (AppType {applied, arg}) =
+        (case weakNormalizeTy applied of
+           TypeFn (tv, _, ty) => weakNormalizeTy (substituteTy (tv, arg) ty)
+         | AnyType (ArrowKind (_, kind)) => AnyType kind
+         | applied => AppType {applied = applied, arg = arg})
+    | weakNormalizeTy (ty as MultiFnType _) = ty
+    | weakNormalizeTy (ty as ForallType _) = ty
+    | weakNormalizeTy (ty as ExistsType _) = ty
+    | weakNormalizeTy (ty as TypeFn _) = ty
+    | weakNormalizeTy (ty as AnyType _) = ty
+
   fun freeTyVarsInTy (bound: TypedSyntax.TyVarSet.set, TyVar tv) acc =
         if TypedSyntax.TyVarSet.member (bound, tv) then acc
         else TypedSyntax.TyVarSet.add (acc, tv)
@@ -754,6 +782,7 @@ struct
         freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
     | freeTyVarsInTy (bound, TypeFn (tv, _, ty)) acc =
         freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
+    | freeTyVarsInTy (_, AnyType _) acc = acc
   fun freeTyVarsInPat (_, WildcardPat _) acc = acc
     | freeTyVarsInPat
         (bound, SConPat {sourceSpan = _, scon = _, equality, cookedValue}) acc =
@@ -834,8 +863,10 @@ struct
     | freeTyVarsInExp (bound, MultiAppExp (f, args)) acc =
         List.foldl (fn (arg, acc) => freeTyVarsInExp (bound, arg) acc)
           (freeTyVarsInExp (bound, f) acc) args
-    | freeTyVarsInExp (bound, HandleExp {body, exnName = _, handler}) acc =
-        freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler) acc)
+    | freeTyVarsInExp (bound, HandleExp {body, exnName = _, handler, resultTy})
+        acc =
+        freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler)
+          (freeTyVarsInTy (bound, resultTy) acc))
     | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc =
         freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2)
           (freeTyVarsInExp (bound, exp3) acc))
@@ -1032,7 +1063,8 @@ struct
     | freeVarsInExp (bound, MultiAppExp (f, args)) acc =
         List.foldl (fn (arg, acc) => freeVarsInExp (bound, arg) acc)
           (freeVarsInExp (bound, f) acc) args
-    | freeVarsInExp (bound, HandleExp {body, exnName, handler}) acc =
+    | freeVarsInExp (bound, HandleExp {body, exnName, handler, resultTy = _})
+        acc =
         freeVarsInExp (bound, body)
           (freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler) acc)
     | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc =
@@ -1157,6 +1189,7 @@ struct
           "ExistsType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
       | print_Ty (TypeFn (tv, _, x)) =
           "TypeFn(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
+      | print_Ty (AnyType _) = "AnyType"
     fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
       | print_PrimOp (WordConstOp x) = "WordConstOp " ^ IntInf.toString x
       | print_PrimOp (RealConstOp x) =
@@ -1302,7 +1335,7 @@ struct
       | print_Exp (MultiAppExp (f, args)) =
           "MultiAppExp(" ^ print_Exp f ^ "," ^ Syntax.print_list print_Exp args
           ^ ")"
-      | print_Exp (HandleExp {body, exnName, handler}) =
+      | print_Exp (HandleExp {body, exnName, handler, resultTy = _}) =
           "HandleExp{body=" ^ print_Exp body ^ ",exnName="
           ^ TypedSyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler
           ^ ")"
@@ -1366,7 +1399,13 @@ sig
     , targetInfo: TargetInfo.target_info
     , messageHandler: Message.handler
     }
-  type Env
+  type Env =
+    { equalityForTyVarMap: TypedSyntax.VId TypedSyntax.TyVarMap.map
+    , equalityForTyNameMap: TypedSyntax.LongVId TypedSyntax.TyNameMap.map
+    , exnMap: {predicate: FSyntax.Exp, getPayload: FSyntax.Exp option} TypedSyntax.VIdMap.map
+    , overloadMap: (FSyntax.Exp Syntax.OverloadKeyMap.map) TypedSyntax.TyNameMap.map
+    , valMap: FSyntax.Ty TypedSyntax.VIdMap.map
+    }
   val programToFDecs: Context * Env * TypedSyntax.TopDec list
                       -> Env * FSyntax.Dec list
   datatype export_entity =
@@ -2707,6 +2746,7 @@ struct
                   , matchType = T.HANDLE
                   , resultTy = toFTy (ctx, env, resultTy)
                   }
+              , resultTy = toFTy (ctx, env, resultTy)
               }
           end
       | toFExp (ctx, env, T.RaiseExp (span, ty, exp)) =
@@ -4161,7 +4201,20 @@ struct
               | toFTy (T.RecordExtType (_, _, _)) =
                   raise Fail "unexpected record extension"
               | toFTy (T.TyCon (_, tyargs, tyname)) =
-                  F.TyCon (List.map toFTy tyargs, tyname)
+                  if
+                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2)
+                  then
+                    case List.map toFTy tyargs of
+                      [a, b, result] => F.MultiFnType ([a, b], result)
+                    | _ => raise Fail "invalid use of function2"
+                  else if
+                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3)
+                  then
+                    case List.map toFTy tyargs of
+                      [a, b, c, result] => F.MultiFnType ([a, b, c], result)
+                    | _ => raise Fail "invalid use of function3"
+                  else
+                    F.TyCon (List.map toFTy tyargs, tyname)
               | toFTy (T.FnType (_, paramTy, resultTy)) =
                   F.FnType (toFTy paramTy, toFTy resultTy)
             fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty)) =

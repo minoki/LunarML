@@ -394,6 +394,8 @@ struct
           (Vector.foldr
              (fn (i, acc) => Char.chr (i div 256) :: Char.chr (i mod 256) :: acc)
              [] s))) (* big endian *)
+    | doValue ctx (C.Cast {value, ...}) = doValue ctx value
+    | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
   (*:
   val doExp : Context * Env * N.Exp -> L.Exp

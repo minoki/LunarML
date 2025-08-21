@@ -130,35 +130,51 @@ struct
       | goSimpleExp (C.Projection {label, record, fieldTypes}) =
           Projection
             {label = label, record = Value record, fieldTypes = fieldTypes}
-      | goSimpleExp (C.Abs {contParam, params, body, attr}) =
+      | goSimpleExp
+          (C.Abs {contParam, tyParams = _, params, body, resultTy = _, attr}) =
           Abs
             { contParam = contParam
-            , params = params
+            , params = List.map #1 params
             , body = goStat body
             , attr = attr
             }
     and goDec (C.ValDec {exp, results}) =
-          ValDec {exp = goSimpleExp exp, results = results}
+          ValDec {exp = goSimpleExp exp, results = List.map #1 results}
       | goDec (C.RecDec decs) =
           RecDec
             (List.map
-               (fn {name, contParam, params, body, attr} =>
+               (fn { name
+                   , contParam
+                   , tyParams = _
+                   , params
+                   , body
+                   , resultTy = _
+                   , attr
+                   } =>
                   { name = name
                   , contParam = contParam
-                  , params = params
+                  , params = List.map #1 params
                   , body = goStat body
                   , attr = attr
                   }) decs)
+      | goDec (C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package}) =
+          ValDec {exp = Value package, results = [SOME vid]}
       | goDec (C.ContDec {name, params, body, attr = _}) =
-          ContDec {name = name, params = params, body = goStat body}
+          ContDec {name = name, params = List.map #1 params, body = goStat body}
       | goDec (C.RecContDec decs) =
           RecContDec
-            (List.map (fn (name, params, body) => (name, params, goStat body))
-               decs)
-      | goDec (C.ESImportDec dec) = ESImportDec dec
+            (List.map
+               (fn (name, params, body) =>
+                  (name, List.map #1 params, goStat body)) decs)
+      | goDec (C.ESImportDec {pure, specs, moduleName}) =
+          ESImportDec
+            { pure = pure
+            , specs = List.map (fn (name, v, _) => (name, v)) specs
+            , moduleName = moduleName
+            }
     and goStat (C.Let {decs, cont}) =
           Let {decs = List.map goDec decs, cont = goStat cont}
-      | goStat (C.App {applied, cont, args, attr}) =
+      | goStat (C.App {applied, cont, tyArgs = _, args, attr}) =
           App
             { applied = Value applied
             , cont = cont
@@ -207,8 +223,8 @@ struct
           (case TypedSyntax.VIdTable.find usage vid of
              SOME r => r := oneMore (!r)
            | NONE => TypedSyntax.VIdTable.insert usage (vid, ref ONCE))
-        fun useValue (C.Var v) = use v
-          | useValue _ = ()
+        fun useValue v =
+          Option.app use (C.extractVarFromValue v)
         fun goExp (Value v) = useValue v
           | goExp (PrimOp {args, ...}) = List.app goExp args
           | goExp (Record fields) = Syntax.LabelMap.app goExp fields

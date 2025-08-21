@@ -878,10 +878,15 @@ struct
                  val a = CpsSimplify.newVId (ctx, "a")
                  val b = CpsSimplify.newVId (ctx, "b")
                  val t = CpsSimplify.newVId (ctx, "t")
+                 val (tyA, tyB, resultTy) =
+                   case tyargs of
+                     [tyA, tyB, resultTy] => (tyA, tyB, resultTy)
+                   | _ => raise Fail "invalid mkFn2"
                in
                  SIMPLE_EXP (C.Abs
                    { contParam = l
-                   , params = [a, b]
+                   , tyParams = []
+                   , params = [(a, tyA), (b, tyB)]
                    , body = C.Let
                        { decs =
                            [C.ValDec
@@ -892,16 +897,18 @@ struct
                                        [ (Syntax.NumericLabel 1, C.Var a)
                                        , (Syntax.NumericLabel 2, C.Var b)
                                        ])
-                              , results = [SOME t]
+                              , results = [(SOME t, F.TupleType [tyA, tyB])]
                               }]
                        , cont = C.App
                            { applied = C.Var f
                            , cont = l
+                           , tyArgs = []
                            , args = [C.Var t]
-                           , attr = {}
+                           , attr = {typeOnly = false}
                            }
                        }
-                   , attr = {alwaysInline = false}
+                   , resultTy = resultTy
+                   , attr = {alwaysInline = false, typeOnly = false}
                    })
                end
            | (F.PrimCall P.mkFn3, [C.Var f]) =>
@@ -911,10 +918,15 @@ struct
                  val b = CpsSimplify.newVId (ctx, "b")
                  val c = CpsSimplify.newVId (ctx, "c")
                  val t = CpsSimplify.newVId (ctx, "t")
+                 val (tyA, tyB, tyC, resultTy) =
+                   case tyargs of
+                     [tyA, tyB, tyC, resultTy] => (tyA, tyB, tyC, resultTy)
+                   | _ => raise Fail "invalid mkFn2"
                in
                  SIMPLE_EXP (C.Abs
                    { contParam = l
-                   , params = [a, b, c]
+                   , tyParams = []
+                   , params = [(a, tyA), (b, tyB), (c, tyC)]
                    , body = C.Let
                        { decs =
                            [C.ValDec
@@ -926,16 +938,19 @@ struct
                                        , (Syntax.NumericLabel 2, C.Var b)
                                        , (Syntax.NumericLabel 3, C.Var c)
                                        ])
-                              , results = [SOME t]
+                              , results =
+                                  [(SOME t, F.TupleType [tyA, tyB, tyC])]
                               }]
                        , cont = C.App
                            { applied = C.Var f
                            , cont = l
+                           , tyArgs = []
                            , args = [C.Var t]
-                           , attr = {}
+                           , attr = {typeOnly = false}
                            }
                        }
-                   , attr = {alwaysInline = false}
+                   , resultTy = resultTy
+                   , attr = {alwaysInline = false, typeOnly = false}
                    })
                end
            | _ => NOT_SIMPLIFIED)
@@ -951,14 +966,26 @@ struct
                 | _ => NOT_SIMPLIFIED)
            | _ => NOT_SIMPLIFIED)
       | simplifySimpleExp
-          (_, _, C.Abs {contParam = _, params = _, body = _, attr = _}) =
-          NOT_SIMPLIFIED (* TODO: Try eta conversion *)
+          ( _
+          , _
+          , C.Abs
+              { contParam = _
+              , tyParams = _
+              , params = _
+              , body = _
+              , resultTy = _
+              , attr = _
+              }
+          ) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
     and simplifyDec (ctx: Context)
-      (dec, (env, cenv, subst, csubst, acc: C.Dec list)) =
+      (dec, (env, cenv, tysubst, subst, csubst, acc: C.Dec list)) =
       case dec of
         C.ValDec {exp, results} =>
           let
-            val exp = CpsSimplify.substSimpleExp (subst, csubst, exp)
+            val exp = CpsSimplify.substSimpleExp (tysubst, subst, csubst, exp)
+            val results =
+              List.map (fn (v, ty) => (v, CpsSimplify.substTy tysubst ty))
+                results
           in
             case simplifySimpleExp (ctx, env, exp) of
               VALUE v =>
@@ -966,12 +993,12 @@ struct
                   val () = #simplificationOccurred ctx := true
                   val subst =
                     case results of
-                      [SOME result] =>
+                      [(SOME result, _)] =>
                         TypedSyntax.VIdMap.insert (subst, result, v)
-                    | [NONE] => subst
+                    | [(NONE, _)] => subst
                     | _ => subst (* should not occur *)
                 in
-                  (env, cenv, subst, csubst, acc)
+                  (env, cenv, tysubst, subst, csubst, acc)
                 end
             | simplified =>
                 let
@@ -988,16 +1015,25 @@ struct
                     | _ => exp
                 in
                   case (exp, results) of
-                    ( C.Abs {contParam, params, body, attr as {alwaysInline}}
-                    , [SOME result]
+                    ( C.Abs
+                        { contParam
+                        , tyParams
+                        , params
+                        , body
+                        , resultTy
+                        , attr as {alwaysInline, ...}
+                        }
+                    , [(SOME result, ty)]
                     ) =>
                       let
                         val body = simplifyStat
-                          (ctx, env, cenv, subst, csubst, body)
+                          (ctx, env, cenv, tysubst, subst, csubst, body)
                         val exp = C.Abs
                           { contParam = contParam
+                          , tyParams = tyParams
                           , params = params
                           , body = body
+                          , resultTy = resultTy
                           , attr = attr
                           }
                         val env = TypedSyntax.VIdMap.insert
@@ -1012,17 +1048,19 @@ struct
                                else
                                  NONE (*, isDiscardableFunction = isDiscardableExp (env, body) *)}
                           )
-                        val dec = C.ValDec {exp = exp, results = [SOME result]}
+                        val dec = C.ValDec
+                          {exp = exp, results = [(SOME result, ty)]}
                       in
-                        (env, cenv, subst, csubst, dec :: acc)
+                        (env, cenv, tysubst, subst, csubst, dec :: acc)
                       end
                   | _ =>
                       (case (C.isDiscardable exp, results) of
-                         (true, [NONE]) => (env, cenv, subst, csubst, acc)
-                       | (_, [SOME result]) =>
+                         (true, [(NONE, _)]) =>
+                           (env, cenv, tysubst, subst, csubst, acc)
+                       | (_, [(SOME result, ty)]) =>
                            let
                              val dec = C.ValDec
-                               {exp = exp, results = [SOME result]}
+                               {exp = exp, results = [(SOME result, ty)]}
                              val env = TypedSyntax.VIdMap.insert
                                ( env
                                , result
@@ -1031,11 +1069,11 @@ struct
                                       exp (*, isDiscardableFunction = false *)}
                                )
                            in
-                             (env, cenv, subst, csubst, dec :: acc)
+                             (env, cenv, tysubst, subst, csubst, dec :: acc)
                            end
                        | _ =>
                            let val dec = C.ValDec {exp = exp, results = results}
-                           in (env, cenv, subst, csubst, dec :: acc)
+                           in (env, cenv, tysubst, subst, csubst, dec :: acc)
                            end)
                 end
           end
@@ -1043,19 +1081,53 @@ struct
           let
             val defs =
               List.map
-                (fn {name, contParam, params, body, attr} =>
+                (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                    { name = name
                    , contParam = contParam
-                   , params = params
-                   , body = simplifyStat (ctx, env, cenv, subst, csubst, body)
+                   , tyParams = tyParams
+                   , params =
+                       List.map
+                         (fn (v, ty) => (v, CpsSimplify.substTy tysubst ty))
+                         params
+                   , body = simplifyStat
+                       (ctx, env, cenv, tysubst, subst, csubst, body)
+                   , resultTy = CpsSimplify.substTy tysubst resultTy
                    , attr = attr
                    }) defs
           in
-            (env, cenv, subst, csubst, C.RecDec defs :: acc)
+            (env, cenv, tysubst, subst, csubst, C.RecDec defs :: acc)
           end
+      | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+          (case CpsSimplify.substValue (tysubst, subst) package of
+             C.Pack {value, payloadTy = payloadTy', packageTy = _} =>
+               let
+                 val subst = TypedSyntax.VIdMap.insert (subst, vid, value)
+                 val tysubst =
+                   TypedSyntax.TyVarMap.insert (tysubst, tyVar, payloadTy')
+               in
+                 (env, cenv, tysubst, subst, csubst, acc)
+               end
+           | package =>
+               ( env
+               , cenv
+               , tysubst
+               , subst
+               , csubst
+               , C.UnpackDec
+                   { tyVar = tyVar
+                   , kind = kind
+                   , vid = vid
+                   , payloadTy = payloadTy
+                   , package = package
+                   } :: acc
+               ))
       | C.ContDec {name, params, body, attr as {alwaysInline}} =>
           let
-            val body = simplifyStat (ctx, env, cenv, subst, csubst, body)
+            val params =
+              List.map (fn (v, ty) => (v, CpsSimplify.substTy tysubst ty))
+                params
+            val body = simplifyStat
+              (ctx, env, cenv, tysubst, subst, csubst, body)
             val cenv = C.CVarMap.insert
               ( cenv
               , name
@@ -1069,7 +1141,7 @@ struct
             val dec = C.ContDec
               {name = name, params = params, body = body, attr = attr}
           in
-            (env, cenv, subst, csubst, dec :: acc)
+            (env, cenv, tysubst, subst, csubst, dec :: acc)
           end
       | C.RecContDec defs =>
           let
@@ -1077,17 +1149,33 @@ struct
               (List.map
                  (fn (name, params, body) =>
                     ( name
-                    , params
-                    , simplifyStat (ctx, env, cenv, subst, csubst, body)
+                    , List.map
+                        (fn (v, ty) => (v, CpsSimplify.substTy tysubst ty))
+                        params
+                    , simplifyStat
+                        (ctx, env, cenv, tysubst, subst, csubst, body)
                     )) defs)
           in
-            (env, cenv, subst, csubst, dec :: acc)
+            (env, cenv, tysubst, subst, csubst, dec :: acc)
           end
-      | C.ESImportDec _ => (env, cenv, subst, csubst, dec :: acc)
+      | C.ESImportDec {pure, specs, moduleName} =>
+          let
+            val dec = C.ESImportDec
+              { pure = pure
+              , specs =
+                  List.map
+                    (fn (n, v, ty) => (n, v, CpsSimplify.substTy tysubst ty))
+                    specs
+              , moduleName = moduleName
+              }
+          in
+            (env, cenv, tysubst, subst, csubst, dec :: acc)
+          end
     and simplifyStat
       ( ctx: Context
       , env: value_info TypedSyntax.VIdMap.map
-      , cenv: ((C.Var option) list * C.Stat option) C.CVarMap.map
+      , cenv: ((C.Var option * F.Ty) list * C.Stat option) C.CVarMap.map
+      , tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map
       , subst: C.Value TypedSyntax.VIdMap.map
       , csubst: C.CVar C.CVarMap.map
       , e
@@ -1095,38 +1183,60 @@ struct
       case e of
         C.Let {decs, cont} =>
           let
-            val (env, cenv, subst, csubst, revDecs) =
-              List.foldl (simplifyDec ctx) (env, cenv, subst, csubst, []) decs
+            val (env, cenv, tysubst, subst, csubst, revDecs) =
+              List.foldl (simplifyDec ctx)
+                (env, cenv, tysubst, subst, csubst, []) decs
           in
             CpsTransform.prependRevDecs (revDecs, simplifyStat
-              (ctx, env, cenv, subst, csubst, cont))
+              (ctx, env, cenv, tysubst, subst, csubst, cont))
           end
-      | C.App {applied, cont, args, attr} =>
+      | C.App {applied, cont, tyArgs, args, attr} =>
           let
-            val applied = CpsSimplify.substValue subst applied
+            val applied = CpsSimplify.substValue (tysubst, subst) applied
             val cont = CpsSimplify.substCVar csubst cont
-            val args = List.map (CpsSimplify.substValue subst) args
+            val tyArgs = List.map (CpsSimplify.substTy tysubst) tyArgs
+            val args = List.map (CpsSimplify.substValue (tysubst, subst)) args
           in
             case applied of
               C.Var applied =>
                 (case TypedSyntax.VIdMap.find (env, applied) of
                    SOME
-                     { exp = SOME (C.Abs {contParam, params, body, attr = _})
+                     { exp =
+                         SOME
+                           (C.Abs
+                              { contParam
+                              , tyParams
+                              , params
+                              , body
+                              , resultTy = _
+                              , attr = _
+                              })
                      , ...
                      } =>
                      let
                        val () = #simplificationOccurred ctx := true
+                       val tysubst =
+                         ListPair.foldlEq
+                           (fn ((tv, _), a, tysubst) =>
+                              TypedSyntax.TyVarMap.insert (tysubst, tv, a))
+                           tysubst (tyParams, tyArgs)
+                         handle ListPair.UnequalLengths =>
+                           raise Fail
+                             ("inliner: arity mismatch in type application: ("
+                              ^ TypedSyntax.print_VId applied ^ ")")
                        val subst =
                          ListPair.foldlEq
-                           (fn (p, a, subst) =>
+                           (fn ((p, _), a, subst) =>
                               TypedSyntax.VIdMap.insert (subst, p, a)) subst
                            (params, args)
                          handle ListPair.UnequalLengths =>
                            raise Fail
-                             "inliner: arity mismatch in function application"
+                             ("inliner: arity mismatch in function application ("
+                              ^ TypedSyntax.print_VId applied ^ ")")
                        val csubst = C.CVarMap.insert (csubst, contParam, cont)
                      in
-                       CpsSimplify.alphaConvert (ctx, subst, csubst, body)
+                       CpsSimplify.alphaConvert
+                         (ctx, tysubst, subst, csubst, body)
                      end
                  (*
                  | SOME { exp = _, isDiscardableFunction = true } =>
@@ -1144,6 +1254,7 @@ struct
                      C.App
                        { applied = C.Var applied
                        , cont = cont
+                       , tyArgs = tyArgs
                        , args = args
                        , attr = attr
                        })
@@ -1151,6 +1262,7 @@ struct
                 C.App
                   { applied = applied
                   , cont = cont
+                  , tyArgs = tyArgs
                   , args = args
                   , attr = attr
                   } (* should not occur *)
@@ -1158,7 +1270,7 @@ struct
       | C.AppCont {applied, args} =>
           let
             val applied = CpsSimplify.substCVar csubst applied
-            val args = List.map (CpsSimplify.substValue subst) args
+            val args = List.map (CpsSimplify.substValue (tysubst, subst)) args
           in
             case C.CVarMap.find (cenv, applied) of
               SOME (params, SOME body) =>
@@ -1166,34 +1278,34 @@ struct
                   val () = #simplificationOccurred ctx := true
                   val subst =
                     ListPair.foldlEq
-                      (fn (SOME p, a, subst) =>
+                      (fn ((SOME p, _), a, subst) =>
                          TypedSyntax.VIdMap.insert (subst, p, a)
-                        | (NONE, _, subst) => subst) subst (params, args)
+                        | ((NONE, _), _, subst) => subst) subst (params, args)
                     handle ListPair.UnequalLengths =>
                       raise Fail
                         "inliner: arity mismatch in continuation application"
                 in
-                  CpsSimplify.alphaConvert (ctx, subst, csubst, body)
+                  CpsSimplify.alphaConvert (ctx, tysubst, subst, csubst, body)
                 end
             | _ => C.AppCont {applied = applied, args = args}
           end
       | C.If {cond, thenCont, elseCont} =>
-          (case CpsSimplify.substValue subst cond of
+          (case CpsSimplify.substValue (tysubst, subst) cond of
              C.BoolConst true =>
                ( #simplificationOccurred ctx := true
-               ; simplifyStat (ctx, env, cenv, subst, csubst, thenCont)
+               ; simplifyStat (ctx, env, cenv, tysubst, subst, csubst, thenCont)
                )
            | C.BoolConst false =>
                ( #simplificationOccurred ctx := true
-               ; simplifyStat (ctx, env, cenv, subst, csubst, elseCont)
+               ; simplifyStat (ctx, env, cenv, tysubst, subst, csubst, elseCont)
                )
            | cond =>
                C.If
                  { cond = cond
                  , thenCont = simplifyStat
-                     (ctx, env, cenv, subst, csubst, thenCont)
+                     (ctx, env, cenv, tysubst, subst, csubst, thenCont)
                  , elseCont = simplifyStat
-                     (ctx, env, cenv, subst, csubst, elseCont)
+                     (ctx, env, cenv, tysubst, subst, csubst, elseCont)
                  })
       | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
           C.Handle
@@ -1201,17 +1313,20 @@ struct
                 ( ctx
                 , env
                 , C.CVarMap.empty (* do not inline across 'handle' *)
+                , tysubst
                 , subst
                 , csubst
                 , body
                 )
-            , handler = (e, simplifyStat (ctx, env, cenv, subst, csubst, h))
+            , handler = (e, simplifyStat
+                (ctx, env, cenv, tysubst, subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
             }
-      | C.Raise (span, x) => C.Raise (span, CpsSimplify.substValue subst x)
+      | C.Raise (span, x) =>
+          C.Raise (span, CpsSimplify.substValue (tysubst, subst) x)
       | C.Unreachable => e
-    local val nextCont = ref ~1 val nextVId = ref ~1000
+    local val nextCont = ref ~1 val nextVId = ref ~1000 val nextTyVar = ref ~100
     in
       fun newCont () =
         let val i = !nextCont
@@ -1220,6 +1335,35 @@ struct
       fun newVId name =
         let val i = !nextVId
         in nextVId := i - 1; TypedSyntax.MkVId (name, i)
+        end
+      fun newTyVar name =
+        let val i = !nextTyVar
+        in nextTyVar := i - 1; TypedSyntax.MkTyVar (name, i)
+        end
+      fun TyAbs f =
+        let
+          val k = newCont ()
+          val tv = newTyVar "'a"
+          val (resultTy, body) = f (FSyntax.TyVar tv)
+        in
+          C.Abs
+            { contParam = k
+            , tyParams = [(tv, FSyntax.TypeKind)]
+            , params = []
+            , body =
+                let
+                  val result = newVId "a"
+                in
+                  C.Let
+                    { decs =
+                        [C.ValDec
+                           {exp = body, results = [(SOME result, resultTy)]}]
+                    , cont = C.AppCont {applied = k, args = [C.Var result]}
+                    }
+                end
+            , resultTy = resultTy
+            , attr = {alwaysInline = true, typeOnly = true}
+            }
         end
     end
     val General_exnName =
@@ -1230,7 +1374,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [e]
+          , tyParams = []
+          , params = [(e, FSyntax.Types.exn)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1239,11 +1384,12 @@ struct
                          , tyargs = []
                          , args = [C.Var e]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val Real_abs =
@@ -1254,7 +1400,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [x]
+          , tyParams = []
+          , params = [(x, FSyntax.Types.real)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1263,11 +1410,12 @@ struct
                          , tyargs = []
                          , args = [C.Var x]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.real)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.real
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val String_concat =
@@ -1278,7 +1426,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [xs]
+          , tyParams = []
+          , params = [(xs, FSyntax.Types.list FSyntax.Types.string)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1287,11 +1436,12 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val String_implode =
@@ -1302,7 +1452,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [xs]
+          , tyParams = []
+          , params = [(xs, FSyntax.Types.list FSyntax.Types.char)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1311,11 +1462,12 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val Vector_fromList =
@@ -1323,75 +1475,93 @@ struct
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "v"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
-        C.Abs
-          { contParam = k
-          , params = [xs]
-          , body = C.Let
-              { decs =
-                  [C.ValDec
-                     { exp = C.PrimOp
-                         { primOp = FSyntax.PrimCall Primitives.Vector_fromList
-                         , tyargs = [ty]
-                         , args = [C.Var xs]
-                         }
-                     , results = [SOME result]
-                     }]
-              , cont = C.AppCont {applied = k, args = [C.Var result]}
+        TyAbs (fn ty =>
+          ( F.MultiFnType ([FSyntax.Types.list ty], FSyntax.Types.vector ty)
+          , C.Abs
+              { contParam = k
+              , tyParams = []
+              , params = [(xs, FSyntax.Types.list ty)]
+              , body = C.Let
+                  { decs =
+                      [C.ValDec
+                         { exp = C.PrimOp
+                             { primOp =
+                                 FSyntax.PrimCall Primitives.Vector_fromList
+                             , tyargs = [ty]
+                             , args = [C.Var xs]
+                             }
+                         , results = [(SOME result, FSyntax.Types.vector ty)]
+                         }]
+                  , cont = C.AppCont {applied = k, args = [C.Var result]}
+                  }
+              , resultTy = FSyntax.Types.vector ty
+              , attr = {alwaysInline = true, typeOnly = false}
               }
-          , attr = {alwaysInline = true}
-          }
+          ))
       end
     val Vector_concat =
       let
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "v"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
-        C.Abs
-          { contParam = k
-          , params = [xs]
-          , body = C.Let
-              { decs =
-                  [C.ValDec
-                     { exp = C.PrimOp
-                         { primOp = FSyntax.PrimCall Primitives.Vector_concat
-                         , tyargs = [ty]
-                         , args = [C.Var xs]
-                         }
-                     , results = [SOME result]
-                     }]
-              , cont = C.AppCont {applied = k, args = [C.Var result]}
+        TyAbs (fn ty =>
+          ( F.MultiFnType
+              ( [FSyntax.Types.list (FSyntax.Types.vector ty)]
+              , FSyntax.Types.vector ty
+              )
+          , C.Abs
+              { contParam = k
+              , tyParams = []
+              , params = [(xs, FSyntax.Types.list (FSyntax.Types.vector ty))]
+              , body = C.Let
+                  { decs =
+                      [C.ValDec
+                         { exp = C.PrimOp
+                             { primOp =
+                                 FSyntax.PrimCall Primitives.Vector_concat
+                             , tyargs = [ty]
+                             , args = [C.Var xs]
+                             }
+                         , results = [(SOME result, FSyntax.Types.vector ty)]
+                         }]
+                  , cont = C.AppCont {applied = k, args = [C.Var result]}
+                  }
+              , resultTy = FSyntax.Types.vector ty
+              , attr = {alwaysInline = true, typeOnly = false}
               }
-          , attr = {alwaysInline = true}
-          }
+          ))
       end
     val Array_fromList =
       let
         val k = newCont ()
         val xs = newVId "xs"
         val result = newVId "a"
-        val ty = FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
       in
-        C.Abs
-          { contParam = k
-          , params = [xs]
-          , body = C.Let
-              { decs =
-                  [C.ValDec
-                     { exp = C.PrimOp
-                         { primOp = FSyntax.PrimCall Primitives.Array_fromList
-                         , tyargs = [ty]
-                         , args = [C.Var xs]
-                         }
-                     , results = [SOME result]
-                     }]
-              , cont = C.AppCont {applied = k, args = [C.Var result]}
+        TyAbs (fn ty =>
+          ( F.MultiFnType ([FSyntax.Types.list ty], FSyntax.Types.array ty)
+          , C.Abs
+              { contParam = k
+              , tyParams = []
+              , params = [(xs, FSyntax.Types.list ty)]
+              , body = C.Let
+                  { decs =
+                      [C.ValDec
+                         { exp = C.PrimOp
+                             { primOp =
+                                 FSyntax.PrimCall Primitives.Array_fromList
+                             , tyargs = [ty]
+                             , args = [C.Var xs]
+                             }
+                         , results = [(SOME result, FSyntax.Types.array ty)]
+                         }]
+                  , cont = C.AppCont {applied = k, args = [C.Var result]}
+                  }
+              , resultTy = FSyntax.Types.array ty
+              , attr = {alwaysInline = true, typeOnly = false}
               }
-          , attr = {alwaysInline = true}
-          }
+          ))
       end
     fun Exception_predicate tag =
       let
@@ -1401,7 +1571,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [e]
+          , tyParams = []
+          , params = [(e, FSyntax.Types.exn)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1411,11 +1582,12 @@ struct
                          , tyargs = []
                          , args = [C.Var e, C.Var tag]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.bool)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.bool
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val Fail_construct =
@@ -1426,7 +1598,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [message]
+          , tyParams = []
+          , params = [(message, FSyntax.Types.string)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1435,11 +1608,12 @@ struct
                          , tyargs = [FSyntax.Types.string]
                          , args = [C.Var InitialEnv.VId_Fail_tag, C.Var message]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.exn)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.exn
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val Fail_payload =
@@ -1450,7 +1624,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [e]
+          , tyParams = []
+          , params = [(e, FSyntax.Types.exn)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1459,11 +1634,12 @@ struct
                          , tyargs = [FSyntax.Types.string]
                          , args = [C.Var e]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val JavaScript_function =
@@ -1474,7 +1650,14 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [xs]
+          , tyParams = []
+          , params =
+              [( xs
+               , FSyntax.FnType
+                   ( FSyntax.Types.vector FSyntax.Types.js_value
+                   , FSyntax.Types.js_value
+                   )
+               )]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1484,11 +1667,12 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.js_value)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.js_value
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val JavaScript_encodeUtf8 =
@@ -1499,7 +1683,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [xs]
+          , tyParams = []
+          , params = [(xs, FSyntax.Types.string16)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1509,11 +1694,12 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val JavaScript_decodeUtf8 =
@@ -1524,7 +1710,8 @@ struct
       in
         C.Abs
           { contParam = k
-          , params = [xs]
+          , tyParams = []
+          , params = [(xs, FSyntax.Types.string)]
           , body = C.Let
               { decs =
                   [C.ValDec
@@ -1534,11 +1721,12 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [SOME result]
+                     , results = [(SOME result, FSyntax.Types.string)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , attr = {alwaysInline = true}
+          , resultTy = FSyntax.Types.string
+          , attr = {alwaysInline = true, typeOnly = false}
           }
       end
     val initialEnv: value_info TypedSyntax.VIdMap.map =
@@ -1586,6 +1774,7 @@ struct
         ( ctx
         , initialEnv
         , C.CVarMap.empty
+        , TypedSyntax.TyVarMap.empty
         , TypedSyntax.VIdMap.empty
         , C.CVarMap.empty
         , exp

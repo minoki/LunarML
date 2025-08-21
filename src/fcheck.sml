@@ -14,6 +14,22 @@ sig
     , valConEnv:
         ({tyParams: FSyntax.TyVar list, payload: FSyntax.Ty option} StringMap.map) TypedSyntax.TyVarMap.map
     }
+  val sameType: FSyntax.Ty TypedSyntax.TyVarMap.map
+                -> FSyntax.Ty * FSyntax.Ty
+                -> bool
+  val checkSame:
+    FSyntax.Ty TypedSyntax.TyVarMap.map * (unit -> string) * FSyntax.Ty
+    -> FSyntax.Ty
+    -> unit
+  structure TypeOfPrimitives:
+  sig
+    val typeOf:
+      Primitives.PrimOp
+      -> { vars: (FSyntax.TyVar * unit) list
+         , args: FSyntax.Ty vector
+         , results: FSyntax.Ty list
+         }
+  end
   val inferExp: Env * FSyntax.Exp -> FSyntax.Ty
   val checkExp: Env * (* expectedTy *) FSyntax.Ty * FSyntax.Exp -> unit
 end =
@@ -59,6 +75,7 @@ struct
       | kindOf env (F.TypeFn (tv, kind, ty)) =
           F.ArrowKind
             (kind, kindOf (TypedSyntax.TyVarMap.insert (env, tv, kind)) ty)
+      | kindOf env (F.AnyType kind) = kind
     and checkKind (env, expectedKind) ty =
       let
         val kind = kindOf env ty
@@ -102,6 +119,7 @@ struct
                 else
                   normalizeType (TypedSyntax.TyVarMap.insert (env, tv, arg))
                     body
+            | F.AnyType (F.ArrowKind (_, kind)) => F.AnyType kind
             | _ => F.AppType {applied = applied, arg = arg}
           end
       | normalizeType env (F.MultiFnType (params, result)) =
@@ -113,6 +131,7 @@ struct
           F.ExistsType (tv, kind, normalizeType env ty)
       | normalizeType env (F.TypeFn (tv, kind, ty)) =
           F.TypeFn (tv, kind, normalizeType env ty)
+      | normalizeType _ (ty as F.AnyType _) = ty
 
     (*: val sameType' : int * int TypedSyntax.TyVarMap.map * int TypedSyntax.TyVarMap.map -> F.Ty * F.Ty -> bool *)
     fun sameType' (_: int, tvmap, tvmap') (F.TyVar tv, F.TyVar tv') =
@@ -178,6 +197,8 @@ struct
           in
             sameType' env' (ty, ty')
           end
+      | sameType' _ (F.AnyType _, _) = true
+      | sameType' _ (_, F.AnyType _) = true
       | sameType' _ _ = false
     (*: val sameType : F.Ty TypedSyntax.TyVarMap.map -> F.Ty * F.Ty -> bool *)
     fun sameType env (ty, ty') =
@@ -590,14 +611,14 @@ struct
                 )
             | _ => raise TypeError "invalid function application"
           end
-      | inferExp (env, F.HandleExp {body, exnName, handler}) =
+      | inferExp (env, F.HandleExp {body, exnName, handler, resultTy}) =
           let
-            val ty = inferExp (env, body)
             val handlerEnv = modifyValEnv
               (fn m => TypedSyntax.VIdMap.insert (m, exnName, F.Types.exn), env)
           in
-            checkExp (handlerEnv, ty, handler);
-            ty
+            checkExp (env, resultTy, body);
+            checkExp (handlerEnv, resultTy, handler);
+            resultTy
           end
       | inferExp (env, F.IfThenElseExp (cond, then', else')) =
           let
@@ -721,14 +742,6 @@ struct
       | checkExp (env, expectedTy, F.LetExp (decs, exp)) =
           let val env' = inferDecs (env, decs)
           in checkExp (env', expectedTy, exp)
-          end
-      | checkExp (env, expectedTy, F.HandleExp {body, exnName, handler}) =
-          let
-            val handlerEnv = modifyValEnv
-              (fn m => TypedSyntax.VIdMap.insert (m, exnName, F.Types.exn), env)
-          in
-            checkExp (env, expectedTy, body);
-            checkExp (handlerEnv, expectedTy, handler)
           end
       | checkExp (env, expectedTy, F.IfThenElseExp (cond, then', else')) =
           ( checkExp (env, F.Types.bool, cond)

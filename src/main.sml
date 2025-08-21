@@ -94,7 +94,9 @@ struct
          , maxInt = SOME TargetInfo.maxInt54
          , wordSize = 32
          })
-  fun optimizeCps (_: {nextVId: int ref, printTimings: bool}) cexp 0 = cexp
+  fun optimizeCps
+        (_: {nextTyVar: int ref, nextVId: int ref, printTimings: bool}) cexp 0 =
+        cexp
     | optimizeCps ctx cexp n =
         let
           val () =
@@ -104,7 +106,10 @@ struct
               ()
           val timer = Timer.startCPUTimer ()
           val ctx' =
-            {nextVId = #nextVId ctx, simplificationOccurred = ref false}
+            { nextTyVar = #nextTyVar ctx
+            , nextVId = #nextVId ctx
+            , simplificationOccurred = ref false
+            }
           val cexp = CpsDeadCodeElimination.goStat (ctx', cexp)
           val cexp = CpsUncurry.goStat (ctx', cexp)
           val cexp = CpsUnpackRecordParameter.goStat (ctx', cexp)
@@ -643,6 +648,7 @@ struct
           end
         else
           ()
+      val nextTyVar = #nextTyVar (#driverContext ctx)
       val nextId = #nextVId (#driverContext ctx)
       val cont =
         let
@@ -657,14 +663,18 @@ struct
         | BACKEND_LUAJIT => true
         | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => false
         | BACKEND_JS {style = Backend.CPS, ...} => true
-      val cexp =
-        CpsTransform.transformT
+      val (_, cexp) =
+        CpsTransform.transformBlock
           ( { targetInfo = targetInfo
             , nextVId = nextId
             , exportAsRecord = exportAsRecord
             }
           , CpsTransform.initialEnv
-          ) fexp ([], cont)
+          ) fexp cont
+        handle CheckF.TypeError message =>
+          ( print ("internal type check failed: " ^ message ^ "\n")
+          ; raise Message.Abort
+          )
       val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then
@@ -673,15 +683,43 @@ struct
         else
           ()
       val cexp =
-        optimizeCps {nextVId = nextId, printTimings = #printTimings opts} cexp
-          (3 * (#optimizationLevel opts + 3))
+        optimizeCps
+          { nextTyVar = nextTyVar
+          , nextVId = nextId
+          , printTimings = #printTimings opts
+          } cexp (3 * (#optimizationLevel opts + 3))
       val cexp =
-        let val context = {nextVId = nextId, simplificationOccurred = ref false}
-        in CpsSimplify.finalizeStat (context, cexp)
+        let
+          val context =
+            { nextTyVar = nextTyVar
+            , nextVId = nextId
+            , simplificationOccurred = ref false
+            }
+        in
+          CpsSimplify.finalizeStat (context, cexp)
         end
       val cexp =
-        optimizeCps {nextVId = nextId, printTimings = #printTimings opts} cexp
-          (3 * (#optimizationLevel opts + 3))
+        optimizeCps
+          { nextTyVar = nextTyVar
+          , nextVId = nextId
+          , printTimings = #printTimings opts
+          } cexp (3 * (#optimizationLevel opts + 3))
+      val cexp =
+        let
+          val context =
+            { nextTyVar = nextTyVar
+            , nextVId = nextId
+            , simplificationOccurred = ref false
+            }
+        in
+          CpsErasePoly.transform (context, cexp)
+        end
+      val cexp =
+        optimizeCps
+          { nextTyVar = nextTyVar
+          , nextVId = nextId
+          , printTimings = #printTimings opts
+          } cexp (3 * (#optimizationLevel opts + 3))
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then

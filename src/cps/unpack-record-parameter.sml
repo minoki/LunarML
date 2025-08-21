@@ -66,86 +66,68 @@ local
         case CSyntax.CVarTable.find table c of
           SOME r => !r
         | NONE => {indirect = MANY} (* unknown *)
-      fun useValue env (C.Var v) =
-            (case TypedSyntax.VIdTable.find env v of
-               SOME r =>
-                 let
-                   val {call, project, other, labels} = !r
-                 in
-                   r
-                   :=
-                   { call = call
-                   , project = project
-                   , other = oneMore other
-                   , labels = labels
-                   }
-                 end
-             | NONE => ())
-        | useValue _ C.Unit = ()
-        | useValue _ C.Nil = ()
-        | useValue _ (C.BoolConst _) = ()
-        | useValue _ (C.IntConst _) = ()
-        | useValue _ (C.WordConst _) = ()
-        | useValue _ (C.CharConst _) = ()
-        | useValue _ (C.Char16Const _) = ()
-        | useValue _ (C.StringConst _) = ()
-        | useValue _ (C.String16Const _) = ()
-      fun useValueAsCallee (env, C.Var v) =
-            (case TypedSyntax.VIdTable.find env v of
-               SOME r =>
-                 let
-                   val {call, project, other, labels} = !r
-                 in
-                   r
-                   :=
-                   { call = oneMore call
-                   , project = project
-                   , other = other
-                   , labels = labels
-                   }
-                 end
-             | NONE => ())
-        | useValueAsCallee (_, C.Unit) = ()
-        | useValueAsCallee (_, C.Nil) = ()
-        | useValueAsCallee (_, C.BoolConst _) = ()
-        | useValueAsCallee (_, C.IntConst _) = ()
-        | useValueAsCallee (_, C.WordConst _) = ()
-        | useValueAsCallee (_, C.CharConst _) = ()
-        | useValueAsCallee (_, C.Char16Const _) = ()
-        | useValueAsCallee (_, C.StringConst _) = ()
-        | useValueAsCallee (_, C.String16Const _) = ()
-      fun useValueAsRecord (env, label, result, C.Var v) =
-            (case TypedSyntax.VIdTable.find env v of
-               SOME r =>
-                 let
-                   val {call, project, other, labels} = !r
-                   val result' =
-                     case result of
-                       SOME (TypedSyntax.MkVId (name, _)) => SOME name
-                     | NONE => NONE
-                   fun mergeOption (x as SOME _, _) = x
-                     | mergeOption (NONE, y) = y
-                 in
-                   r
-                   :=
-                   { call = call
-                   , project = oneMore project
-                   , other = other
-                   , labels =
-                       Syntax.LabelMap.insertWith mergeOption
-                         (labels, label, result')
-                   }
-                 end
-             | NONE => ())
-        | useValueAsRecord (_, _, _, C.Unit) = ()
-        | useValueAsRecord (_, _, _, C.Nil) = ()
-        | useValueAsRecord (_, _, _, C.BoolConst _) = ()
-        | useValueAsRecord (_, _, _, C.IntConst _) = ()
-        | useValueAsRecord (_, _, _, C.WordConst _) = ()
-        | useValueAsRecord (_, _, _, C.CharConst _) = ()
-        | useValueAsRecord (_, _, _, C.Char16Const _) = ()
-        | useValueAsRecord (_, _, _, C.StringConst _) = ()
-        | useValueAsRecord (_, _, _, C.String16Const _) = ()
+      fun useValue env v =
+        case C.extractVarFromValue v of
+          NONE => ()
+        | SOME var =>
+            case TypedSyntax.VIdTable.find env var of
+              SOME r =>
+                let
+                  val {call, project, other, labels} = !r
+                in
+                  r
+                  :=
+                  { call = call
+                  , project = project
+                  , other = oneMore other
+                  , labels = labels
+                  }
+                end
+            | NONE => ()
+      fun useValueAsCallee (env, v) =
+        case C.extractVarFromValue v of
+          NONE => ()
+        | SOME var =>
+            case TypedSyntax.VIdTable.find env var of
+              SOME r =>
+                let
+                  val {call, project, other, labels} = !r
+                in
+                  r
+                  :=
+                  { call = oneMore call
+                  , project = project
+                  , other = other
+                  , labels = labels
+                  }
+                end
+            | NONE => ()
+      fun useValueAsRecord (env, label, result, v) =
+        case C.extractVarFromValue v of
+          NONE => ()
+        | SOME var =>
+            case TypedSyntax.VIdTable.find env var of
+              SOME r =>
+                let
+                  val {call, project, other, labels} = !r
+                  val result' =
+                    case result of
+                      SOME (TypedSyntax.MkVId (name, _)) => SOME name
+                    | NONE => NONE
+                  fun mergeOption (x as SOME _, _) = x
+                    | mergeOption (NONE, y) = y
+                in
+                  r
+                  :=
+                  { call = call
+                  , project = oneMore project
+                  , other = other
+                  , labels =
+                      Syntax.LabelMap.insertWith mergeOption
+                        (labels, label, result')
+                  }
+                end
+            | NONE => ()
       fun useContVarIndirect cenv (v: C.CVar) =
         (case C.CVarTable.find cenv v of
            SOME r =>
@@ -184,7 +166,7 @@ local
               , C.Projection {label, record, fieldTypes = _}
               ) =
               (case results of
-                 [result] => useValueAsRecord (env, label, result, record)
+                 [(result, _)] => useValueAsRecord (env, label, result, record)
                | _ => () (* should not occur *))
           | goSimpleExp
               ( env
@@ -192,16 +174,24 @@ local
               , cenv
               , crenv
               , _
-              , C.Abs {contParam, params, body, attr = _}
+              , C.Abs
+                  { contParam
+                  , tyParams = _
+                  , params
+                  , body
+                  , resultTy = _
+                  , attr = _
+                  }
               ) =
-              ( List.app (fn p => add (env, p)) params
+              ( List.app (fn (p, _) => add (env, p)) params
               ; addC (cenv, contParam)
               ; goStat (env, renv, cenv, crenv, body)
               )
         and goDec (env, renv, cenv, crenv) =
           fn C.ValDec {exp, results} =>
             ( goSimpleExp (env, renv, cenv, crenv, results, exp)
-            ; List.app (fn SOME result => add (env, result) | NONE => ())
+            ; List.app
+                (fn (SOME result, _) => add (env, result) | (NONE, _) => ())
                 results
             )
            | C.RecDec defs =>
@@ -218,7 +208,7 @@ local
               List.app
                 (fn {contParam, params, body, ...} =>
                    ( addC (cenv, contParam)
-                   ; List.app (fn p => add (env, p)) params
+                   ; List.app (fn (p, _) => add (env, p)) params
                    ; goStat (env, renv, cenv, crenv, body)
                    )) defs;
               TypedSyntax.VIdMap.appi
@@ -228,8 +218,10 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
+           | C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package} =>
+            (useValue env package; add (env, vid))
            | C.ContDec {name, params, body, attr = _} =>
-            ( List.app (Option.app (fn p => add (env, p))) params
+            ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ()) params
             ; goStat (env, renv, cenv, crenv, body)
             ; addC (cenv, name)
             )
@@ -245,7 +237,8 @@ local
                 recursiveCEnv;
               List.app
                 (fn (_, params, body) =>
-                   ( List.app (Option.app (fn p => add (env, p))) params
+                   ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ())
+                       params
                    ; goStat (env, renv, cenv, crenv, body)
                    )) defs;
               C.CVarMap.appi (fn (f, v) => C.CVarTable.insert crenv (f, v))
@@ -255,7 +248,7 @@ local
                 defs
             end
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
-            List.app (fn (_, vid) => add (env, vid)) specs
+            List.app (fn (_, vid, _) => add (env, vid)) specs
         and goStat
           ( env: (usage ref) TypedSyntax.VIdTable.hash_table
           , renv
@@ -268,7 +261,7 @@ local
               ( List.app (goDec (env, renv, cenv, crenv)) decs
               ; goStat (env, renv, cenv, crenv, cont)
               )
-          | C.App {applied, cont, args, attr = _} =>
+          | C.App {applied, cont, tyArgs = _, args, attr = _} =>
               ( useValueAsCallee (env, applied)
               ; useContVarIndirect cenv cont
               ; List.app (useValue env) args
@@ -331,8 +324,8 @@ in
       datatype param_transform =
         KEEP
       | ELIMINATE
-      | UNPACK of (C.Var * Syntax.Label) list
-      fun tryUnpackParam (ctx: Context, usage) param =
+      | UNPACK of (C.Var * Syntax.Label * FSyntax.Ty) list
+      fun tryUnpackParam (ctx: Context, usage) (param, recordTy) =
         case CpsUsageAnalysis.getValueUsage (usage, param) of
           {call = NEVER, project = NEVER, other = NEVER, labels = _} =>
             ELIMINATE
@@ -348,11 +341,23 @@ in
                             case label of
                               Syntax.IdentifierLabel name => name
                             | Syntax.NumericLabel n => "_" ^ Int.toString n
+                      val fieldTy =
+                        case FSyntax.weakNormalizeTy recordTy of
+                          FSyntax.RecordType fieldTypes =>
+                            (case Syntax.LabelMap.find (fieldTypes, label) of
+                               SOME fieldTy => fieldTy
+                             | NONE => raise Fail "missing field")
+                        | anyTy as FSyntax.AnyType FSyntax.TypeKind => anyTy
+                        | recordTy =>
+                            raise Fail
+                              ("invalid record type: "
+                               ^ Printer.build (FPrinter.doTy 0 recordTy))
                     in
-                      (CpsSimplify.newVId (#base ctx, name), label) :: acc
+                      (CpsSimplify.newVId (#base ctx, name), label, fieldTy)
+                      :: acc
                     end) [] labels)
         | _ => KEEP
-      fun tryUnpackContParam (ctx: Context, usage) (SOME param) =
+      fun tryUnpackContParam (ctx: Context, usage) (SOME param, recordTy) =
             (case CpsUsageAnalysis.getValueUsage (usage, param) of
                {call = NEVER, project = NEVER, other = NEVER, labels = _} =>
                  ELIMINATE
@@ -368,15 +373,40 @@ in
                                  case label of
                                    Syntax.IdentifierLabel name => name
                                  | Syntax.NumericLabel n => "_" ^ Int.toString n
+                           val fieldTy =
+                             case FSyntax.weakNormalizeTy recordTy of
+                               FSyntax.RecordType fieldTypes =>
+                                 (case Syntax.LabelMap.find (fieldTypes, label) of
+                                    SOME fieldTy => fieldTy
+                                  | NONE => raise Fail "missing field")
+                             | anyTy as FSyntax.AnyType FSyntax.TypeKind =>
+                                 anyTy
+                             | recordTy =>
+                                 raise Fail
+                                   ("invalid record type: "
+                                    ^ Printer.build (FPrinter.doTy 0 recordTy))
                          in
-                           (CpsSimplify.newVId (#base ctx, name), label) :: acc
+                           ( CpsSimplify.newVId (#base ctx, name)
+                           , label
+                           , fieldTy
+                           ) :: acc
                          end) [] labels)
              | _ => KEEP)
-        | tryUnpackContParam (_, _) NONE = ELIMINATE
+        | tryUnpackContParam (_, _) (NONE, _) = ELIMINATE
       fun simplifyDec (ctx: Context) (dec, acc: C.Dec list) =
         case dec of
           C.ValDec
-            {exp = C.Abs {contParam, params, body, attr}, results = [SOME name]} =>
+            { exp =
+                C.Abs
+                  { contParam
+                  , tyParams
+                  , params
+                  , body
+                  , resultTy
+                  , attr as {typeOnly, ...}
+                  }
+            , results = [(SOME name, fnTy)]
+            } =>
             let
               val shouldTransformParams =
                 case CpsUsageAnalysis.getValueUsage (#usage ctx, name) of
@@ -398,58 +428,75 @@ in
                 SOME paramTransforms =>
                   let
                     val () = #simplificationOccurred (#base ctx) := true
-                    val worker =
-                      let
-                        val workerParams =
-                          ListPair.foldrEq
-                            (fn (p, KEEP, acc) => p :: acc
-                              | (_, ELIMINATE, acc) => acc
-                              | (_, UNPACK fields, acc) =>
-                               List.map #1 fields @ acc) []
-                            (params, paramTransforms)
-                        val workerDecs =
-                          ListPair.foldrEq
-                            (fn (p, UNPACK fields, decs) =>
+                    val workerParams =
+                      ListPair.foldrEq
+                        (fn (p, KEEP, acc) => p :: acc
+                          | (_, ELIMINATE, acc) => acc
+                          | (_, UNPACK fields, acc) =>
+                           List.map (fn (v, _, ty) => (v, ty)) fields @ acc) []
+                        (params, paramTransforms)
+                    local
+                      val workerDecs =
+                        ListPair.foldrEq
+                          (fn ((p, _), UNPACK fields, decs) =>
+                             let
+                               val expMap =
+                                 List.foldl
+                                   (fn ((fieldVar, label, _), map) =>
+                                      Syntax.LabelMap.insert
+                                        (map, label, C.Var fieldVar))
+                                   Syntax.LabelMap.empty fields
+                               val tyMap =
+                                 List.foldl
+                                   (fn ((_, label, ty), map) =>
+                                      Syntax.LabelMap.insert (map, label, ty))
+                                   Syntax.LabelMap.empty fields
+                             in
                                C.ValDec
-                                 { exp = C.Record
-                                     (List.foldl
-                                        (fn ((fieldVar, label), map) =>
-                                           Syntax.LabelMap.insert
-                                             (map, label, C.Var fieldVar))
-                                        Syntax.LabelMap.empty fields)
-                                 , results = [SOME p]
+                                 { exp = C.Record expMap
+                                 , results =
+                                     [(SOME p, FSyntax.RecordType tyMap)]
                                  } :: decs
-                              | (_, KEEP, decs) => decs
-                              | (_, ELIMINATE, decs) => decs) []
-                            (params, paramTransforms)
-                        val workerBody =
-                          case workerDecs of
-                            [] => body
-                          | _ => C.Let {decs = workerDecs, cont = body}
-                        val workerBody = simplifyStat (ctx, workerBody)
-                      in
-                        C.Abs
-                          { contParam = contParam
-                          , params = workerParams
-                          , body = workerBody
-                          , attr = attr
-                          }
-                      end
+                             end
+                            | (_, KEEP, decs) => decs
+                            | (_, ELIMINATE, decs) => decs) []
+                          (params, paramTransforms)
+                      val workerBody =
+                        case workerDecs of
+                          [] => body
+                        | _ => C.Let {decs = workerDecs, cont = body}
+                      val workerBody = simplifyStat (ctx, workerBody)
+                    in
+                      val worker = C.Abs
+                        { contParam = contParam
+                        , tyParams = tyParams
+                        , params = workerParams
+                        , body = workerBody
+                        , resultTy = resultTy
+                        , attr = attr
+                        }
+                    end
                     val workerName = CpsSimplify.renewVId (#base ctx, name)
                     val wrapper =
                       let
                         val k = CpsSimplify.genContSym (#base ctx)
+                        val wrapperTyParams =
+                          List.map
+                            (fn (tv, kind) =>
+                               (CpsSimplify.renewTyVar (#base ctx, tv), kind))
+                            tyParams
                         val wrapperParams =
-                          List.map (fn p => CpsSimplify.renewVId (#base ctx, p))
-                            params
+                          List.map
+                            (fn (p, ty) =>
+                               (CpsSimplify.renewVId (#base ctx, p), ty)) params
                         val (decs, args) =
                           ListPair.foldrEq
-                            (fn (p, KEEP, (decs, args)) =>
+                            (fn ((p, _), KEEP, (decs, args)) =>
                                (decs, C.Var p :: args)
                               | (_, ELIMINATE, acc) => acc
-                              | (p, UNPACK fields, (decs, args)) =>
+                              | ((p, _), UNPACK fields, (decs, args)) =>
                                List.foldr
-                                 (fn ((v, label), (decs, args)) =>
+                                 (fn ((v, label, ty), (decs, args)) =>
                                     let
                                       val v =
                                         CpsSimplify.renewVId (#base ctx, v)
@@ -461,7 +508,7 @@ in
                                               , fieldTypes =
                                                   Syntax.LabelMap.empty (* dummy *)
                                               }
-                                        , results = [SOME v]
+                                        , results = [(SOME v, ty)]
                                         }
                                     in
                                       (dec :: decs, C.Var v :: args)
@@ -470,23 +517,30 @@ in
                       in
                         C.Abs
                           { contParam = k
+                          , tyParams = wrapperTyParams
                           , params = wrapperParams
                           , body = C.Let
                               { decs = decs
                               , cont = C.App
                                   { applied = C.Var workerName
                                   , cont = k
+                                  , tyArgs =
+                                      List.map (fn (tv, _) => FSyntax.TyVar tv)
+                                        wrapperTyParams
                                   , args = args
-                                  , attr = {}
+                                  , attr = {typeOnly = typeOnly}
                                   }
                               }
-                          , attr = {alwaysInline = true}
+                          , resultTy = resultTy
+                          , attr = {alwaysInline = true, typeOnly = typeOnly}
                           }
                       end
+                    val workerTy = FSyntax.MultiFnType
+                      (List.map #2 workerParams, resultTy)
                     val workerDec = C.ValDec
-                      {exp = worker, results = [SOME workerName]}
+                      {exp = worker, results = [(SOME workerName, workerTy)]}
                     val wrapperDec = C.ValDec
-                      {exp = wrapper, results = [SOME name]}
+                      {exp = wrapper, results = [(SOME name, fnTy)]}
                   in
                     wrapperDec :: workerDec :: acc
                   end
@@ -495,11 +549,14 @@ in
                     val body = simplifyStat (ctx, body)
                     val exp = C.Abs
                       { contParam = contParam
+                      , tyParams = tyParams
                       , params = params
                       , body = body
+                      , resultTy = resultTy
                       , attr = attr
                       }
-                    val dec = C.ValDec {exp = exp, results = [SOME name]}
+                    val dec = C.ValDec
+                      {exp = exp, results = [(SOME name, fnTy)]}
                   in
                     dec :: acc
                   end
@@ -508,7 +565,16 @@ in
         | C.RecDec defs =>
             let
               fun transform
-                ({name, contParam, params, body, attr}, (wrappers, acc)) =
+                ( { name
+                  , contParam
+                  , tyParams
+                  , params
+                  , body
+                  , resultTy
+                  , attr as {typeOnly, ...}
+                  }
+                , (wrappers, acc)
+                ) =
                 let
                   val shouldTransformParams =
                     case CpsUsageAnalysis.getValueUsage (#usage ctx, name) of
@@ -542,20 +608,30 @@ in
                             (fn (p, KEEP, acc) => p :: acc
                               | (_, ELIMINATE, acc) => acc
                               | (_, UNPACK fields, acc) =>
-                               List.map #1 fields @ acc) []
-                            (params, paramTransforms)
+                               List.map (fn (v, _, ty) => (v, ty)) fields @ acc)
+                            [] (params, paramTransforms)
                         val workerDecs =
                           ListPair.foldrEq
-                            (fn (p, UNPACK fields, decs) =>
-                               C.ValDec
-                                 { exp = C.Record
-                                     (List.foldl
-                                        (fn ((fieldVar, label), map) =>
-                                           Syntax.LabelMap.insert
-                                             (map, label, C.Var fieldVar))
-                                        Syntax.LabelMap.empty fields)
-                                 , results = [SOME p]
-                                 } :: decs
+                            (fn ((p, _), UNPACK fields, decs) =>
+                               let
+                                 val expMap =
+                                   List.foldl
+                                     (fn ((fieldVar, label, _), map) =>
+                                        Syntax.LabelMap.insert
+                                          (map, label, C.Var fieldVar))
+                                     Syntax.LabelMap.empty fields
+                                 val tyMap =
+                                   List.foldl
+                                     (fn ((_, label, ty), map) =>
+                                        Syntax.LabelMap.insert (map, label, ty))
+                                     Syntax.LabelMap.empty fields
+                               in
+                                 C.ValDec
+                                   { exp = C.Record expMap
+                                   , results =
+                                       [(SOME p, FSyntax.RecordType tyMap)]
+                                   } :: decs
+                               end
                               | (_, KEEP, decs) => decs
                               | (_, ELIMINATE, decs) => decs) []
                             (params, paramTransforms)
@@ -567,18 +643,25 @@ in
                         val wrapper =
                           let
                             val k = CpsSimplify.genContSym (#base ctx)
+                            val wrapperTyParams =
+                              List.map
+                                (fn (tv, kind) =>
+                                   ( CpsSimplify.renewTyVar (#base ctx, tv)
+                                   , kind
+                                   )) tyParams
                             val wrapperParams =
                               List.map
-                                (fn p => CpsSimplify.renewVId (#base ctx, p))
+                                (fn (p, ty) =>
+                                   (CpsSimplify.renewVId (#base ctx, p), ty))
                                 params
                             val (decs, args) =
                               ListPair.foldrEq
-                                (fn (p, KEEP, (decs, args)) =>
+                                (fn ((p, _), KEEP, (decs, args)) =>
                                    (decs, C.Var p :: args)
                                   | (_, ELIMINATE, acc) => acc
-                                  | (p, UNPACK fields, (decs, args)) =>
+                                  | ((p, _), UNPACK fields, (decs, args)) =>
                                    List.foldr
-                                     (fn ((v, label), (decs, args)) =>
+                                     (fn ((v, label, ty), (decs, args)) =>
                                         let
                                           val v =
                                             CpsSimplify.renewVId (#base ctx, v)
@@ -590,7 +673,7 @@ in
                                                   , fieldTypes =
                                                       Syntax.LabelMap.empty (* dummy *)
                                                   }
-                                            , results = [SOME v]
+                                            , results = [(SOME v, ty)]
                                             }
                                         in
                                           (dec :: decs, C.Var v :: args)
@@ -598,17 +681,23 @@ in
                                 (wrapperParams, paramTransforms)
                           in
                             { contParam = k
+                            , tyParams = wrapperTyParams
                             , params = wrapperParams
                             , body = C.Let
                                 { decs = decs
                                 , cont = C.App
                                     { applied = C.Var workerName
                                     , cont = k
+                                    , tyArgs =
+                                        List.map
+                                          (fn (tv, _) => FSyntax.TyVar tv)
+                                          wrapperTyParams
                                     , args = args
-                                    , attr = {}
+                                    , attr = {typeOnly = typeOnly}
                                     }
                                 }
-                            , attr = {alwaysInline = true}
+                            , resultTy = resultTy
+                            , attr = {alwaysInline = true, typeOnly = typeOnly}
                             }
                           end
                         val wrappers =
@@ -617,8 +706,10 @@ in
                         ( wrappers
                         , { name = workerName
                           , contParam = contParam
+                          , tyParams = tyParams
                           , params = workerParams
                           , body = workerBody
+                          , resultTy = resultTy
                           , attr = attr
                           } :: acc
                         )
@@ -627,8 +718,10 @@ in
                       ( wrappers
                       , { name = name
                         , contParam = contParam
+                        , tyParams = tyParams
                         , params = params
                         , body = body
+                        , resultTy = resultTy
                         , attr = attr
                         } :: acc
                       )
@@ -637,7 +730,7 @@ in
                 List.foldr transform (TypedSyntax.VIdMap.empty, []) defs
               val defs =
                 List.map
-                  (fn {name, contParam, params, body, attr} =>
+                  (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                      let
                        val body =
                          if TypedSyntax.VIdMap.isEmpty wrappers then
@@ -648,6 +741,7 @@ in
                                   C.App
                                     { applied = C.Var applied
                                     , cont
+                                    , tyArgs
                                     , args
                                     , attr = _
                                     } =>
@@ -655,37 +749,111 @@ in
                                    TypedSyntax.VIdMap.find (wrappers, applied)
                                  of
                                    NONE => e
-                                 | SOME {contParam, params, body, attr = _} =>
+                                 | SOME
+                                     { contParam
+                                     , tyParams
+                                     , params
+                                     , body
+                                     , resultTy = _
+                                     , attr = _
+                                     } =>
                                      let
+                                       val tysubst =
+                                         ListPair.foldlEq
+                                           (fn ((tv, _), a, tysubst) =>
+                                              TypedSyntax.TyVarMap.insert
+                                                (tysubst, tv, a))
+                                           TypedSyntax.TyVarMap.empty
+                                           (tyParams, tyArgs)
+                                         handle ListPair.UnequalLengths =>
+                                           raise Fail
+                                             ("CpsUnpackRecordParameter: "
+                                              ^ TypedSyntax.print_VId name
+                                              ^ ": tyParams ("
+                                              ^
+                                              String.concatWith ", "
+                                                (List.map
+                                                   (fn (tv, _) =>
+                                                      Printer.build
+                                                        (FPrinter.doTyVar tv))
+                                                   tyParams) ^ ") vs tyArgs ("
+                                              ^
+                                              String.concatWith ", "
+                                                (List.map
+                                                   (Printer.build
+                                                    o FPrinter.doTy 0) tyArgs)
+                                              ^ ")")
                                        val subst =
                                          ListPair.foldlEq
-                                           (fn (p, a, subst) =>
+                                           (fn ((p, _), a, subst) =>
                                               TypedSyntax.VIdMap.insert
                                                 (subst, p, a))
                                            TypedSyntax.VIdMap.empty
                                            (params, args)
+                                         handle ListPair.UnequalLengths =>
+                                           raise Fail
+                                             ("CpsUnpackRecordParameter: "
+                                              ^ TypedSyntax.print_VId name
+                                              ^ ": params ("
+                                              ^
+                                              String.concatWith ", "
+                                                (List.map
+                                                   (fn (v, _) =>
+                                                      TypedSyntax.print_VId v)
+                                                   params) ^ ") vs args ("
+                                              ^
+                                              String.concatWith ", "
+                                                (List.map CSyntax.valueToString
+                                                   args) ^ ")")
                                        val csubst =
                                          C.CVarMap.singleton (contParam, cont)
                                      in
                                        CpsSimplify.alphaConvert
-                                         (#base ctx, subst, csubst, body)
+                                         ( #base ctx
+                                         , tysubst
+                                         , subst
+                                         , csubst
+                                         , body
+                                         )
                                      end)
                                | e => e) body
                        val body = simplifyStat (ctx, body)
                      in
                        { name = name
                        , contParam = contParam
+                       , tyParams = tyParams
                        , params = params
                        , body = body
+                       , resultTy = resultTy
                        , attr = attr
                        }
                      end) defs
             in
               TypedSyntax.VIdMap.foldli
-                (fn (name, wrapper, acc) =>
-                   C.ValDec {exp = C.Abs wrapper, results = [SOME name]} :: acc)
-                (C.RecDec defs :: acc) wrappers
+                (fn ( name
+                    , {contParam, tyParams, params, body, resultTy, attr}
+                    , acc
+                    ) =>
+                   let
+                     val wrapperTy = FSyntax.MultiFnType
+                       ( List.map #2 params
+                       , resultTy
+                       ) (* TODO: type parameters *)
+                   in
+                     C.ValDec
+                       { exp = C.Abs
+                           { contParam = contParam
+                           , tyParams = tyParams
+                           , params = params
+                           , body = body
+                           , resultTy = resultTy
+                           , attr = attr
+                           }
+                       , results = [(SOME name, wrapperTy)]
+                       } :: acc
+                   end) (C.RecDec defs :: acc) wrappers
             end
+        | C.UnpackDec _ => dec :: acc
         | C.ContDec {name, params, body, attr} =>
             let
               val shouldTransformParams =
@@ -714,23 +882,33 @@ in
                     val () = #simplificationOccurred (#base ctx) := true
                     val params' =
                       ListPair.foldrEq
-                        (fn (SOME p, KEEP, acc) => p :: acc
-                          | (SOME _, ELIMINATE, acc) => acc
-                          | (SOME _, UNPACK fields, acc) =>
-                           List.map #1 fields @ acc
-                          | (NONE, _, acc) => acc) [] (params, paramTransforms)
+                        (fn ((SOME p, ty), KEEP, acc) => (p, ty) :: acc
+                          | ((SOME _, _), ELIMINATE, acc) => acc
+                          | ((SOME _, _), UNPACK fields, acc) =>
+                           List.map (fn (v, _, ty) => (v, ty)) fields @ acc
+                          | ((NONE, _), _, acc) => acc) []
+                        (params, paramTransforms)
                     val decs =
                       ListPair.foldrEq
-                        (fn (p, UNPACK fields, decs) =>
-                           C.ValDec
-                             { exp = C.Record
-                                 (List.foldl
-                                    (fn ((fieldVar, label), map) =>
-                                       Syntax.LabelMap.insert
-                                         (map, label, C.Var fieldVar))
-                                    Syntax.LabelMap.empty fields)
-                             , results = [p]
-                             } :: decs
+                        (fn ((p, _), UNPACK fields, decs) =>
+                           let
+                             val expMap =
+                               List.foldl
+                                 (fn ((fieldVar, label, _), map) =>
+                                    Syntax.LabelMap.insert
+                                      (map, label, C.Var fieldVar))
+                                 Syntax.LabelMap.empty fields
+                             val tyMap =
+                               List.foldl
+                                 (fn ((_, label, ty), map) =>
+                                    Syntax.LabelMap.insert (map, label, ty))
+                                 Syntax.LabelMap.empty fields
+                           in
+                             C.ValDec
+                               { exp = C.Record expMap
+                               , results = [(p, FSyntax.RecordType tyMap)]
+                               } :: decs
+                           end
                           | (_, KEEP, decs) => decs
                           | (_, ELIMINATE, decs) => decs) []
                         (params, paramTransforms)
@@ -744,16 +922,17 @@ in
                       let
                         val params' =
                           List.map
-                            (Option.map (fn p =>
-                               CpsSimplify.renewVId (#base ctx, p))) params
+                            (fn (SOME p, ty) =>
+                               (SOME (CpsSimplify.renewVId (#base ctx, p)), ty)
+                              | a as (NONE, _) => a) params
                         val (decs, args) =
                           ListPair.foldrEq
-                            (fn (SOME p, KEEP, (decs, args)) =>
+                            (fn ((SOME p, _), KEEP, (decs, args)) =>
                                (decs, C.Var p :: args)
-                              | (SOME _, ELIMINATE, acc) => acc
-                              | (SOME p, UNPACK fields, (decs, args)) =>
+                              | ((SOME _, _), ELIMINATE, acc) => acc
+                              | ((SOME p, _), UNPACK fields, (decs, args)) =>
                                List.foldr
-                                 (fn ((v, label), (decs, args)) =>
+                                 (fn ((v, label, ty), (decs, args)) =>
                                     let
                                       val v =
                                         CpsSimplify.renewVId (#base ctx, v)
@@ -765,12 +944,12 @@ in
                                               , fieldTypes =
                                                   Syntax.LabelMap.empty (* dummy *)
                                               }
-                                        , results = [SOME v]
+                                        , results = [(SOME v, ty)]
                                         }
                                     in
                                       (dec :: decs, C.Var v :: args)
                                     end) (decs, args) fields
-                              | (NONE, _, acc) => acc) ([], [])
+                              | ((NONE, _), _, acc) => acc) ([], [])
                             (params', paramTransforms)
                       in
                         C.ContDec
@@ -785,7 +964,7 @@ in
                       end
                     val dec = C.ContDec
                       { name = name'
-                      , params = List.map SOME params'
+                      , params = List.map (fn (v, ty) => (SOME v, ty)) params'
                       , body = body
                       , attr = attr
                       }
@@ -839,24 +1018,33 @@ in
                         val () = #simplificationOccurred (#base ctx) := true
                         val params' =
                           ListPair.foldrEq
-                            (fn (SOME p, KEEP, acc) => p :: acc
-                              | (SOME _, ELIMINATE, acc) => acc
-                              | (SOME _, UNPACK fields, acc) =>
-                               List.map #1 fields @ acc
-                              | (NONE, _, acc) => acc) []
+                            (fn ((SOME p, ty), KEEP, acc) => (p, ty) :: acc
+                              | ((SOME _, _), ELIMINATE, acc) => acc
+                              | ((SOME _, _), UNPACK fields, acc) =>
+                               List.map (fn (v, _, ty) => (v, ty)) fields @ acc
+                              | ((NONE, _), _, acc) => acc) []
                             (params, paramTransforms)
                         val decs =
                           ListPair.foldrEq
-                            (fn (p, UNPACK fields, decs) =>
-                               C.ValDec
-                                 { exp = C.Record
-                                     (List.foldl
-                                        (fn ((fieldVar, label), map) =>
-                                           Syntax.LabelMap.insert
-                                             (map, label, C.Var fieldVar))
-                                        Syntax.LabelMap.empty fields)
-                                 , results = [p]
-                                 } :: decs
+                            (fn ((p, _), UNPACK fields, decs) =>
+                               let
+                                 val expMap =
+                                   List.foldl
+                                     (fn ((fieldVar, label, _), map) =>
+                                        Syntax.LabelMap.insert
+                                          (map, label, C.Var fieldVar))
+                                     Syntax.LabelMap.empty fields
+                                 val tyMap =
+                                   List.foldl
+                                     (fn ((_, label, ty), map) =>
+                                        Syntax.LabelMap.insert (map, label, ty))
+                                     Syntax.LabelMap.empty fields
+                               in
+                                 C.ValDec
+                                   { exp = C.Record expMap
+                                   , results = [(p, FSyntax.RecordType tyMap)]
+                                   } :: decs
+                               end
                               | (_, KEEP, decs) => decs
                               | (_, ELIMINATE, decs) => decs) []
                             (params, paramTransforms)
@@ -869,16 +1057,19 @@ in
                           let
                             val params' =
                               List.map
-                                (Option.map (fn p =>
-                                   CpsSimplify.renewVId (#base ctx, p))) params
+                                (fn (SOME p, ty) =>
+                                   ( SOME (CpsSimplify.renewVId (#base ctx, p))
+                                   , ty
+                                   )
+                                  | a as (NONE, _) => a) params
                             val (decs, args) =
                               ListPair.foldrEq
-                                (fn (SOME p, KEEP, (decs, args)) =>
+                                (fn ((SOME p, _), KEEP, (decs, args)) =>
                                    (decs, C.Var p :: args)
-                                  | (SOME _, ELIMINATE, acc) => acc
-                                  | (SOME p, UNPACK fields, (decs, args)) =>
+                                  | ((SOME _, _), ELIMINATE, acc) => acc
+                                  | ((SOME p, _), UNPACK fields, (decs, args)) =>
                                    List.foldr
-                                     (fn ((v, label), (decs, args)) =>
+                                     (fn ((v, label, ty), (decs, args)) =>
                                         let
                                           val v =
                                             CpsSimplify.renewVId (#base ctx, v)
@@ -890,12 +1081,12 @@ in
                                                   , fieldTypes =
                                                       Syntax.LabelMap.empty (* dummy *)
                                                   }
-                                            , results = [SOME v]
+                                            , results = [(SOME v, ty)]
                                             }
                                         in
                                           (dec :: decs, C.Var v :: args)
                                         end) (decs, args) fields
-                                  | (NONE, _, acc) => acc) ([], [])
+                                  | ((NONE, _), _, acc) => acc) ([], [])
                                 (params', paramTransforms)
                           in
                             ( params'
@@ -910,7 +1101,8 @@ in
                         { origName = name
                         , body = body
                         , newName = name'
-                        , newParams = List.map SOME params'
+                        , newParams =
+                            List.map (fn (p, ty) => (SOME p, ty)) params'
                         , inline = wrapper
                         }
                       end
@@ -940,15 +1132,16 @@ in
                                     let
                                       val subst =
                                         ListPair.foldlEq
-                                          (fn (SOME p, a, subst) =>
+                                          (fn ((SOME p, _), a, subst) =>
                                              TypedSyntax.VIdMap.insert
                                                (subst, p, a)
-                                            | (NONE, _, subst) => subst)
+                                            | ((NONE, _), _, subst) => subst)
                                           TypedSyntax.VIdMap.empty
                                           (params, args)
                                     in
                                       CpsSimplify.alphaConvert
                                         ( #base ctx
+                                        , TypedSyntax.TyVarMap.empty
                                         , subst
                                         , C.CVarMap.empty
                                         , wrapperBody

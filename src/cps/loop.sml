@@ -24,22 +24,16 @@ local
         case TypedSyntax.VIdTable.find table v of
           SOME r => !r
         | NONE => {returnConts = CSyntax.CVarSet.empty} (* unknown *)
-      fun useValueAsCallee (env, cont, C.Var v) =
-            (case TypedSyntax.VIdTable.find env v of
-               SOME r =>
-                 let val {returnConts} = !r
-                 in r := {returnConts = C.CVarSet.add (returnConts, cont)}
-                 end
-             | NONE => ())
-        | useValueAsCallee (_, _, C.Unit) = ()
-        | useValueAsCallee (_, _, C.Nil) = ()
-        | useValueAsCallee (_, _, C.BoolConst _) = ()
-        | useValueAsCallee (_, _, C.IntConst _) = ()
-        | useValueAsCallee (_, _, C.WordConst _) = ()
-        | useValueAsCallee (_, _, C.CharConst _) = ()
-        | useValueAsCallee (_, _, C.Char16Const _) = ()
-        | useValueAsCallee (_, _, C.StringConst _) = ()
-        | useValueAsCallee (_, _, C.String16Const _) = ()
+      fun useValueAsCallee (env, cont, v) =
+        case C.extractVarFromValue v of
+          NONE => ()
+        | SOME var =>
+            case TypedSyntax.VIdTable.find env var of
+              SOME r =>
+                let val {returnConts} = !r
+                in r := {returnConts = C.CVarSet.add (returnConts, cont)}
+                end
+            | NONE => ()
       local
         fun add (env, v) =
           if TypedSyntax.VIdTable.inDomain env v then
@@ -53,12 +47,25 @@ local
           | goSimpleExp (_, _, C.ExnTag _) = ()
           | goSimpleExp (_, _, C.Projection _) = ()
           | goSimpleExp
-              (env, renv, C.Abs {contParam = _, params, body, attr = _}) =
-              (List.app (fn p => add (env, p)) params; goStat (env, renv, body))
+              ( env
+              , renv
+              , C.Abs
+                  { contParam = _
+                  , tyParams = _
+                  , params
+                  , body
+                  , resultTy = _
+                  , attr = _
+                  }
+              ) =
+              ( List.app (fn (p, _) => add (env, p)) params
+              ; goStat (env, renv, body)
+              )
         and goDec (env, renv) =
           fn C.ValDec {exp, results} =>
             ( goSimpleExp (env, renv, exp)
-            ; List.app (fn SOME result => add (env, result) | NONE => ())
+            ; List.app
+                (fn (SOME result, _) => add (env, result) | (NONE, _) => ())
                 results
             )
            | C.RecDec defs =>
@@ -74,7 +81,7 @@ local
                 recursiveEnv;
               List.app
                 (fn {params, body, ...} =>
-                   ( List.app (fn p => add (env, p)) params
+                   ( List.app (fn (p, _) => add (env, p)) params
                    ; goStat (env, renv, body)
                    )) defs;
               TypedSyntax.VIdMap.appi
@@ -84,24 +91,27 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
+           | C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package = _} =>
+            add (env, vid)
            | C.ContDec {name = _, params, body, attr = _} =>
-            ( List.app (Option.app (fn p => add (env, p))) params
+            ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ()) params
             ; goStat (env, renv, body)
             )
            | C.RecContDec defs =>
             List.app
               (fn (_, params, body) =>
-                 ( List.app (Option.app (fn p => add (env, p))) params
+                 ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ())
+                     params
                  ; goStat (env, renv, body)
                  )) defs
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
-            List.app (fn (_, vid) => add (env, vid)) specs
+            List.app (fn (_, vid, _) => add (env, vid)) specs
         and goStat
           (env: (usage ref) TypedSyntax.VIdTable.hash_table, renv, stat) =
           case stat of
             C.Let {decs, cont} =>
               (List.app (goDec (env, renv)) decs; goStat (env, renv, cont))
-          | C.App {applied, cont, args = _, attr = _} =>
+          | C.App {applied, cont, tyArgs = _, args = _, attr = _} =>
               (useValueAsCallee (env, cont, applied))
           | C.AppCont {applied = _, args = _} => ()
           | C.If {cond = _, thenCont, elseCont} =>
@@ -142,13 +152,17 @@ in
         case dec of
           C.ValDec {exp, results} =>
             (case (exp, results) of
-               (C.Abs {contParam, params, body, attr}, results) =>
+               ( C.Abs {contParam, tyParams, params, body, resultTy, attr}
+               , results
+               ) =>
                  let
                    val body = simplifyStat (ctx, body)
                    val exp = C.Abs
                      { contParam = contParam
+                     , tyParams = tyParams
                      , params = params
                      , body = body
+                     , resultTy = resultTy
                      , attr = attr
                      }
                    val dec = C.ValDec {exp = exp, results = results}
@@ -163,32 +177,41 @@ in
             let
               val defs =
                 List.map
-                  (fn {name, contParam, params, body, attr} =>
+                  (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                      { name = name
                      , contParam = contParam
+                     , tyParams = tyParams
                      , params = params
                      , body = simplifyStat (ctx, body)
+                     , resultTy = resultTy
                      , attr = attr
                      }) defs
               fun tryConvertToLoop
-                (def as {name, contParam, params, body, attr}) =
+                (def as
+                   {name, contParam, tyParams, params, body, resultTy, attr}) =
                 if
                   C.CVarSet.member
                     ( #returnConts
                         (CpsUsageAnalysis.getValueUsage (#rec_usage ctx, name))
                     , contParam
-                    )
+                    ) andalso List.null tyParams
                 then
                   let
                     val loop = CpsSimplify.genContSym (#base ctx)
                     val params' =
-                      List.map (fn v => CpsSimplify.renewVId (#base ctx, v))
+                      List.map
+                        (fn (v, ty) => (CpsSimplify.renewVId (#base ctx, v), ty))
                         params
                     val body' =
                       C.recurseStat
                         (fn call as
                              C.App
-                               {applied = C.Var applied, cont, args, attr = _} =>
+                               { applied = C.Var applied
+                               , cont
+                               , tyArgs = []
+                               , args
+                               , attr = _
+                               } =>
                            if applied = name andalso cont = contParam then
                              C.AppCont {applied = loop, args = args}
                            else
@@ -196,15 +219,23 @@ in
                           | c => c) body
                     val body'' = C.Let
                       { decs =
-                          [C.RecContDec [(loop, List.map SOME params, body')]]
+                          [C.RecContDec
+                             [( loop
+                              , List.map (fn (v, ty) => (SOME v, ty)) params
+                              , body'
+                              )]]
                       , cont = C.AppCont
-                          {applied = loop, args = List.map C.Var params'}
+                          { applied = loop
+                          , args = List.map (fn (v, _) => C.Var v) params'
+                          }
                       }
                   in
                     { name = name
                     , contParam = contParam
+                    , tyParams = []
                     , params = params'
                     , body = body''
+                    , resultTy = resultTy
                     , attr = attr
                     }
                   end
@@ -213,6 +244,7 @@ in
             in
               C.RecDec (List.map tryConvertToLoop defs) :: acc
             end
+        | C.UnpackDec _ => dec :: acc
         | C.ContDec {name, params, body, attr} =>
             let
               val dec = C.ContDec

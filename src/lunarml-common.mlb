@@ -53,6 +53,7 @@ cps/inline.sml
 cps/decompose-recursive.sml
 cps/unpack-record-parameter.sml
 cps/eta.sml
+cps/erase-poly.sml
 backend.sml
 nested.sml
 lua-transform.sml

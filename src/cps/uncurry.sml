@@ -9,104 +9,162 @@ end =
 struct
   local structure C = CSyntax
   in
-    (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.Stat) option *)
+    (*: val tryUncurry : C.SimpleExp -> (((FSyntax.TyVar * FSyntax.Kind) list * (C.Var * C.Ty) list * bool) list * C.CVar * C.Stat * C.Ty * bool) option *)
     fun tryUncurry
           (C.Abs
              { contParam
+             , tyParams
              , params
              , body as
                  C.Let {decs, cont = C.AppCont {applied = k, args = [C.Var v]}}
-             , attr = {alwaysInline = false}
+             , resultTy
+             , attr = {alwaysInline = false, typeOnly}
              }) =
           (case decs of
-             [C.ValDec {exp, results = [SOME f]}] =>
+             [C.ValDec {exp, results = [(SOME f, _)]}] =>
                if contParam = k andalso v = f then
                  case tryUncurry exp of
-                   SOME (pp, k, b) => SOME (params :: pp, k, b)
-                 | NONE => SOME ([params], contParam, body)
+                   SOME (rest, k, b, r, typeOnly') =>
+                     SOME
+                       ( (tyParams, params, typeOnly) :: rest
+                       , k
+                       , b
+                       , r
+                       , typeOnly andalso typeOnly'
+                       )
+                 | NONE =>
+                     SOME
+                       ( [(tyParams, params, typeOnly)]
+                       , contParam
+                       , body
+                       , resultTy
+                       , typeOnly
+                       )
                else
-                 SOME ([params], contParam, body)
-           | _ => SOME ([params], contParam, body))
+                 SOME
+                   ( [(tyParams, params, typeOnly)]
+                   , contParam
+                   , body
+                   , resultTy
+                   , typeOnly
+                   )
+           | _ =>
+               SOME
+                 ( [(tyParams, params, typeOnly)]
+                 , contParam
+                 , body
+                 , resultTy
+                 , typeOnly
+                 ))
       | tryUncurry _ = NONE
-    fun doUncurry (ctx, name, exp, acc) =
+    fun doUncurry (ctx, name, exp, ty, acc) =
       case tryUncurry exp of
-        SOME (params :: (pp as _ :: _), k, body) =>
+        SOME (allParams as (_ :: _ :: _), k, body, resultTy, typeOnly) =>
           let
             val () = #simplificationOccurred ctx := true
+            val allTyParams = List.concat (List.map #1 allParams)
+            val allValParams = List.concat (List.map #2 allParams)
             val workerName = CpsSimplify.renewVId (ctx, name)
+            val workerTy = FSyntax.MultiFnType
+              (List.map #2 allValParams, resultTy)
+            val workerTy =
+              List.foldr
+                (fn ((tv, kind), ty) => FSyntax.ForallType (tv, kind, ty))
+                workerTy allTyParams
             val body = simplifyStat (ctx, body)
             val workerDec = C.ValDec
               { exp = C.Abs
                   { contParam = k
-                  , params = params @ List.concat pp
+                  , tyParams = allTyParams
+                  , params = allValParams
                   , body = body
-                  , attr = {alwaysInline = false}
+                  , resultTy = resultTy
+                  , attr = {alwaysInline = false, typeOnly = typeOnly}
                   }
-              , results = [SOME workerName]
+              , results = [(SOME workerName, workerTy)]
               }
-            val params' =
-              List.map (fn p => CpsSimplify.renewVId (ctx, p)) params
-            val pp' =
-              List.map (List.map (fn p => CpsSimplify.renewVId (ctx, p))) pp
-            fun mkWrapper (k, []) =
+            val allParams' =
+              List.map
+                (fn (tyParams, params, typeOnly) =>
+                   ( List.map
+                       (fn (tv, kind) =>
+                          (CpsSimplify.renewTyVar (ctx, tv), kind)) tyParams
+                   , List.map
+                       (fn (p, ty) => (CpsSimplify.renewVId (ctx, p), ty))
+                       params
+                   , typeOnly
+                   )) allParams
+            fun mkWrapperBody (k, []) =
                   C.App
                     { applied = C.Var workerName
                     , cont = k
-                    , args = List.map C.Var (params' @ List.concat pp')
-                    , attr = {}
+                    , tyArgs =
+                        List.map (fn (tv, _) => FSyntax.TyVar tv) (List.concat
+                          (List.map #1 allParams'))
+                    , args = List.map (fn (v, _) => C.Var v) (List.concat
+                        (List.map #2 allParams'))
+                    , attr = {typeOnly = typeOnly}
                     }
-              | mkWrapper (k, params :: pp) =
+              | mkWrapperBody (k, p as (tyParams, params, _) :: _) =
                   let
                     val name = CpsSimplify.renewVId (ctx, name)
-                    val l = CpsSimplify.genContSym ctx
                   in
                     C.Let
                       { decs =
                           [C.ValDec
-                             { exp = C.Abs
-                                 { contParam = l
-                                 , params = params
-                                 , body = mkWrapper (l, pp)
-                                 , attr = {alwaysInline = true}
-                                 }
-                             , results = [SOME name]
+                             { exp = mkWrapperAbs p
+                             , results =
+                                 [( SOME name
+                                  , FSyntax.MultiFnType
+                                      (List.map #2 params, resultTy)
+                                  )]
                              }]
                       , cont = C.AppCont {applied = k, args = [C.Var name]}
                       }
                   end
-            val l = CpsSimplify.genContSym ctx
+            and mkWrapperAbs ((tyParams, params, typeOnly) :: rest) =
+                  let
+                    val k = CpsSimplify.genContSym ctx
+                  in
+                    C.Abs
+                      { contParam = k
+                      , tyParams = tyParams
+                      , params = params
+                      , body = mkWrapperBody (k, rest)
+                      , resultTy = resultTy
+                      , attr = {alwaysInline = true, typeOnly = typeOnly}
+                      }
+                  end
+              | mkWrapperAbs [] = raise Fail "mkWrapperAbs"
           in
             C.ValDec
-              { exp = C.Abs
-                  { contParam = l
-                  , params = params'
-                  , body = mkWrapper (l, pp')
-                  , attr = {alwaysInline = true}
-                  }
-              , results = [SOME name]
-              } :: workerDec :: acc
+              {exp = mkWrapperAbs allParams', results = [(SOME name, ty)]}
+            :: workerDec :: acc
           end
-      | _ => C.ValDec {exp = exp, results = [SOME name]} :: acc
+      | _ => C.ValDec {exp = exp, results = [(SOME name, ty)]} :: acc
     and simplifyDec ctx (dec, acc) =
       case dec of
-        C.ValDec {exp as C.Abs _, results = [SOME name]} =>
-          doUncurry (ctx, name, exp, acc)
-      | C.ValDec {exp = C.Abs _, results = [NONE]} => acc
+        C.ValDec {exp as C.Abs _, results = [(SOME name, ty)]} =>
+          doUncurry (ctx, name, exp, ty, acc)
+      | C.ValDec {exp = C.Abs _, results = [(NONE, _)]} => acc
       | C.ValDec {exp = _, results = _} => dec :: acc
       | C.RecDec defs =>
           let
             val defs =
               List.map
-                (fn {name, contParam, params, body, attr} =>
+                (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                    { name = name
                    , contParam = contParam
+                   , tyParams = tyParams
                    , params = params
                    , body = simplifyStat (ctx, body)
+                   , resultTy = resultTy
                    , attr = attr
                    }) defs
           in
             C.RecDec defs :: acc
           end
+      | C.UnpackDec _ => dec :: acc
       | C.ContDec {name, params, body, attr} =>
           C.ContDec
             { name = name

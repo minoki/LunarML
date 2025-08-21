@@ -263,6 +263,8 @@ struct
           )
     | doValue _ (C.String16Const x) =
         J.ConstExp (J.WideString x)
+    | doValue ctx (C.Cast {value, ...}) = doValue ctx value
+    | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
   fun CVarToId v =
     TypedSyntax.MkVId ("cont", C.CVar.toInt v)

@@ -19,10 +19,11 @@ sig
   structure CVarSet: ORD_SET where type Key.ord_key = CVar.t
   structure CVarMap: ORD_MAP where type Key.ord_key = CVar.t
   structure CVarTable: MONO_HASH_TABLE where type Key.hash_key = CVar.t
+  type Ty = FSyntax.Ty
   datatype Value =
     Var of Var
   | Unit (* : unit *)
-  | Nil (* : 'a list *)
+  | Nil (* : forall 'a. 'a list *)
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
@@ -30,39 +31,57 @@ sig
   | Char16Const of int
   | StringConst of string
   | String16Const of int vector
-  type AbsAttr = {alwaysInline: bool}
+  | Cast of {value: Value, from: Ty, to: Ty}
+  | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
+  type AbsAttr = {alwaysInline: bool, typeOnly: bool}
   type ContAttr = {alwaysInline: bool}
-  type AppAttr = {}
+  type AppAttr = {typeOnly: bool}
   datatype SimpleExp =
-    PrimOp of
-      {primOp: FSyntax.PrimOp, tyargs: FSyntax.Ty list, args: Value list}
+    PrimOp of {primOp: FSyntax.PrimOp, tyargs: Ty list, args: Value list}
   | Record of Value Syntax.LabelMap.map (* non-empty record *)
-  | ExnTag of {name: string, payloadTy: FSyntax.Ty option}
+  | ExnTag of {name: string, payloadTy: Ty option}
   | Projection of
-      { label: Syntax.Label
-      , record: Value
-      , fieldTypes: FSyntax.Ty Syntax.LabelMap.map
-      }
+      {label: Syntax.Label, record: Value, fieldTypes: Ty Syntax.LabelMap.map}
   | Abs of
       { contParam: CVar
-      , params: Var list
+      , tyParams: (FSyntax.TyVar * FSyntax.Kind) list
+      , params: (Var * Ty) list
       , body: Stat
+      , resultTy: Ty
       , attr: AbsAttr
       } (* non-recursive function *)
   and Dec =
-    ValDec of {exp: SimpleExp, results: (Var option) list}
+    ValDec of {exp: SimpleExp, results: (Var option * Ty) list}
   | RecDec of
-      {name: Var, contParam: CVar, params: Var list, body: Stat, attr: AbsAttr} list (* recursive function *)
+      { name: Var
+      , contParam: CVar
+      , tyParams: (FSyntax.TyVar * FSyntax.Kind) list
+      , params: (Var * Ty) list
+      , body: Stat
+      , resultTy: Ty
+      , attr: AbsAttr
+      } list (* recursive function *)
+  | UnpackDec of
+      { tyVar: FSyntax.TyVar
+      , kind: FSyntax.Kind
+      , vid: Var
+      , payloadTy: Ty
+      , package: Value
+      }
   | ContDec of
-      {name: CVar, params: (Var option) list, body: Stat, attr: ContAttr}
-  | RecContDec of (CVar * (Var option) list * Stat) list
+      {name: CVar, params: (Var option * Ty) list, body: Stat, attr: ContAttr}
+  | RecContDec of (CVar * (Var option * Ty) list * Stat) list
   | ESImportDec of
-      {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
+      { pure: bool
+      , specs: (Syntax.ESImportName * Var * Ty) list
+      , moduleName: string
+      }
   and Stat =
     Let of {decs: Dec list, cont: Stat}
   | App of
       { applied: Value
       , cont: CVar
+      , tyArgs: Ty list
       , args: Value list
       , attr: AppAttr
       } (* tail call *) (* return arity? *)
@@ -76,11 +95,13 @@ sig
       }
   | Raise of SourcePos.span * Value
   | Unreachable
+  val extractVarFromValue: Value -> Var option
   val isDiscardable: SimpleExp -> bool
   val containsApp: Stat -> bool
   val freeVarsInExp: TypedSyntax.VIdSet.set * Stat * TypedSyntax.VIdSet.set
                      -> TypedSyntax.VIdSet.set
   val recurseStat: (Stat -> Stat) -> Stat -> Stat
+  val valueToString: Value -> string
 end =
 struct
   exception InvalidCode of string
@@ -113,10 +134,11 @@ struct
            Word.fromInt (CVar.toInt x)
          fun sameKey (x: CVar.t, y: CVar.t) = x = y
        end)
+  type Ty = FSyntax.Ty
   datatype Value =
     Var of Var
   | Unit (* : unit *)
-  | Nil (* : 'a list *)
+  | Nil (* : forall 'a. 'a list *)
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
@@ -125,41 +147,59 @@ struct
   | StringConst of string
   | String16Const of int vector
   (*
-                 | RealConst of Numeric.float_notation
+  | RealConst of Numeric.float_notation
   *)
-  type AbsAttr = {alwaysInline: bool}
+  | Cast of {value: Value, from: Ty, to: Ty}
+  | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
+  type AbsAttr = {alwaysInline: bool, typeOnly: bool}
   type ContAttr = {alwaysInline: bool}
-  type AppAttr = {}
+  type AppAttr = {typeOnly: bool}
   datatype SimpleExp =
-    PrimOp of
-      {primOp: FSyntax.PrimOp, tyargs: FSyntax.Ty list, args: Value list}
+    PrimOp of {primOp: FSyntax.PrimOp, tyargs: Ty list, args: Value list}
   | Record of Value Syntax.LabelMap.map (* non-empty record *)
-  | ExnTag of {name: string, payloadTy: FSyntax.Ty option}
+  | ExnTag of {name: string, payloadTy: Ty option}
   | Projection of
-      { label: Syntax.Label
-      , record: Value
-      , fieldTypes: FSyntax.Ty Syntax.LabelMap.map
-      }
+      {label: Syntax.Label, record: Value, fieldTypes: Ty Syntax.LabelMap.map}
   | Abs of
       { contParam: CVar
-      , params: Var list
+      , tyParams: (FSyntax.TyVar * FSyntax.Kind) list
+      , params: (Var * Ty) list
       , body: Stat
+      , resultTy: Ty
       , attr: AbsAttr
       } (* non-recursive function *)
   and Dec =
-    ValDec of {exp: SimpleExp, results: (Var option) list}
+    ValDec of {exp: SimpleExp, results: (Var option * Ty) list}
   | RecDec of
-      {name: Var, contParam: CVar, params: Var list, body: Stat, attr: AbsAttr} list (* recursive function *)
+      { name: Var
+      , contParam: CVar
+      , tyParams: (FSyntax.TyVar * FSyntax.Kind) list
+      , params: (Var * Ty) list
+      , body: Stat
+      , resultTy: Ty
+      , attr: AbsAttr
+      } list (* recursive function *)
+  | UnpackDec of
+      { tyVar: FSyntax.TyVar
+      , kind: FSyntax.Kind
+      , vid: Var
+      , payloadTy: Ty
+      , package: Value
+      }
   | ContDec of
-      {name: CVar, params: (Var option) list, body: Stat, attr: ContAttr}
-  | RecContDec of (CVar * (Var option) list * Stat) list
+      {name: CVar, params: (Var option * Ty) list, body: Stat, attr: ContAttr}
+  | RecContDec of (CVar * (Var option * Ty) list * Stat) list
   | ESImportDec of
-      {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
+      { pure: bool
+      , specs: (Syntax.ESImportName * Var * Ty) list
+      , moduleName: string
+      }
   and Stat =
     Let of {decs: Dec list, cont: Stat}
   | App of
       { applied: Value
       , cont: CVar
+      , tyArgs: Ty list
       , args: Value list
       , attr: AppAttr
       } (* tail call *) (* return arity? *)
@@ -173,6 +213,18 @@ struct
       }
   | Raise of SourcePos.span * Value
   | Unreachable
+  fun extractVarFromValue (Var v) = SOME v
+    | extractVarFromValue Unit = NONE
+    | extractVarFromValue Nil = NONE
+    | extractVarFromValue (BoolConst _) = NONE
+    | extractVarFromValue (IntConst _) = NONE
+    | extractVarFromValue (WordConst _) = NONE
+    | extractVarFromValue (CharConst _) = NONE
+    | extractVarFromValue (Char16Const _) = NONE
+    | extractVarFromValue (StringConst _) = NONE
+    | extractVarFromValue (String16Const _) = NONE
+    | extractVarFromValue (Cast {value, ...}) = extractVarFromValue value
+    | extractVarFromValue (Pack {value, ...}) = extractVarFromValue value
   local structure F = FSyntax
   in
     fun isDiscardable (PrimOp {primOp = F.IntConstOp _, ...}) = true
@@ -245,6 +297,7 @@ struct
 
     fun containsAppDec (ValDec _) = false
       | containsAppDec (RecDec _) = false
+      | containsAppDec (UnpackDec _) = false
       | containsAppDec (ContDec {name = _, params = _, body, attr = _}) =
           containsApp body
       | containsAppDec (RecContDec defs) =
@@ -262,21 +315,13 @@ struct
       | containsApp Unreachable = false
 
     fun freeVarsInValue bound (v, acc) =
-      case v of
-        Var var =>
+      case extractVarFromValue v of
+        SOME var =>
           if TypedSyntax.VIdSet.member (bound, var) then acc
           else TypedSyntax.VIdSet.add (acc, var)
-      | Unit => acc
-      | Nil => acc
-      | BoolConst _ => acc
-      | IntConst _ => acc
-      | WordConst _ => acc
-      | CharConst _ => acc
-      | Char16Const _ => acc
-      | StringConst _ => acc
-      | String16Const _ => acc
-    fun VIdSet_addOpt (SOME x, set) = TypedSyntax.VIdSet.add (set, x)
-      | VIdSet_addOpt (NONE, set) = set
+      | NONE => acc
+    fun VIdSet_addOpt ((SOME x, _), set) = TypedSyntax.VIdSet.add (set, x)
+      | VIdSet_addOpt ((NONE, _), set) = set
     fun freeVarsInSimpleExp (bound, PrimOp {primOp = _, tyargs = _, args}, acc) =
           List.foldl (freeVarsInValue bound) acc args
       | freeVarsInSimpleExp (bound, Record fields, acc) =
@@ -286,17 +331,29 @@ struct
           (bound, Projection {label = _, record, fieldTypes = _}, acc) =
           freeVarsInValue bound (record, acc)
       | freeVarsInSimpleExp
-          (bound, Abs {contParam = _, params, body, attr = _}, acc) =
-          let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
-          in freeVarsInExp (bound, body, acc)
+          ( bound
+          , Abs
+              { contParam = _
+              , tyParams = _
+              , params
+              , body
+              , resultTy = _
+              , attr = _
+              }
+          , acc
+          ) =
+          let
+            val bound =
+              List.foldl
+                (fn ((vid, _), bound) => TypedSyntax.VIdSet.add (bound, vid))
+                bound params
+          in
+            freeVarsInExp (bound, body, acc)
           end
     and freeVarsInDec (ValDec {exp, results}, (bound, acc)) =
           let
             val acc = freeVarsInSimpleExp (bound, exp, acc)
-            val bound' =
-              List.foldl
-                (fn (SOME r, bound) => TypedSyntax.VIdSet.add (bound, r)
-                  | (NONE, bound) => bound) bound results
+            val bound' = List.foldl VIdSet_addOpt bound results
           in
             (bound', acc)
           end
@@ -310,13 +367,20 @@ struct
               List.foldl
                 (fn ({params, body, ...}, acc) =>
                    let
-                     val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+                     val bound =
+                       List.foldl
+                         (fn ((vid, _), bound) =>
+                            TypedSyntax.VIdSet.add (bound, vid)) bound params
                    in
                      freeVarsInExp (bound, body, acc)
                    end) acc defs
           in
             (bound, acc)
           end
+      | freeVarsInDec (UnpackDec {vid, package, ...}, (bound, acc)) =
+          ( TypedSyntax.VIdSet.add (bound, vid)
+          , freeVarsInValue bound (package, acc)
+          )
       | freeVarsInDec (ContDec {name = _, params, body, attr = _}, (bound, acc)) =
           let val bound = List.foldl VIdSet_addOpt bound params
           in (bound, freeVarsInExp (bound, body, acc))
@@ -334,15 +398,17 @@ struct
           end
       | freeVarsInDec
           (ESImportDec {pure = _, specs, moduleName = _}, (bound, acc)) =
-          ( List.foldl (fn ((_, v), bound) => TypedSyntax.VIdSet.add (bound, v))
-              bound specs
+          ( List.foldl
+              (fn ((_, v, _), bound) => TypedSyntax.VIdSet.add (bound, v)) bound
+              specs
           , acc
           )
     and freeVarsInExp (bound, Let {decs, cont}, acc) =
           let val (bound, acc) = List.foldl freeVarsInDec (bound, acc) decs
           in freeVarsInExp (bound, cont, acc)
           end
-      | freeVarsInExp (bound, App {applied, cont = _, args, attr = _}, acc) =
+      | freeVarsInExp
+          (bound, App {applied, cont = _, tyArgs = _, args, attr = _}, acc) =
           List.foldl (freeVarsInValue bound)
             (freeVarsInValue bound (applied, acc)) args
       | freeVarsInExp (bound, AppCont {applied = _, args}, acc) =
@@ -372,25 +438,34 @@ struct
           | goSimpleExp (e as Record _) = e
           | goSimpleExp (e as ExnTag _) = e
           | goSimpleExp (e as Projection _) = e
-          | goSimpleExp (Abs {contParam, params, body, attr}) =
+          | goSimpleExp
+              (Abs {contParam, tyParams, params, body, resultTy, attr}) =
               Abs
                 { contParam = contParam
+                , tyParams = tyParams
                 , params = params
                 , body = goExp body
+                , resultTy = resultTy
                 , attr = attr
                 }
-        and goDec (ValDec {exp, results}) =
-              ValDec {exp = goSimpleExp exp, results = results}
+        and goDec (ValDec {exp, results (*, tybinds *)}) =
+              ValDec
+                { exp = goSimpleExp exp
+                , results = results (*, tybinds = tybinds *)
+                }
           | goDec (RecDec defs) =
               RecDec
                 (List.map
-                   (fn {name, contParam, params, body, attr} =>
+                   (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                       { name = name
                       , contParam = contParam
+                      , tyParams = tyParams
                       , params = params
                       , body = goExp body
+                      , resultTy = resultTy
                       , attr = attr
                       }) defs)
+          | goDec (dec as UnpackDec _) = dec
           | goDec (ContDec {name, params, body, attr}) =
               ContDec
                 {name = name, params = params, body = goExp body, attr = attr}
@@ -424,6 +499,43 @@ struct
       in
         goExp
       end
+    fun valueToString (Var v) =
+          "Var(" ^ TypedSyntax.print_VId v ^ ")"
+      | valueToString Unit = "Unit"
+      | valueToString Nil = "Nil"
+      | valueToString (BoolConst x) =
+          "Bool(" ^ Bool.toString x ^ ")"
+      | valueToString (IntConst (Primitives.INT, x)) =
+          "Int(" ^ IntInf.toString x ^ ")"
+      | valueToString (IntConst (Primitives.I32, x)) =
+          "Int32(" ^ IntInf.toString x ^ ")"
+      | valueToString (IntConst (Primitives.I54, x)) =
+          "Int54(" ^ IntInf.toString x ^ ")"
+      | valueToString (IntConst (Primitives.I64, x)) =
+          "Int64(" ^ IntInf.toString x ^ ")"
+      | valueToString (IntConst (Primitives.INT_INF, x)) =
+          "IntInf(" ^ IntInf.toString x ^ ")"
+      | valueToString (WordConst (Primitives.WORD, x)) =
+          "Word(" ^ IntInf.toString x ^ ")"
+      | valueToString (WordConst (Primitives.W32, x)) =
+          "Word32(" ^ IntInf.toString x ^ ")"
+      | valueToString (WordConst (Primitives.W64, x)) =
+          "Word64(" ^ IntInf.toString x ^ ")"
+      | valueToString (CharConst x) =
+          "Char(" ^ Char.toString x ^ ")"
+      | valueToString (Char16Const x) =
+          "Char16(" ^ Int.toString x ^ ")"
+      | valueToString (StringConst x) =
+          "String(\"" ^ String.toString x ^ "\")"
+      | valueToString (String16Const x) =
+          "String16(["
+          ^
+          String.concatWith ","
+            (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
+      | valueToString (Cast {value, ...}) =
+          "Cast(" ^ valueToString value ^ ")"
+      | valueToString (Pack {value, ...}) =
+          "Pack(" ^ valueToString value ^ ")"
   end
 end
 
@@ -431,12 +543,15 @@ structure CpsTransform :>
 sig
   type Context =
     {targetInfo: TargetInfo.target_info, nextVId: int ref, exportAsRecord: bool}
-  val initialEnv: CSyntax.Value TypedSyntax.VIdMap.map
+  val initialEnv: (CSyntax.Value option * FSyntax.Ty) TypedSyntax.VIdMap.map
   val prependRevDecs: CSyntax.Dec list * CSyntax.Stat -> CSyntax.Stat
-  val transformT: Context * CSyntax.Value TypedSyntax.VIdMap.map
-                  -> FSyntax.Exp
-                  -> CSyntax.Dec list * CSyntax.CVar
-                  -> CSyntax.Stat
+  val prependRevDecsTy: CSyntax.Dec list * (FSyntax.Ty * CSyntax.Stat)
+                        -> FSyntax.Ty * CSyntax.Stat
+  val transformBlock:
+    Context * (CSyntax.Value option * FSyntax.Ty) TypedSyntax.VIdMap.map
+    -> FSyntax.Exp
+    -> CSyntax.CVar
+    -> FSyntax.Ty * CSyntax.Stat
 end =
 struct
   local
@@ -467,192 +582,444 @@ struct
         TypedSyntax.MkVId ("tmp", n)
       end
 
-    fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
-      | stripTyAbs e = e
+    fun renewSym (ctx: Context, TypedSyntax.MkVId (name, _)) =
+      let
+        val n = !(#nextVId ctx)
+        val _ = #nextVId ctx := n + 1
+      in
+        TypedSyntax.MkVId (name, n)
+      end
+
+    type Ty = FSyntax.Ty
+
+    datatype value_transform =
+      TCast of {from: Ty, to: Ty}
+    | TPack of {payloadTy: Ty, packageTy: Ty}
+
+    (* applyValueTransforms ([t1,...,tN], (v, ty)) = applyValueTransform ([tN], ...applyValueTransform ([t1], (v, ty))...) *)
+    fun applyValueTransform (TCast {from, to}, (v, _)) =
+          (C.Cast {value = v, from = from, to = to}, to)
+      | applyValueTransform (TPack {payloadTy, packageTy}, (v, _)) =
+          ( C.Pack {value = v, payloadTy = payloadTy, packageTy = packageTy}
+          , packageTy
+          )
+    fun applyValueTransforms (ts, v_ty) =
+      List.foldl applyValueTransform v_ty ts
+
+    fun applyValueTransformToVal (TCast {from, to}, v) =
+          C.Cast {value = v, from = from, to = to}
+      | applyValueTransformToVal (TPack {payloadTy, packageTy}, v) =
+          C.Pack {value = v, payloadTy = payloadTy, packageTy = packageTy}
+    fun applyValueTransformsToVal (ts, v) =
+      List.foldl applyValueTransformToVal v ts
+
+    fun applyValueTransformToTy (TCast {from = _, to}, _) = to
+      | applyValueTransformToTy (TPack {payloadTy = _, packageTy}, _) =
+          packageTy
+    fun applyValueTransformsToTy (ts, ty) =
+      List.foldl applyValueTransformToTy ty ts
 
     (* 'a -> 'b ~~> (cont : 'b -> 'ans, param : 'a) -> 'ans *)
     (* continuation of 'a : (value : 'a) -> 'ans *)
 
     datatype cont =
       REIFIED of C.CVar
-    | META of C.Var option * (C.Dec list * C.Value -> C.Stat)
+    | META of
+        C.Var option (* * Ty *) * (C.Dec list * C.Value * Ty -> Ty * C.Stat)
     fun prependRevDecs ([], cont) = cont
       | prependRevDecs (revDecs, C.Let {decs, cont}) =
           C.Let {decs = List.revAppend (revDecs, decs), cont = cont}
       | prependRevDecs (revDecs, cont) =
           C.Let {decs = List.rev revDecs, cont = cont}
-    fun reify (_, revDecs, REIFIED k) f =
-          prependRevDecs (revDecs, f k)
-      | reify (ctx, revDecs, META (hint, m)) f =
+    fun prependRevDecsTy (revDecs, (ty: Ty, cont)) =
+      (ty, prependRevDecs (revDecs, cont))
+    (*: val reify : Context * C.Dec list * cont -> value_transform list -> (C.CVar -> Ty * C.Stat) -> Ty * C.Stat *)
+    fun reify (ctx, revDecs, REIFIED k) valueTransforms f =
+          if List.null valueTransforms then
+            prependRevDecsTy (revDecs, f k)
+          else
+            let
+              val kk = genContSym ctx
+              val v = genSym ctx
+              val (ty, stat) = f kk
+              val ty' = applyValueTransformsToTy (valueTransforms, ty)
+              val dec = C.ContDec
+                { name = kk
+                , params = [(SOME v, ty)]
+                , body = C.AppCont
+                    { applied = k
+                    , args =
+                        [applyValueTransformsToVal (valueTransforms, C.Var v)]
+                    }
+                , attr = {alwaysInline = false}
+                }
+            in
+              (ty', prependRevDecs (dec :: revDecs, stat))
+            end
+      | reify (ctx, revDecs, META (hint, m)) valueTransforms f =
           let
             val k = genContSym ctx
             val x =
               case hint of
                 NONE => genSym ctx
               | SOME x => x
+            val (ty, stat) = f k
+            val ty' = applyValueTransformsToTy (valueTransforms, ty)
+            val v = applyValueTransformsToVal (valueTransforms, C.Var x)
+            val (ty'', body') = m ([], v, ty)
           in
-            prependRevDecs
-              ( C.ContDec
-                  { name = k
-                  , params = [SOME x]
-                  , body = m ([], C.Var x)
-                  , attr = {alwaysInline = false}
-                  } :: revDecs
-              , f k
-              )
+            ( ty''
+            , prependRevDecs
+                ( C.ContDec
+                    { name = k
+                    , params = [(SOME x, ty)]
+                    , body = body'
+                    , attr = {alwaysInline = false}
+                    } :: revDecs
+                , stat
+                )
+            )
           end
-    fun apply revDecs (REIFIED k) arg =
-          prependRevDecs (revDecs, C.AppCont {applied = k, args = [arg]})
-      | apply revDecs (META (_, m)) arg = m (revDecs, arg)
+    (*: val apply : C.Dec list -> cont -> value_transform list -> C.Value * Ty -> Ty * C.Stat *)
+    fun apply revDecs (REIFIED k) valueTransforms (arg, ty) =
+          ( applyValueTransformsToTy (valueTransforms, ty)
+          , prependRevDecs (revDecs, C.AppCont
+              { applied = k
+              , args = [applyValueTransformsToVal (valueTransforms, arg)]
+              })
+          )
+      | apply revDecs (META (_, m)) valueTransforms (arg, ty) =
+          let val ty' = applyValueTransformsToTy (valueTransforms, ty)
+          in m (revDecs, applyValueTransformsToVal (valueTransforms, arg), ty')
+          end
     fun getResultHint (META (hint, _)) = hint
       | getResultHint (REIFIED _) = NONE
-    val initialEnv =
-      List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
-        [ (InitialEnv.VId_false, C.BoolConst false)
-        , (InitialEnv.VId_true, C.BoolConst true)
-        , (InitialEnv.VId_nil, C.Nil)
-        ]
+    val initialEnv: (C.Value option * Ty) TypedSyntax.VIdMap.map =
+      let
+        val tv = TypedSyntax.MkTyVar ("a", 0)
+        val initialEnv0 =
+          TypedSyntax.VIdMap.map (fn ty => (NONE, ty))
+            (#valMap ToFSyntax.initialEnv)
+      in
+        List.foldl TypedSyntax.VIdMap.insert' initialEnv0
+          [ ( InitialEnv.VId_false
+            , (SOME (C.BoolConst false), FSyntax.Types.bool)
+            )
+          , (InitialEnv.VId_true, (SOME (C.BoolConst true), FSyntax.Types.bool))
+          , ( InitialEnv.VId_nil
+            , ( SOME C.Nil
+              , F.ForallType (tv, F.TypeKind, FSyntax.Types.list (F.TyVar tv))
+              )
+            )
+          ]
+      end
     (*:
-    val transform : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option } -> (C.Dec list * C.Value -> C.Stat) -> C.Stat
-    and transformT : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * C.CVar -> C.Stat
-    and transformX : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * cont -> C.Stat
+    val transform : Context * (C.Value option * Ty) TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option (*, resultTy : Ty *) } -> (C.Dec list * C.Value * Ty -> Ty * C.Stat) -> Ty * C.Stat
+    and transformBlock : Context * (C.Value option * Ty) TypedSyntax.VIdMap.map -> F.Exp -> C.CVar -> Ty * C.Stat
+    and transformX : Context * (C.Value option * Ty) TypedSyntax.VIdMap.map -> F.Exp -> value_transform list -> C.Dec list * cont -> Ty * C.Stat
      *)
-    fun transform (ctx, env) exp {revDecs, resultHint} k =
-      transformX (ctx, env) exp (revDecs, META (resultHint, k))
-    and transformT (ctx, env) exp (revDecs, k) =
-      transformX (ctx, env) exp (revDecs, REIFIED k)
+    fun transform (ctx, env) exp {revDecs, resultHint (*, resultTy *)} k =
+      transformX (ctx, env) exp [] (revDecs, META (resultHint, k))
+    and transformBlock (ctx, env) exp k =
+      transformX (ctx, env) exp [] ([], REIFIED k)
     and transformX (ctx: Context, env) (exp: F.Exp)
-      (revDecs: C.Dec list, k: cont) : C.Stat =
+      (valueTransforms: value_transform list) (revDecs: C.Dec list, k: cont) :
+      Ty * C.Stat =
       case exp of
-        F.PrimExp (F.PrimCall Primitives.Unsafe_cast, _, [arg]) =>
-          transformX (ctx, env) arg (revDecs, k)
-      | F.PrimExp (F.RaiseOp span, _, [arg]) =>
+        F.PrimExp (F.RaiseOp span, [ty], [arg]) =>
           transform (ctx, env) arg {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, arg) => prependRevDecs (revDecs, C.Raise (span, arg)))
-      | F.PrimExp (F.PrimCall Primitives.unreachable, _, _) => C.Unreachable
+            (fn (revDecs, arg, _) =>
+               ( applyValueTransformsToTy (valueTransforms, ty)
+               , prependRevDecs (revDecs, C.Raise (span, arg))
+               ))
       | F.PrimExp (primOp, tyargs, args) =>
-          foldlCont
-            (fn (e, (revDecs, acc), cont) =>
-               transform (ctx, env) e {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, v) => cont (revDecs, v :: acc))) (revDecs, [])
-            args
-            (fn (revDecs, revArgs) =>
-               case primOp of
-                 F.IntConstOp x =>
-                   (case tyargs of
-                      [F.TyVar tv] =>
-                        if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int) then
-                          apply revDecs k (C.IntConst
-                            (#defaultInt (#targetInfo ctx), x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int32) then
-                          apply revDecs k (C.IntConst (Primitives.I32, x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int54) then
-                          apply revDecs k (C.IntConst (Primitives.I54, x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int64) then
-                          apply revDecs k (C.IntConst (Primitives.I64, x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.intInf) then
-                          apply revDecs k (C.IntConst (Primitives.INT_INF, x))
-                        else
-                          raise Fail "IntConstOp: invalid type"
-                    | _ => raise Fail "IntConstOp: invalid type")
-               | F.WordConstOp x =>
-                   (case tyargs of
-                      [F.TyVar tv] =>
-                        if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word) then
-                          apply revDecs k (C.WordConst
-                            (#defaultWord (#targetInfo ctx), x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word32) then
-                          apply revDecs k (C.WordConst (Primitives.W32, x))
-                        else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word64) then
-                          apply revDecs k (C.WordConst (Primitives.W64, x))
-                        else
-                          raise Fail "WordConstOp: invalid type"
-                    | _ => raise Fail "WordConstOp: invalid type")
-               | F.Char8ConstOp x =>
-                   apply revDecs k
-                     (C.CharConst x) (* assume the type is correct *)
-               | F.Char16ConstOp x =>
-                   apply revDecs k
-                     (C.Char16Const x) (* assume the type is correct *)
-               | F.String8ConstOp x =>
-                   apply revDecs k
-                     (C.StringConst x) (* assume the type is correct *)
-               | F.String16ConstOp x =>
-                   apply revDecs k
-                     (C.String16Const x) (* assume the type is correct *)
-               | _ =>
-                   let
-                     val args = List.rev revArgs
-                     val returnArity =
-                       case primOp of
-                         F.PrimCall p => Primitives.returnArity p
-                       | F.LuaCallNOp n => n
-                       | F.LuaMethodNOp (_, n) => n
-                       | _ => 1
-                     val primOp =
-                       case primOp of
-                         F.PrimCall p =>
-                           F.PrimCall
-                             (Primitives.fixIntWord
-                                { int = #defaultInt (#targetInfo ctx)
-                                , word = #defaultWord (#targetInfo ctx)
-                                } p)
-                       | _ => primOp
-                     val exp =
-                       C.PrimOp {primOp = primOp, tyargs = tyargs, args = args}
-                   in
-                     case returnArity of
-                       0 =>
-                         apply (C.ValDec {exp = exp, results = []} :: revDecs) k
-                           C.Unit
-                     | 1 =>
-                         let
-                           val result =
-                             case getResultHint k of
-                               SOME r => r
-                             | NONE => genSym ctx
-                         in
-                           apply
-                             (C.ValDec {exp = exp, results = [SOME result]}
-                              :: revDecs) k (C.Var result)
-                         end
+          let
+            val (_ (* argTypes *), resultTypes) =
+              case (primOp, tyargs) of
+                (F.PrimCall p, tyargs) =>
+                  let
+                    val {vars, args, results} = CheckF.TypeOfPrimitives.typeOf p
+                    val m =
+                      ListPair.foldl
+                        (fn ((v, _), t, acc) =>
+                           TypedSyntax.TyVarMap.insert (acc, v, t))
+                        TypedSyntax.TyVarMap.empty (vars, tyargs)
+                    val goTy = #doTy (F.substTy m)
+                    val results' = List.map goTy results
+                  in
+                    ( Vector.foldr (fn (ty, acc) => goTy ty :: acc) [] args
+                    , List.map goTy results
+                    )
+                  end
+              | (F.IntConstOp _, [ty]) => ([], [ty])
+              | (F.WordConstOp _, [ty]) => ([], [ty])
+              | (F.RealConstOp _, [ty]) => ([], [ty])
+              | (F.Char8ConstOp _, [ty]) => ([], [ty])
+              | (F.Char16ConstOp _, [ty]) => ([], [ty])
+              | (F.String8ConstOp _, [ty]) => ([], [ty])
+              | (F.String16ConstOp _, [ty]) => ([], [ty])
+              | (F.RaiseOp _, [ty]) => ([FSyntax.Types.exn], [ty])
+              | (F.ListOp, [elemTy]) =>
+                  (List.map (fn _ => elemTy) args, [FSyntax.Types.list elemTy])
+              | (F.VectorOp, [elemTy]) =>
+                  ( List.map (fn _ => elemTy) args
+                  , [FSyntax.Types.vector elemTy]
+                  )
+              | (F.DataTagAsStringOp _, [dataTy]) =>
+                  ([dataTy], [FSyntax.Types.string])
+              | (F.DataTagAsString16Op _, [dataTy]) =>
+                  ([dataTy], [FSyntax.Types.string16])
+              | (F.DataPayloadOp _, [dataTy, payloadTy]) =>
+                  ([dataTy], [payloadTy])
+              | (F.ExnPayloadOp, [payloadTy]) =>
+                  ([FSyntax.Types.exn], [payloadTy])
+              | (F.ConstructValOp _, [dataTy]) => ([], [dataTy])
+              | (F.ConstructValWithPayloadOp _, [dataTy, payloadTy]) =>
+                  ([payloadTy], [dataTy])
+              | (F.ConstructExnOp, []) =>
+                  ([FSyntax.Types.exntag], [FSyntax.Types.exn])
+              | (F.ConstructExnWithPayloadOp, [payloadTy]) =>
+                  ([FSyntax.Types.exntag, payloadTy], [FSyntax.Types.exn])
+              | (F.JsCallOp, []) =>
+                  ( List.map (fn _ => FSyntax.Types.js_value) args
+                  , [FSyntax.Types.js_value]
+                  )
+              | (F.JsMethodOp, []) =>
+                  ( List.map (fn _ => FSyntax.Types.js_value) args
+                  , [FSyntax.Types.js_value]
+                  )
+              | (F.JsNewOp, []) =>
+                  ( List.map (fn _ => FSyntax.Types.js_value) args
+                  , [FSyntax.Types.js_value]
+                  )
+              | (F.LuaCallOp, []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , [FSyntax.Types.vector FSyntax.Types.lua_value]
+                  )
+              | (F.LuaCall1Op, []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , [FSyntax.Types.lua_value]
+                  )
+              | (F.LuaCallNOp n, []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , List.tabulate (n, fn _ => FSyntax.Types.lua_value)
+                  )
+              | (F.LuaMethodOp _, []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , [FSyntax.Types.vector FSyntax.Types.lua_value]
+                  )
+              | (F.LuaMethod1Op _, []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , [FSyntax.Types.lua_value]
+                  )
+              | (F.LuaMethodNOp (_, n), []) =>
+                  ( List.map (fn _ => FSyntax.Types.lua_value) args
+                  , List.tabulate (n, fn _ => FSyntax.Types.lua_value)
+                  )
+              | _ =>
+                  raise CSyntax.InvalidCode
+                    ("unknown primop or invalid type arguments to primop "
+                     ^ FSyntax.PrettyPrint.print_PrimOp primOp)
+          in
+            case (primOp, args, resultTypes) of
+              (F.PrimCall Primitives.Unsafe_cast, [arg], _) =>
+                (case tyargs of
+                   [from, to] =>
+                     transformX (ctx, env) arg
+                       (TCast {from = from, to = to} :: valueTransforms)
+                       (revDecs, k)
+                 | _ => raise Fail "invalid use of Unsafe.cast")
+            | (F.PrimCall Primitives.unreachable, _, [ty]) =>
+                (ty, C.Unreachable)
+            | _ =>
+                foldlCont
+                  (fn (e, (revDecs, acc), cont) =>
+                     transform (ctx, env) e
+                       {revDecs = revDecs, resultHint = NONE}
+                       (fn (revDecs, v, _) => cont (revDecs, v :: acc)))
+                  (revDecs, []) args
+                  (fn (revDecs, revArgs) =>
+                     case primOp of
+                       F.IntConstOp x =>
+                         (case tyargs of
+                            [ty as F.TyVar tv] =>
+                              let
+                                val v =
+                                  if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.int)
+                                  then
+                                    C.IntConst
+                                      (#defaultInt (#targetInfo ctx), x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.int32)
+                                  then
+                                    C.IntConst (Primitives.I32, x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.int54)
+                                  then
+                                    C.IntConst (Primitives.I54, x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.int64)
+                                  then
+                                    C.IntConst (Primitives.I64, x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.intInf)
+                                  then
+                                    C.IntConst (Primitives.INT_INF, x)
+                                  else
+                                    raise Fail "IntConstOp: invalid type"
+                              in
+                                apply revDecs k valueTransforms (v, ty)
+                              end
+                          | _ => raise Fail "IntConstOp: invalid type")
+                     | F.WordConstOp x =>
+                         (case tyargs of
+                            [ty as F.TyVar tv] =>
+                              let
+                                val v =
+                                  if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.word)
+                                  then
+                                    C.WordConst
+                                      (#defaultWord (#targetInfo ctx), x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.word32)
+                                  then
+                                    C.WordConst (Primitives.W32, x)
+                                  else if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.word64)
+                                  then
+                                    C.WordConst (Primitives.W64, x)
+                                  else
+                                    raise Fail "WordConstOp: invalid type"
+                              in
+                                apply revDecs k valueTransforms (v, ty)
+                              end
+                          | _ => raise Fail "WordConstOp: invalid type")
+                     | F.Char8ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.CharConst x
+                           , FSyntax.Types.char
+                           ) (* assume the type is correct *)
+                     | F.Char16ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.Char16Const x
+                           , FSyntax.Types.char16
+                           ) (* assume the type is correct *)
+                     | F.String8ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.StringConst x
+                           , FSyntax.Types.string
+                           ) (* assume the type is correct *)
+                     | F.String16ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.String16Const x
+                           , FSyntax.Types.string16
+                           ) (* assume the type is correct *)
                      | _ =>
                          let
-                           val results = List.tabulate (returnArity, fn _ =>
-                             genSym ctx)
-                           val tupleVar =
-                             case getResultHint k of
-                               SOME r => r
-                             | NONE => genSym ctx
-                           val (_, tuple) =
-                             List.foldl
-                               (fn (v, (i, acc)) =>
-                                  ( i + 1
-                                  , Syntax.LabelMap.insert
-                                      (acc, Syntax.NumericLabel i, C.Var v)
-                                  )) (1, Syntax.LabelMap.empty) results
+                           val args = List.rev revArgs
+                           val returnArity =
+                             case primOp of
+                               F.PrimCall p => Primitives.returnArity p
+                             | F.LuaCallNOp n => n
+                             | F.LuaMethodNOp (_, n) => n
+                             | _ => 1
+                           val primOp =
+                             case primOp of
+                               F.PrimCall p =>
+                                 F.PrimCall
+                                   (Primitives.fixIntWord
+                                      { int = #defaultInt (#targetInfo ctx)
+                                      , word = #defaultWord (#targetInfo ctx)
+                                      } p)
+                             | _ => primOp
+                           (* TODO: Fix int/word in the types *)
+                           val exp =
+                             C.PrimOp
+                               {primOp = primOp, tyargs = tyargs, args = args}
                          in
-                           apply
-                             (C.ValDec
-                                { exp = C.Record tuple
-                                , results = [SOME tupleVar]
-                                }
-                              ::
-                              C.ValDec
-                                {exp = exp, results = List.map SOME results}
-                              :: revDecs) k (C.Var tupleVar)
-                         end
-                   end)
+                           case (returnArity, resultTypes) of
+                             (0, []) =>
+                               apply
+                                 (C.ValDec {exp = exp, results = []} :: revDecs)
+                                 k valueTransforms (C.Unit, FSyntax.Types.unit)
+                           | (1, [resultTy]) =>
+                               let
+                                 val result =
+                                   case getResultHint k of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                               in
+                                 apply
+                                   (C.ValDec
+                                      { exp = exp
+                                      , results = [(SOME result, resultTy)]
+                                      } :: revDecs) k valueTransforms
+                                   (C.Var result, resultTy)
+                               end
+                           | _ =>
+                               let
+                                 val results =
+                                   List.tabulate (returnArity, fn _ =>
+                                     genSym ctx)
+                                 val tupleVar =
+                                   case getResultHint k of
+                                     SOME r => r
+                                   | NONE => genSym ctx
+                                 val tupleTy = F.TupleType resultTypes
+                                 val (_, tuple) =
+                                   List.foldl
+                                     (fn (v, (i, acc)) =>
+                                        ( i + 1
+                                        , Syntax.LabelMap.insert
+                                            ( acc
+                                            , Syntax.NumericLabel i
+                                            , C.Var v
+                                            )
+                                        )) (1, Syntax.LabelMap.empty) results
+                               in
+                                 apply
+                                   (C.ValDec
+                                      { exp = C.Record tuple
+                                      , results = [(SOME tupleVar, tupleTy)]
+                                      }
+                                    ::
+                                    C.ValDec
+                                      { exp = exp
+                                      , results =
+                                          ListPair.mapEq
+                                            (fn (v, ty) => (SOME v, ty))
+                                            (results, resultTypes)
+                                      } :: revDecs) k valueTransforms
+                                   (C.Var tupleVar, tupleTy)
+                               end
+                         end)
+          end
       | F.VarExp vid =>
           (case TypedSyntax.VIdMap.find (env, vid) of
-             SOME v => apply revDecs k v
-           | NONE => apply revDecs k (C.Var vid))
-      | F.RecordExp [] => apply revDecs k C.Unit
+             SOME (SOME replacement, ty) =>
+               apply revDecs k valueTransforms (replacement, ty)
+           | SOME (NONE, ty) => apply revDecs k valueTransforms (C.Var vid, ty)
+           | NONE =>
+               raise Fail
+                 ("CpsTransform: undefined variable: "
+                  ^ TypedSyntax.print_VId vid))
+      | F.RecordExp [] =>
+          apply revDecs k valueTransforms (C.Unit, FSyntax.Types.unit)
       | F.RecordExp fields =>
           foldlCont
             (fn ((label, exp), (revDecs, acc), cont) =>
                transform (ctx, env) exp {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, v) => cont (revDecs, (label, v) :: acc)))
+                 (fn (revDecs, v, ty) => cont (revDecs, (label, v, ty) :: acc)))
             (revDecs, []) fields
             (fn (revDecs, revFields) =>
                let
@@ -660,63 +1027,126 @@ struct
                    case getResultHint k of
                      SOME r => r
                    | NONE => genSym ctx
+                 val recordTy = F.RecordType
+                   (List.foldl
+                      (fn ((label, _, ty), m) =>
+                         Syntax.LabelMap.insert (m, label, ty))
+                      Syntax.LabelMap.empty revFields)
                in
                  apply
                    (C.ValDec
                       { exp = C.Record
-                          (List.foldr Syntax.LabelMap.insert'
+                          (List.foldr
+                             (fn ((label, v, _), m) =>
+                                Syntax.LabelMap.insert (m, label, v))
                              Syntax.LabelMap.empty revFields)
-                      , results = [SOME result]
-                      } :: revDecs) k (C.Var result)
+                      , results = [(SOME result, recordTy)]
+                      } :: revDecs) k valueTransforms (C.Var result, recordTy)
                end)
       | F.LetExp (decs, finalExp) =>
           let
             fun doDecs (env, [], revDecs) =
-                  transformX (ctx, env) finalExp (revDecs, k)
-              | doDecs (env, F.ValDec (vid, _, exp) :: decs, revDecs) =
+                  transformX (ctx, env) finalExp valueTransforms (revDecs, k)
+              | doDecs (env, F.ValDec (vid, optTy, exp) :: decs, revDecs) =
                   transform (ctx, env) exp
                     {revDecs = revDecs, resultHint = SOME vid}
-                    (fn (revDecs, v) =>
-                       doDecs
-                         ( TypedSyntax.VIdMap.insert (env, vid, v)
-                         , decs
-                         , revDecs
-                         ))
+                    (fn (revDecs, v, ty) =>
+                       let
+                         val () =
+                           case optTy of
+                             NONE => ()
+                           | SOME expectedTy =>
+                               CheckF.checkSame
+                                 ( TypedSyntax.TyVarMap.empty
+                                 , fn () =>
+                                     "ValDec " ^ TypedSyntax.print_VId vid
+                                 , expectedTy
+                                 ) ty
+                       in
+                         doDecs
+                           ( TypedSyntax.VIdMap.insert (env, vid, (SOME v, ty))
+                           , decs
+                           , revDecs
+                           )
+                       end)
               | doDecs (env, F.RecValDec decs' :: decs, revDecs) =
                   let
+                    val env =
+                      List.foldl
+                        (fn ((vid, ty, _), env) =>
+                           TypedSyntax.VIdMap.insert (env, vid, (NONE, ty))) env
+                        decs'
                     val dec = C.RecDec
                       (List.map
                          (fn (vid, _, exp) =>
                             let
                               val contParam = genContSym ctx
                             in
-                              case stripTyAbs exp of
+                              case exp of
                                 F.MultiFnExp (params, body) =>
-                                  { name = vid
-                                  , contParam = contParam
-                                  , params = List.map #1 params
-                                  , body =
-                                      transformT (ctx, env) body ([], contParam)
-                                  , attr = {alwaysInline = false}
-                                  }
+                                  let
+                                    val env =
+                                      List.foldl
+                                        (fn ((vid, ty), env) =>
+                                           TypedSyntax.VIdMap.insert
+                                             (env, vid, (NONE, ty))) env params
+                                    val (resultTy, body) =
+                                      transformBlock (ctx, env) body contParam
+                                  in
+                                    { name = vid
+                                    , contParam = contParam
+                                    , tyParams = []
+                                    , params = params
+                                    , body = body
+                                    , resultTy = resultTy
+                                    , attr =
+                                        {alwaysInline = false, typeOnly = false}
+                                    }
+                                  end
+                              | F.TyAbsExp (tv, kind, body) =>
+                                  let
+                                    val (resultTy, body) =
+                                      transformBlock (ctx, env) body contParam
+                                  in
+                                    { name = vid
+                                    , contParam = contParam
+                                    , tyParams = [(tv, kind)]
+                                    , params = []
+                                    , body = body
+                                    , resultTy = resultTy
+                                    , attr =
+                                        {alwaysInline = false, typeOnly = true}
+                                    }
+                                  end
                               | _ => raise Fail "RecValDec"
                             end) decs')
                   in
                     doDecs (env, decs, dec :: revDecs)
                   end
-              | doDecs (env, F.UnpackDec (_, _, vid, _, exp) :: decs, revDecs) =
+              | doDecs
+                  (env, F.UnpackDec (tv, kind, vid, ty, exp) :: decs, revDecs) =
                   transform (ctx, env) exp
-                    {revDecs = revDecs, resultHint = SOME vid}
-                    (fn (revDecs, v) =>
-                       doDecs
-                         ( TypedSyntax.VIdMap.insert (env, vid, v)
-                         , decs
-                         , revDecs
-                         ))
+                    {revDecs = revDecs, resultHint = SOME (renewSym (ctx, vid))}
+                    (fn (revDecs, package, _ (* packageTy *)) =>
+                       let
+                         val dec = C.UnpackDec
+                           { tyVar = tv
+                           , kind = kind
+                           , vid = vid
+                           , payloadTy = ty
+                           , package = package
+                           }
+                       in
+                         doDecs
+                           ( TypedSyntax.VIdMap.insert (env, vid, (NONE, ty))
+                           , decs
+                           , dec :: revDecs
+                           )
+                       end)
               | doDecs (env, F.IgnoreDec exp :: decs, revDecs) =
                   transform (ctx, env) exp
                     {revDecs = revDecs, resultHint = NONE}
-                    (fn (revDecs, _) => doDecs (env, decs, revDecs))
+                    (fn (revDecs, _, _) => doDecs (env, decs, revDecs))
               | doDecs (env, F.DatatypeDec _ :: decs, revDecs) =
                   doDecs (env, decs, revDecs)
               | doDecs
@@ -727,8 +1157,11 @@ struct
                   let
                     val dec = C.ValDec
                       { exp = C.ExnTag {name = name, payloadTy = payloadTy}
-                      , results = [SOME tagName]
+                      , results = [(SOME tagName, FSyntax.Types.exntag)]
                       }
+                    val env =
+                      TypedSyntax.VIdMap.insert
+                        (env, tagName, (NONE, FSyntax.Types.exntag))
                   in
                     doDecs (env, decs, dec :: revDecs)
                   end
@@ -738,12 +1171,14 @@ struct
                   , revDecs
                   ) =
                   let
-                    val dec = C.ESImportDec
-                      { pure = pure
-                      , specs =
-                          List.map (fn (name, vid, _) => (name, vid)) specs
-                      , moduleName = moduleName
-                      }
+                    val dec =
+                      C.ESImportDec
+                        {pure = pure, specs = specs, moduleName = moduleName}
+                    val env =
+                      List.foldl
+                        (fn ((_, vid, ty), env) =>
+                           TypedSyntax.VIdMap.insert (env, vid, (NONE, ty))) env
+                        specs
                   in
                     doDecs (env, decs, dec :: revDecs)
                   end
@@ -752,42 +1187,65 @@ struct
           end
       | F.MultiAppExp (applied, args) =>
           transform (ctx, env) applied {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, f) =>
-               foldlCont
-                 (fn (arg, (revDecs, acc), cont) =>
-                    transform (ctx, env) arg
-                      {revDecs = revDecs, resultHint = NONE}
-                      (fn (revDecs, v) => cont (revDecs, v :: acc)))
-                 (revDecs, []) args
-                 (fn (revDecs, revArgs) =>
-                    reify (ctx, revDecs, k) (fn j =>
-                      C.App
-                        { applied = f
-                        , cont = j
-                        , args = List.rev revArgs
-                        , attr = {}
-                        })))
-      | F.HandleExp {body, exnName, handler} =>
-          reify (ctx, revDecs, k) (fn j =>
+            (fn (revDecs, f, tyF) =>
+               let
+                 val resultTy =
+                   case tyF of
+                     F.MultiFnType (_, resultTy) => resultTy
+                   | _ =>
+                       raise Fail
+                         ("MultiAppExp: expected MultiFnType, but got "
+                          ^ Printer.build (FPrinter.doTy 0 tyF) ^ "\n"
+                          ^ Printer.build (FPrinter.doExp 0 applied))
+               in
+                 foldlCont
+                   (fn (arg, (revDecs, acc), cont) =>
+                      transform (ctx, env) arg
+                        {revDecs = revDecs, resultHint = NONE}
+                        (fn (revDecs, v, _) => cont (revDecs, v :: acc)))
+                   (revDecs, []) args
+                   (fn (revDecs, revArgs) =>
+                      reify (ctx, revDecs, k) valueTransforms (fn j =>
+                        ( resultTy
+                        , C.App
+                            { applied = f
+                            , cont = j
+                            , tyArgs = []
+                            , args = List.rev revArgs
+                            , attr = {typeOnly = false}
+                            }
+                        )))
+               end)
+      | F.HandleExp {body, exnName, handler, resultTy} =>
+          reify (ctx, revDecs, k) valueTransforms (fn j =>
             let
               val success = genContSym ctx
+              val handlerEnv =
+                TypedSyntax.VIdMap.insert
+                  (env, exnName, (NONE, FSyntax.Types.exn))
             in
-              C.Handle
-                { body = transformT (ctx, env) body ([], success)
-                , handler = (exnName, transformT (ctx, env) handler ([], j))
-                , successfulExitIn = success
-                , successfulExitOut = j
-                }
+              ( resultTy
+              , C.Handle
+                  { body = #2 (transformBlock (ctx, env) body success)
+                  , handler = (exnName, #2
+                      (transformBlock (ctx, handlerEnv) handler j))
+                  , successfulExitIn = success
+                  , successfulExitOut = j
+                  }
+              )
             end)
       | F.IfThenElseExp (e1, e2, e3) =>
           transform (ctx, env) e1 {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, e1) =>
-               reify (ctx, revDecs, k) (fn j =>
-                 C.If
-                   { cond = e1
-                   , thenCont = transformT (ctx, env) e2 ([], j)
-                   , elseCont = transformT (ctx, env) e3 ([], j)
-                   }))
+            (fn (revDecs, e1, _) =>
+               reify (ctx, revDecs, k) valueTransforms (fn j =>
+                 let
+                   val (resultTy, thenCont) = transformBlock (ctx, env) e2 j
+                   val (_, elseCont) = transformBlock (ctx, env) e3 j
+                 in
+                   ( resultTy
+                   , C.If {cond = e1, thenCont = thenCont, elseCont = elseCont}
+                   )
+                 end))
       | F.CaseExp _ => raise Fail "CaseExp: not supported here"
       | F.MultiFnExp (params, body) =>
           let
@@ -796,26 +1254,44 @@ struct
                 SOME f => f
               | NONE => genSym ctx
             val kk = genContSym ctx
+            val innerEnv =
+              List.foldl
+                (fn ((p, ty), env) =>
+                   TypedSyntax.VIdMap.insert (env, p, (NONE, ty))) env params
+            val (resultTy, body) = transformBlock (ctx, innerEnv) body kk
+            val fnTy = F.MultiFnType (List.map #2 params, resultTy)
             val dec = C.ValDec
               { exp = C.Abs
                   { contParam = kk
-                  , params = List.map #1 params
-                  , body = transformT (ctx, env) body ([], kk)
-                  , attr = {alwaysInline = false}
+                  , tyParams = []
+                  , params = params
+                  , body = body
+                  , resultTy = resultTy
+                  , attr = {alwaysInline = false, typeOnly = false}
                   }
-              , results = [SOME f]
+              , results = [(SOME f, fnTy)]
               }
           in
-            apply (dec :: revDecs) k (C.Var f)
+            apply (dec :: revDecs) k valueTransforms (C.Var f, fnTy)
           end
       | F.ProjectionExp {label, record, fieldTypes} =>
           transform (ctx, env) record {revDecs = revDecs, resultHint = NONE}
-            (fn (revDecs, record) =>
+            (fn (revDecs, record, recordTy) =>
                let
                  val x =
                    case getResultHint k of
                      SOME x => x
                    | NONE => genSym ctx
+                 val fieldTy =
+                   case recordTy of
+                     F.RecordType fieldTypes' =>
+                       (case Syntax.LabelMap.find (fieldTypes', label) of
+                          SOME ty => ty
+                        | NONE => raise Fail "ProjectionExp: field not found")
+                   | _ =>
+                       raise Fail
+                         ("ProjectionExp: expected a record, but got "
+                          ^ Printer.build (FPrinter.doTy 0 recordTy))
                  val dec = C.ValDec
                    { exp =
                        C.Projection
@@ -823,28 +1299,80 @@ struct
                          , record = record
                          , fieldTypes = fieldTypes
                          }
-                   , results = [SOME x]
+                   , results = [(SOME x, fieldTy)]
                    }
                in
-                 apply (dec :: revDecs) k (C.Var x)
+                 apply (dec :: revDecs) k valueTransforms (C.Var x, fieldTy)
                end)
-      | F.TyAbsExp (_, _, exp) => transformX (ctx, env) exp (revDecs, k)
-      | F.TyAppExp (exp, _) => transformX (ctx, env) exp (revDecs, k)
-      | F.PackExp {payloadTy = _, exp, packageTy = _} =>
-          transformX (ctx, env) exp (revDecs, k)
+      | F.TyAbsExp (tv, kind, body) =>
+          let
+            val f = genSym ctx
+            val kk = genContSym ctx
+            val (resultTy, body) = transformBlock (ctx, env) body kk
+            val fnTy = F.ForallType (tv, kind, resultTy)
+            val dec = C.ValDec
+              { exp = C.Abs
+                  { contParam = kk
+                  , tyParams = [(tv, kind)]
+                  , params = []
+                  , body = body
+                  , resultTy = resultTy
+                  , attr = {alwaysInline = false, typeOnly = true}
+                  }
+              , results = [(SOME f, fnTy)]
+              }
+          in
+            apply (dec :: revDecs) k valueTransforms (C.Var f, fnTy)
+          end
+      | F.TyAppExp (exp, ty) =>
+          transform (ctx, env) exp {revDecs = revDecs, resultHint = NONE}
+            (fn (revDecs, f, tyF) =>
+               let
+                 val resultTy =
+                   case tyF of
+                     F.ForallType (tv, _, resultTy) =>
+                       F.substituteTy (tv, ty) resultTy
+                   | _ =>
+                       raise Fail
+                         ("TyAppExp: expected ForallType, but got "
+                          ^ Printer.build (FPrinter.doTy 0 tyF))
+               in
+                 reify (ctx, revDecs, k) valueTransforms (fn j =>
+                   ( resultTy
+                   , C.App
+                       { applied = f
+                       , cont = j
+                       , tyArgs = [ty]
+                       , args = []
+                       , attr = {typeOnly = true}
+                       }
+                   ))
+               end)
+      | F.PackExp {payloadTy, exp, packageTy} =>
+          transformX (ctx, env) exp
+            (TPack {payloadTy = payloadTy, packageTy = packageTy}
+             :: valueTransforms) (revDecs, k)
       | F.BogusExp _ => raise Message.Abort
       | F.ExitProgram =>
           (case k of
              REIFIED k =>
-               prependRevDecs (revDecs, C.AppCont {applied = k, args = []})
+               let
+                 val dummyTy = F.RecordType Syntax.LabelMap.empty
+               in
+                 ( dummyTy
+                 , prependRevDecs (revDecs, C.AppCont {applied = k, args = []})
+                 )
+               end
            | META _ => raise Fail "unexpected META")
       | F.ExportValue exp =>
           (case k of
              REIFIED k =>
                transform (ctx, env) exp {revDecs = revDecs, resultHint = NONE}
-                 (fn (revDecs, v) =>
-                    prependRevDecs
-                      (revDecs, C.AppCont {applied = k, args = [v]}))
+                 (fn (revDecs, v, ty) =>
+                    ( ty
+                    , prependRevDecs
+                        (revDecs, C.AppCont {applied = k, args = [v]})
+                    ))
            | META _ => raise Fail "unexpected META")
       | F.ExportModule entities =>
           (case k of
@@ -853,62 +1381,85 @@ struct
                  (fn ((name, exp), (revDecs, acc), cont) =>
                     transform (ctx, env) exp
                       {revDecs = revDecs, resultHint = NONE (* name? *)}
-                      (fn (revDecs, v) => cont (revDecs, (name, v) :: acc)))
-                 (revDecs, []) (Vector.foldr (op::) [] entities)
+                      (fn (revDecs, v, ty) =>
+                         cont (revDecs, (name, v, ty) :: acc))) (revDecs, [])
+                 (Vector.foldr (op::) [] entities)
                  (fn (revDecs, items) =>
                     if #exportAsRecord ctx then
                       let
                         val result = genSym ctx (* "export"? *)
+                        val recordTy = F.RecordType
+                          (List.foldl
+                             (fn ((name, _, ty), acc) =>
+                                Syntax.LabelMap.insert
+                                  (acc, Syntax.IdentifierLabel name, ty))
+                             Syntax.LabelMap.empty items)
                         val dec = C.ValDec
                           { exp = C.Record
                               (List.foldl
-                                 (fn ((name, v), m) =>
+                                 (fn ((name, v, _), m) =>
                                     Syntax.LabelMap.insert
                                       (m, Syntax.IdentifierLabel name, v))
                                  Syntax.LabelMap.empty items)
-                          , results = [SOME result]
+                          , results = [(SOME result, recordTy)]
                           }
                       in
-                        prependRevDecs (dec :: revDecs, C.AppCont
-                          {applied = k, args = [C.Var result]})
+                        ( recordTy
+                        , prependRevDecs (dec :: revDecs, C.AppCont
+                            {applied = k, args = [C.Var result]})
+                        )
                       end
                     else
-                      prependRevDecs (revDecs, C.AppCont
-                        { applied = k
-                        , args =
-                            List.foldl (fn ((_, v), acc) => v :: acc) [] items
-                        }))
+                      let
+                        val dummyTy = F.RecordType Syntax.LabelMap.empty
+                      in
+                        ( dummyTy
+                        , prependRevDecs (revDecs, C.AppCont
+                            { applied = k
+                            , args =
+                                List.foldl (fn ((_, v, _), acc) => v :: acc) []
+                                  items
+                            })
+                        )
+                      end)
            | META _ => raise Fail "unexpected META")
   end
 end;
 
 structure CpsSimplify :>
 sig
-  type Context = {nextVId: int ref, simplificationOccurred: bool ref}
+  type Context =
+    {nextTyVar: int ref, nextVId: int ref, simplificationOccurred: bool ref}
   type value_info = {exp: CSyntax.SimpleExp option, isDiscardableFunction: bool}
   val genContSym: Context -> CSyntax.CVar
   val newVId: Context * string -> TypedSyntax.VId
+  val renewTyVar: Context * TypedSyntax.TyVar -> TypedSyntax.TyVar
   val renewVId: Context * TypedSyntax.VId -> TypedSyntax.VId
   val renewCVar: Context * CSyntax.CVar -> CSyntax.CVar
   val substSimpleExp:
-    CSyntax.Value TypedSyntax.VIdMap.map
+    FSyntax.Ty TypedSyntax.TyVarMap.map
+    * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
     * CSyntax.SimpleExp
     -> CSyntax.SimpleExp
   val sizeOfStat: CSyntax.Stat * int -> int
-  val substValue: CSyntax.Value TypedSyntax.VIdMap.map
-                  -> CSyntax.Value
-                  -> CSyntax.Value
+  val substTy: FSyntax.Ty TypedSyntax.TyVarMap.map -> FSyntax.Ty -> FSyntax.Ty
+  val substValue:
+    FSyntax.Ty TypedSyntax.TyVarMap.map * CSyntax.Value TypedSyntax.VIdMap.map
+    -> CSyntax.Value
+    -> CSyntax.Value
   val substCVar: CSyntax.CVar CSyntax.CVarMap.map
                  -> CSyntax.CVar
                  -> CSyntax.CVar
   val substStat:
-    CSyntax.Value TypedSyntax.VIdMap.map
+    FSyntax.Ty TypedSyntax.TyVarMap.map
+    * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
     * CSyntax.Stat
     -> CSyntax.Stat
   val alphaConvert:
     Context
+    * FSyntax.Ty TypedSyntax.TyVarMap.map
     * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
     * CSyntax.Stat
@@ -919,7 +1470,8 @@ end =
 struct
   local structure F = FSyntax structure C = CSyntax
   in
-    type Context = {nextVId: int ref, simplificationOccurred: bool ref}
+    type Context =
+      {nextTyVar: int ref, nextVId: int ref, simplificationOccurred: bool ref}
     fun genContSym (ctx: Context) : CSyntax.CVar =
       let
         val n = !(#nextVId ctx)
@@ -930,6 +1482,10 @@ struct
     fun newVId ({nextVId, ...}: Context, name) =
       let val n = !nextVId
       in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
+      end
+    fun renewTyVar ({nextTyVar, ...}: Context, TypedSyntax.MkTyVar (name, _)) =
+      let val n = !nextTyVar
+      in TypedSyntax.MkTyVar (name, n) before (nextTyVar := n + 1)
       end
     fun renewVId ({nextVId, ...}: Context, TypedSyntax.MkVId (name, _)) =
       let val n = !nextVId
@@ -949,8 +1505,14 @@ struct
         | C.Record fields => threshold - Syntax.LabelMap.numItems fields
         | C.ExnTag _ => threshold - 1
         | C.Projection _ => threshold - 1
-        | C.Abs {contParam = _, params = _, body, attr = _} =>
-            sizeOfStat (body, threshold)
+        | C.Abs
+            { contParam = _
+            , tyParams = _
+            , params = _
+            , body
+            , resultTy = _
+            , attr = _
+            } => sizeOfStat (body, threshold)
     and sizeOfDec (dec, threshold) =
       if threshold < 0 then
         threshold
@@ -960,6 +1522,7 @@ struct
         | C.RecDec defs =>
             List.foldl (fn ({body, ...}, t) => sizeOfStat (body, t)) threshold
               defs
+        | C.UnpackDec _ => threshold
         | C.ContDec {name = _, params = _, body, attr = _} =>
             sizeOfStat (body, threshold)
         | C.RecContDec defs =>
@@ -973,7 +1536,7 @@ struct
         case e of
           C.Let {decs, cont} =>
             List.foldl sizeOfDec (sizeOfStat (cont, threshold)) decs
-        | C.App {applied = _, cont = _, args, attr = _} =>
+        | C.App {applied = _, cont = _, tyArgs = _, args, attr = _} =>
             threshold - List.length args
         | C.AppCont {applied = _, args} => threshold - List.length args
         | C.If {cond = _, thenCont, elseCont} =>
@@ -986,120 +1549,215 @@ struct
             } => sizeOfStat (body, sizeOfStat (h, threshold - 1))
         | C.Raise _ => threshold
         | C.Unreachable => threshold
-    fun substValue (subst: C.Value TypedSyntax.VIdMap.map) (x as C.Var v) =
-          (case TypedSyntax.VIdMap.find (subst, v) of
-             SOME w => w
-           | NONE => x)
-      | substValue _ v = v
+    fun substTy (tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map) =
+      #doTy (FSyntax.substTy tysubst)
+    fun substValue (tysubst, subst: C.Value TypedSyntax.VIdMap.map) =
+      let
+        val goTy = substTy tysubst
+        fun goVal (x as C.Var v) =
+              (case TypedSyntax.VIdMap.find (subst, v) of
+                 SOME w => w
+               | NONE => x)
+          | goVal (C.Cast {value, from, to}) =
+              C.Cast {value = goVal value, from = goTy from, to = goTy to}
+          | goVal (C.Pack {value, payloadTy, packageTy}) =
+              C.Pack
+                { value = goVal value
+                , payloadTy = goTy payloadTy
+                , packageTy = goTy packageTy
+                }
+          | goVal (v as C.Unit) = v
+          | goVal (v as C.Nil) = v
+          | goVal (v as C.BoolConst _) = v
+          | goVal (v as C.IntConst _) = v
+          | goVal (v as C.WordConst _) = v
+          | goVal (v as C.CharConst _) = v
+          | goVal (v as C.Char16Const _) = v
+          | goVal (v as C.StringConst _) = v
+          | goVal (v as C.String16Const _) = v
+      in
+        goVal
+      end
     fun substCVar (csubst: C.CVar C.CVarMap.map) v =
       case C.CVarMap.find (csubst, v) of
         SOME w => w
       | NONE => v
-    fun substSimpleExp (subst, _, C.PrimOp {primOp, tyargs, args}) =
+    fun substSimpleExp (tysubst, subst, _, C.PrimOp {primOp, tyargs, args}) =
           C.PrimOp
             { primOp = primOp
-            , tyargs = tyargs
-            , args = List.map (substValue subst) args
+            , tyargs = List.map (substTy tysubst) tyargs
+            , args = List.map (substValue (tysubst, subst)) args
             }
-      | substSimpleExp (subst, _, C.Record fields) =
-          C.Record (Syntax.LabelMap.map (substValue subst) fields)
-      | substSimpleExp (_, _, e as C.ExnTag _) = e
-      | substSimpleExp (subst, _, C.Projection {label, record, fieldTypes}) =
+      | substSimpleExp (tysubst, subst, _, C.Record fields) =
+          C.Record (Syntax.LabelMap.map (substValue (tysubst, subst)) fields)
+      | substSimpleExp (tysubst, _, _, C.ExnTag {name, payloadTy}) =
+          C.ExnTag
+            {name = name, payloadTy = Option.map (substTy tysubst) payloadTy}
+      | substSimpleExp
+          (tysubst, subst, _, C.Projection {label, record, fieldTypes}) =
           C.Projection
             { label = label
-            , record = substValue subst record
-            , fieldTypes = fieldTypes
+            , record = substValue (tysubst, subst) record
+            , fieldTypes = Syntax.LabelMap.map (substTy tysubst) fieldTypes
             }
-      | substSimpleExp (subst, csubst, C.Abs {contParam, params, body, attr}) =
-          C.Abs
-            { contParam = contParam
-            , params = params
-            , body = substStat (subst, csubst, body)
+      | substSimpleExp
+          ( tysubst
+          , subst
+          , csubst
+          , C.Abs {contParam, tyParams, params, body, resultTy, attr}
+          ) =
+          let
+            val sTy = substTy tysubst
+          in
+            C.Abs
+              { contParam = contParam
+              , tyParams = tyParams
+              , params = List.map (fn (v, ty) => (v, sTy ty)) params
+              , body = substStat (tysubst, subst, csubst, body)
+              , resultTy = sTy resultTy
+              , attr = attr
+              }
+          end
+    and substDec (tysubst, subst, csubst) =
+      fn C.ValDec {exp, results} =>
+        let
+          val sTy = substTy tysubst
+        in
+          C.ValDec
+            { exp = substSimpleExp (tysubst, subst, csubst, exp)
+            , results = List.map (fn (v, ty) => (v, sTy ty)) results
+            }
+        end
+       | C.RecDec defs =>
+        let
+          val sTy = substTy tysubst
+        in
+          C.RecDec
+            (List.map
+               (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
+                  { name = name
+                  , contParam = contParam
+                  , tyParams = tyParams
+                  , params = List.map (fn (v, ty) => (v, sTy ty)) params
+                  , body = substStat (tysubst, subst, csubst, body)
+                  , resultTy = sTy resultTy
+                  , attr = attr
+                  }) defs)
+        end
+       | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+        C.UnpackDec
+          { tyVar = tyVar
+          , kind = kind
+          , vid = vid
+          , payloadTy = substTy tysubst payloadTy
+          , package = substValue (tysubst, subst) package
+          }
+       | C.ContDec {name, params, body, attr} =>
+        let
+          val sTy = substTy tysubst
+        in
+          C.ContDec
+            { name = name
+            , params = List.map (fn (v, ty) => (v, sTy ty)) params
+            , body = substStat (tysubst, subst, csubst, body)
             , attr = attr
             }
-    and substDec (subst, csubst) =
-      fn C.ValDec {exp, results} =>
-        C.ValDec {exp = substSimpleExp (subst, csubst, exp), results = results}
-       | C.RecDec defs =>
-        C.RecDec
-          (List.map
-             (fn {name, contParam, params, body, attr} =>
-                { name = name
-                , contParam = contParam
-                , params = params
-                , body = substStat (subst, csubst, body)
-                , attr = attr
-                }) defs)
-       | C.ContDec {name, params, body, attr} =>
-        C.ContDec
-          { name = name
-          , params = params
-          , body = substStat (subst, csubst, body)
-          , attr = attr
-          }
+        end
        | C.RecContDec defs =>
         C.RecContDec
           (List.map
              (fn (f, params, body) =>
-                (f, params, substStat (subst, csubst, body))) defs)
-       | dec as C.ESImportDec _ => dec
+                (f, params, substStat (tysubst, subst, csubst, body))) defs)
+       | C.ESImportDec {pure, specs, moduleName} =>
+        let
+          val sTy = substTy tysubst
+        in
+          C.ESImportDec
+            { pure = pure
+            , specs = List.map (fn (name, v, ty) => (name, v, sTy ty)) specs
+            , moduleName = moduleName
+            }
+        end
     and substStat
-          ( subst: C.Value TypedSyntax.VIdMap.map
+          ( tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map
+          , subst: C.Value TypedSyntax.VIdMap.map
           , csubst: C.CVar C.CVarMap.map
           , C.Let {decs, cont}
           ) =
           C.Let
-            { decs = List.map (substDec (subst, csubst)) decs
-            , cont = substStat (subst, csubst, cont)
-            }
-      | substStat (subst, csubst, C.App {applied, cont, args, attr}) =
-          C.App
-            { applied = substValue subst applied
-            , cont = substCVar csubst cont
-            , args = List.map (substValue subst) args
-            , attr = attr
-            }
-      | substStat (subst, csubst, C.AppCont {applied, args}) =
-          C.AppCont
-            { applied = substCVar csubst applied
-            , args = List.map (substValue subst) args
-            }
-      | substStat (subst, csubst, C.If {cond, thenCont, elseCont}) =
-          C.If
-            { cond = substValue subst cond
-            , thenCont = substStat (subst, csubst, thenCont)
-            , elseCont = substStat (subst, csubst, elseCont)
+            { decs = List.map (substDec (tysubst, subst, csubst)) decs
+            , cont = substStat (tysubst, subst, csubst, cont)
             }
       | substStat
-          ( subst
+          (tysubst, subst, csubst, C.App {applied, cont, tyArgs, args, attr}) =
+          C.App
+            { applied = substValue (tysubst, subst) applied
+            , cont = substCVar csubst cont
+            , tyArgs = List.map (substTy tysubst) tyArgs
+            , args = List.map (substValue (tysubst, subst)) args
+            , attr = attr
+            }
+      | substStat (tysubst, subst, csubst, C.AppCont {applied, args}) =
+          C.AppCont
+            { applied = substCVar csubst applied
+            , args = List.map (substValue (tysubst, subst)) args
+            }
+      | substStat (tysubst, subst, csubst, C.If {cond, thenCont, elseCont}) =
+          C.If
+            { cond = substValue (tysubst, subst) cond
+            , thenCont = substStat (tysubst, subst, csubst, thenCont)
+            , elseCont = substStat (tysubst, subst, csubst, elseCont)
+            }
+      | substStat
+          ( tysubst
+          , subst
           , csubst
           , C.Handle
               {body, handler = (e, h), successfulExitIn, successfulExitOut}
           ) =
           C.Handle
-            { body = substStat (subst, csubst, body)
-            , handler = (e, substStat (subst, csubst, h))
+            { body = substStat (tysubst, subst, csubst, body)
+            , handler = (e, substStat (tysubst, subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = substCVar csubst successfulExitOut
             }
-      | substStat (subst, _, C.Raise (span, x)) =
-          C.Raise (span, substValue subst x)
-      | substStat (_, _, e as C.Unreachable) = e
-    val substStat = fn (subst, csubst, e) =>
-      if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
-        e
-      else
-        substStat (subst, csubst, e)
+      | substStat (tysubst, subst, _, C.Raise (span, x)) =
+          C.Raise (span, substValue (tysubst, subst) x)
+      | substStat (_, _, _, e as C.Unreachable) = e
+    val substStat = fn (tysubst, subst, csubst, e) =>
+      if
+        TypedSyntax.TyVarMap.isEmpty tysubst
+        andalso TypedSyntax.VIdMap.isEmpty subst
+        andalso C.CVarMap.isEmpty csubst
+      then e
+      else substStat (tysubst, subst, csubst, e)
     fun alphaConvertSimpleExp
-          (ctx, subst, csubst, C.Abs {contParam, params, body, attr}) =
+          ( ctx
+          , tysubst
+          , subst
+          , csubst
+          , C.Abs {contParam, tyParams, params, body, resultTy, attr}
+          ) =
           let
+            val (tyParams', tysubst') =
+              List.foldr
+                (fn ((tv, kind), (tyParams', tysubst)) =>
+                   let
+                     val tv' = renewTyVar (ctx, tv)
+                   in
+                     ( (tv', kind) :: tyParams'
+                     , TypedSyntax.TyVarMap.insert
+                         (tysubst, tv, FSyntax.TyVar tv')
+                     )
+                   end) ([], tysubst) tyParams
+            val sTy = substTy tysubst'
             val (params', subst') =
               List.foldr
-                (fn (p, (params', subst)) =>
+                (fn ((p, ty), (params', subst)) =>
                    let
                      val p' = renewVId (ctx, p)
                    in
-                     ( p' :: params'
+                     ( (p', sTy ty) :: params'
                      , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                      )
                    end) ([], subst) params
@@ -1108,35 +1766,38 @@ struct
           in
             C.Abs
               { contParam = contParam'
+              , tyParams = tyParams'
               , params = params'
-              , body = alphaConvert (ctx, subst', csubst', body)
+              , body = alphaConvert (ctx, tysubst', subst', csubst', body)
+              , resultTy = sTy resultTy
               , attr = attr
               }
           end
-      | alphaConvertSimpleExp (_, subst, csubst, e) =
-          substSimpleExp (subst, csubst, e)
-    and alphaConvertDec (ctx: Context) (dec, (subst, csubst, acc)) =
+      | alphaConvertSimpleExp (_, tysubst, subst, csubst, e) =
+          substSimpleExp (tysubst, subst, csubst, e)
+    and alphaConvertDec (ctx: Context) (dec, (tysubst, subst, csubst, acc)) =
       case dec of
         C.ValDec {exp, results} =>
           let
+            val sTy = substTy tysubst
             val (results', subst') =
               List.foldr
-                (fn (SOME result, (acc, subst)) =>
+                (fn ((SOME result, ty), (acc, subst)) =>
                    let
                      val result' = renewVId (ctx, result)
                    in
-                     ( SOME result' :: acc
+                     ( (SOME result', sTy ty) :: acc
                      , TypedSyntax.VIdMap.insert (subst, result, C.Var result')
                      )
                    end
-                  | (NONE, (acc, subst)) => (NONE :: acc, subst)) ([], subst)
-                results
+                  | (a as (NONE, _), (acc, subst)) => (a :: acc, subst))
+                ([], subst) results
             val dec' = C.ValDec
-              { exp = alphaConvertSimpleExp (ctx, subst, csubst, exp)
+              { exp = alphaConvertSimpleExp (ctx, tysubst, subst, csubst, exp)
               , results = results'
               }
           in
-            (subst', csubst, dec' :: acc)
+            (tysubst, subst', csubst, dec' :: acc)
           end
       | C.RecDec defs =>
           let
@@ -1152,17 +1813,29 @@ struct
                    end) (subst, TypedSyntax.VIdMap.empty) defs
             val dec' = C.RecDec
               (List.map
-                 (fn {name, contParam, params, body, attr} =>
+                 (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                     let
                       val name' = TypedSyntax.VIdMap.lookup (nameMap, name)
                       val contParam' = renewCVar (ctx, contParam)
+                      val (tyParams', tysubst') =
+                        List.foldr
+                          (fn ((tv, kind), (tyParams', tysubst)) =>
+                             let
+                               val tv' = renewTyVar (ctx, tv)
+                             in
+                               ( (tv', kind) :: tyParams'
+                               , TypedSyntax.TyVarMap.insert
+                                   (tysubst, tv, FSyntax.TyVar tv')
+                               )
+                             end) ([], tysubst) tyParams
+                      val sTy = substTy tysubst'
                       val (params', subst) =
                         List.foldr
-                          (fn (p, (params', subst)) =>
+                          (fn ((p, ty), (params', subst)) =>
                              let
                                val p' = renewVId (ctx, p)
                              in
-                               ( p' :: params'
+                               ( (p', sTy ty) :: params'
                                , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                                )
                              end) ([], subst) params
@@ -1171,35 +1844,57 @@ struct
                     in
                       { name = name'
                       , contParam = contParam'
+                      , tyParams = tyParams'
                       , params = params'
-                      , body = alphaConvert (ctx, subst, csubst, body)
+                      , body = alphaConvert (ctx, tysubst, subst, csubst, body)
+                      , resultTy = sTy resultTy
                       , attr = attr
                       }
                     end) defs)
           in
-            (subst, csubst, dec' :: acc)
+            (tysubst, subst, csubst, dec' :: acc)
+          end
+      | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+          let
+            val package' = substValue (tysubst, subst) package
+            val vid' = renewVId (ctx, vid)
+            val tyVar' = renewTyVar (ctx, tyVar)
+            val subst' = TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')
+            val tysubst' =
+              TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')
+            val payloadTy' = substTy tysubst' payloadTy
+            val dec = C.UnpackDec
+              { tyVar = tyVar'
+              , kind = kind
+              , vid = vid'
+              , payloadTy = payloadTy'
+              , package = package'
+              }
+          in
+            (tysubst', subst', csubst, dec :: acc)
           end
       | C.ContDec {name, params, body, attr} =>
           let
+            val sTy = substTy tysubst
             val (params', subst') =
               List.foldr
-                (fn (SOME p, (params', subst)) =>
+                (fn ((SOME p, ty), (params', subst)) =>
                    let
                      val p' = renewVId (ctx, p)
                    in
-                     ( SOME p' :: params'
+                     ( (SOME p', sTy ty) :: params'
                      , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                      )
                    end
-                  | (NONE, (params', subst)) => (NONE :: params', subst))
+                  | (a as (NONE, _), (params', subst)) => (a :: params', subst))
                 ([], subst) params
-            val body = alphaConvert (ctx, subst', csubst, body)
+            val body = alphaConvert (ctx, tysubst, subst', csubst, body)
             val name' = renewCVar (ctx, name)
             val csubst = C.CVarMap.insert (csubst, name, name')
             val dec' = C.ContDec
               {name = name', params = params', body = body, attr = attr}
           in
-            (subst, csubst, dec' :: acc)
+            (tysubst, subst, csubst, dec' :: acc)
           end
       | C.RecContDec defs =>
           let
@@ -1213,6 +1908,7 @@ struct
                      , C.CVarMap.insert (nameMap, f, f')
                      )
                    end) (csubst, C.CVarMap.empty) defs
+            val sTy = substTy tysubst
             val dec' = C.RecContDec
               (List.map
                  (fn (f, params, body) =>
@@ -1220,75 +1916,86 @@ struct
                       val f' = C.CVarMap.lookup (nameMap, f)
                       val (params', subst) =
                         List.foldr
-                          (fn (SOME p, (params', subst)) =>
+                          (fn ((SOME p, ty), (params', subst)) =>
                              let
                                val p' = renewVId (ctx, p)
                              in
-                               ( SOME p' :: params'
+                               ( (SOME p', sTy ty) :: params'
                                , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                                )
                              end
-                            | (NONE, (params', subst)) => (params', subst))
-                          ([], subst) params
+                            | (a as (NONE, _), (params', subst)) =>
+                             (a :: params', subst)) ([], subst) params
                     in
-                      (f', params', alphaConvert (ctx, subst, csubst, body))
+                      ( f'
+                      , params'
+                      , alphaConvert (ctx, tysubst, subst, csubst, body)
+                      )
                     end) defs)
           in
-            (subst, csubst, dec' :: acc)
+            (tysubst, subst, csubst, dec' :: acc)
           end
       | C.ESImportDec {pure, specs, moduleName} =>
           let
+            val sTy = substTy tysubst
             val specs' =
-              List.map (fn (name, vid) => (name, vid, renewVId (ctx, vid)))
+              List.map
+                (fn (name, vid, ty) => (name, vid, renewVId (ctx, vid), sTy ty))
                 specs
             val subst' =
               List.foldl
-                (fn ((_, vid, vid'), subst) =>
+                (fn ((_, vid, vid', _), subst) =>
                    TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')) subst
                 specs'
             val dec' = C.ESImportDec
               { pure = pure
-              , specs = List.map (fn (name, _, vid) => (name, vid)) specs'
+              , specs =
+                  List.map (fn (name, _, vid, ty) => (name, vid, ty)) specs'
               , moduleName = moduleName
               }
           in
-            (subst', csubst, dec' :: acc)
+            (tysubst, subst', csubst, dec' :: acc)
           end
     and alphaConvert
           ( ctx: Context
+          , tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map
           , subst: C.Value TypedSyntax.VIdMap.map
           , csubst: C.CVar C.CVarMap.map
           , C.Let {decs, cont}
           ) =
           let
-            val (subst', csubst', revDecs) =
-              List.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
+            val (tysubst', subst', csubst', revDecs) =
+              List.foldl (alphaConvertDec ctx) (tysubst, subst, csubst, []) decs
           in
             C.Let
               { decs = List.rev revDecs
-              , cont = alphaConvert (ctx, subst', csubst', cont)
+              , cont = alphaConvert (ctx, tysubst', subst', csubst', cont)
               }
           end
-      | alphaConvert (_, subst, csubst, C.App {applied, cont, args, attr}) =
+      | alphaConvert
+          (_, tysubst, subst, csubst, C.App {applied, cont, tyArgs, args, attr}) =
           C.App
-            { applied = substValue subst applied
+            { applied = substValue (tysubst, subst) applied
             , cont = substCVar csubst cont
-            , args = List.map (substValue subst) args
+            , tyArgs = List.map (substTy tysubst) tyArgs
+            , args = List.map (substValue (tysubst, subst)) args
             , attr = attr
             }
-      | alphaConvert (_, subst, csubst, C.AppCont {applied, args}) =
+      | alphaConvert (_, tysubst, subst, csubst, C.AppCont {applied, args}) =
           C.AppCont
             { applied = substCVar csubst applied
-            , args = List.map (substValue subst) args
+            , args = List.map (substValue (tysubst, subst)) args
             }
-      | alphaConvert (ctx, subst, csubst, C.If {cond, thenCont, elseCont}) =
+      | alphaConvert
+          (ctx, tysubst, subst, csubst, C.If {cond, thenCont, elseCont}) =
           C.If
-            { cond = substValue subst cond
-            , thenCont = alphaConvert (ctx, subst, csubst, thenCont)
-            , elseCont = alphaConvert (ctx, subst, csubst, elseCont)
+            { cond = substValue (tysubst, subst) cond
+            , thenCont = alphaConvert (ctx, tysubst, subst, csubst, thenCont)
+            , elseCont = alphaConvert (ctx, tysubst, subst, csubst, elseCont)
             }
       | alphaConvert
           ( ctx
+          , tysubst
           , subst
           , csubst
           , C.Handle
@@ -1302,15 +2009,15 @@ struct
             val subst' = TypedSyntax.VIdMap.insert (subst, e, C.Var e')
           in
             C.Handle
-              { body = alphaConvert (ctx, subst, csubst', body)
-              , handler = (e', alphaConvert (ctx, subst', csubst, h))
+              { body = alphaConvert (ctx, tysubst, subst, csubst', body)
+              , handler = (e', alphaConvert (ctx, tysubst, subst', csubst, h))
               , successfulExitIn = successfulExitIn'
               , successfulExitOut = substCVar csubst successfulExitOut
               }
           end
-      | alphaConvert (_, subst, _, C.Raise (span, x)) =
-          C.Raise (span, substValue subst x)
-      | alphaConvert (_, _, _, e as C.Unreachable) = e
+      | alphaConvert (_, tysubst, subst, _, C.Raise (span, x)) =
+          C.Raise (span, substValue (tysubst, subst) x)
+      | alphaConvert (_, _, _, _, e as C.Unreachable) = e
     type value_info = {exp: C.SimpleExp option, isDiscardableFunction: bool}
     fun isDiscardableDec (dec, env: value_info TypedSyntax.VIdMap.map) =
       case dec of
@@ -1320,7 +2027,7 @@ struct
                let
                  val env =
                    case results of
-                     [SOME result] =>
+                     [(SOME result, _)] =>
                        TypedSyntax.VIdMap.insert
                          ( env
                          , result
@@ -1335,6 +2042,7 @@ struct
                end
            | _ => if C.isDiscardable exp then SOME env else NONE)
       | C.RecDec _ => SOME env
+      | C.UnpackDec _ => SOME env
       | C.ContDec {name = _, params = _, body, attr = _} =>
           if isDiscardableExp (env, body) then SOME env else NONE
       | C.RecContDec _ => NONE
@@ -1345,7 +2053,15 @@ struct
              SOME env => isDiscardableExp (env, cont)
            | NONE => false)
       | isDiscardableExp
-          (env, C.App {applied = C.Var applied, cont = _, args = _, attr = _}) =
+          ( env
+          , C.App
+              { applied = C.Var applied
+              , cont = _
+              , tyArgs = _
+              , args = _
+              , attr = _
+              }
+          ) =
           (case TypedSyntax.VIdMap.find (env, applied) of
              SOME {isDiscardableFunction = true, ...} => true
            | _ => false)
@@ -1381,18 +2097,24 @@ struct
                 , tyargs = _
                 , args = [f, arg]
                 }
-          , results = [SOME result]
+          , results = [(SOME result, ty)]
           } =>
           let
             val name = genContSym ctx
           in
             ( [C.ContDec
                  { name = name
-                 , params = [SOME result]
+                 , params = [(SOME result, ty)]
                  , body = prependDecs (decs, cont)
                  , attr = {alwaysInline = false}
                  }]
-            , C.App {applied = f, cont = name, args = [arg], attr = {}}
+            , C.App
+                { applied = f
+                , cont = name
+                , tyArgs = []
+                , args = [arg]
+                , attr = {typeOnly = false}
+                }
             )
           end
       | C.ValDec
@@ -1408,13 +2130,18 @@ struct
       | C.ValDec {exp = C.Record _, results = _} => (dec :: decs, cont)
       | C.ValDec {exp = C.ExnTag _, results = _} => (dec :: decs, cont)
       | C.ValDec {exp = C.Projection _, results = _} => (dec :: decs, cont)
-      | C.ValDec {exp = C.Abs {contParam, params, body, attr}, results} =>
+      | C.ValDec
+          { exp = C.Abs {contParam, tyParams, params, body, resultTy, attr}
+          , results
+          } =>
           let
             val dec = C.ValDec
               { exp = C.Abs
                   { contParam = contParam
+                  , tyParams = tyParams
                   , params = params
                   , body = finalizeStat (ctx, body)
+                  , resultTy = resultTy
                   , attr = attr
                   }
               , results = results
@@ -1426,16 +2153,19 @@ struct
           let
             val dec = C.RecDec
               (List.map
-                 (fn {name, contParam, params, body, attr} =>
+                 (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                     { name = name
                     , contParam = contParam
+                    , tyParams = tyParams
                     , params = params
                     , body = finalizeStat (ctx, body)
+                    , resultTy = resultTy
                     , attr = attr
                     }) defs)
           in
             (dec :: decs, cont)
           end
+      | dec as C.UnpackDec _ => (dec :: decs, cont)
       | C.ContDec {name, params, body, attr} =>
           let
             val dec = C.ContDec
@@ -1532,7 +2262,17 @@ struct
     fun goDec (table, level) (dec, acc) =
       case dec of
         C.ValDec
-          {exp = C.Abs {contParam, params = _, body, attr = _}, results = _} =>
+          { exp =
+              C.Abs
+                { contParam
+                , tyParams = _
+                , params = _
+                , body
+                , resultTy = _
+                , attr = _
+                }
+          , results = _
+          } =>
           ( C.CVarTable.insert table
               ( contParam
               , { escapes = ref false
@@ -1557,6 +2297,7 @@ struct
                    )
                ; go (table, 0, body, acc)
                )) acc defs
+      | C.UnpackDec _ => acc
       | C.ContDec {name, params = _, body, attr = _} =>
           let
             val free = go (table, level + 1, body, C.CVarSet.empty)
@@ -1603,8 +2344,12 @@ struct
       | C.ESImportDec _ => acc
     and go (table, level, C.Let {decs, cont}, acc) =
           go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
-      | go (table, level, C.App {applied = _, cont, args = _, attr = _}, acc) =
-          escape (table, level, cont, acc)
+      | go
+          ( table
+          , level
+          , C.App {applied = _, cont, tyArgs = _, args = _, attr = _}
+          , acc
+          ) = escape (table, level, cont, acc)
       | go (table, level, C.AppCont {applied, args = _}, acc) =
           direct (table, level, applied, acc)
       | go (table, level, C.If {cond = _, thenCont, elseCont}, acc) =

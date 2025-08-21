@@ -68,6 +68,7 @@ struct
            ::
            doTyVar tv
            @ P.Fragment " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
+    | doTy _ (F.AnyType _) = [P.Fragment "Any"]
   fun doPrimOp (F.IntConstOp x) =
         [P.Fragment ("int " ^ IntInf.toString x)]
     | doPrimOp (F.WordConstOp x) =
@@ -233,7 +234,7 @@ struct
                 doExp 2 arg
                 @ (if List.null acc then acc else P.Fragment " " :: acc)) []
              args @ [P.Fragment ")"])
-    | doExp prec (F.HandleExp {body, exnName, handler}) =
+    | doExp prec (F.HandleExp {body, exnName, handler, resultTy = _}) =
         showParen (prec >= 1)
           (P.Fragment "_try "
            ::

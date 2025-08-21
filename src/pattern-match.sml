@@ -662,7 +662,7 @@ struct
         (List.app (fn dec => goDec (ctx, dec)) decs; goExp (ctx, exp))
     | goExp (ctx, F.MultiAppExp (f, args)) =
         (goExp (ctx, f); List.app (fn arg => goExp (ctx, arg)) args)
-    | goExp (ctx, F.HandleExp {body, exnName = _, handler}) =
+    | goExp (ctx, F.HandleExp {body, exnName = _, handler, resultTy = _}) =
         (goExp (ctx, body); goExp (ctx, handler))
     | goExp (ctx, F.IfThenElseExp (x, y, z)) =
         (goExp (ctx, x); goExp (ctx, y); goExp (ctx, z))

@@ -15,14 +15,18 @@ struct
   fun goDec (dec, (env, acc)) =
     case dec of
       C.ValDec
-        {exp = C.Abs {contParam, params, body, attr}, results as [SOME _]} =>
+        { exp = C.Abs {contParam, tyParams, params, body, resultTy, attr}
+        , results as [(SOME _, _)]
+        } =>
         let
           (* Eta conversion of a function is not implemented yet *)
           val dec' = C.ValDec
             { exp = C.Abs
                 { contParam = contParam
+                , tyParams = tyParams
                 , params = params
                 , body = goFunction body
+                , resultTy = resultTy
                 , attr = attr
                 }
             , results = results
@@ -35,20 +39,23 @@ struct
         let
           val defs =
             List.map
-              (fn {name, contParam, params, body, attr} =>
+              (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                  { name = name
                  , contParam = contParam
+                 , tyParams = tyParams
                  , params = params
                  , body = goFunction body
+                 , resultTy = resultTy
                  , attr = attr
                  }) defs
         in
           (env, C.RecDec defs :: acc)
         end
+    | C.UnpackDec _ => (env, dec :: acc)
     | C.ContDec {name, params, body as C.AppCont {applied, args}, attr} =>
         (* Eta conversion *)
         if
-          ListPair.allEq (fn (SOME p, C.Var q) => p = q | _ => false)
+          ListPair.allEq (fn ((SOME p, _), C.Var q) => p = q | _ => false)
             (params, args)
         then
           (C.CVarMap.insert (env, name, goCont (env, applied)), acc)
@@ -86,10 +93,11 @@ struct
         let val (env, revDecs) = List.foldl goDec (env, []) decs
         in C.Let {decs = List.rev revDecs, cont = goStat (env, cont)}
         end
-    | C.App {applied, cont, args, attr} =>
+    | C.App {applied, cont, tyArgs, args, attr} =>
         C.App
           { applied = applied
           , cont = goCont (env, cont)
+          , tyArgs = tyArgs
           , args = args
           , attr = attr
           }

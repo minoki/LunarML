@@ -12,12 +12,16 @@ struct
     fun goDec ctx (dec, acc) =
       case dec of
         C.ValDec
-          {exp = C.Abs {contParam, params, body, attr}, results as [SOME _]} =>
+          { exp = C.Abs {contParam, tyParams, params, body, resultTy, attr}
+          , results as [(SOME _, _)]
+          } =>
           C.ValDec
             { exp = C.Abs
                 { contParam = contParam
+                , tyParams = tyParams
                 , params = params
                 , body = goStat (ctx, body)
+                , resultTy = resultTy
                 , attr = attr
                 }
             , results = results
@@ -27,11 +31,13 @@ struct
           let
             val defs =
               List.map
-                (fn {name, contParam, params, body, attr} =>
+                (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
                    { name = name
                    , contParam = contParam
+                   , tyParams = tyParams
                    , params = params
                    , body = goStat (ctx, body)
+                   , resultTy = resultTy
                    , attr = attr
                    }) defs
             val defined =
@@ -69,24 +75,38 @@ struct
                        [vid] =>
                          let
                            val
-                             { def as {name, contParam, params, body, attr}
+                             { def as
+                                 { name
+                                 , contParam
+                                 , tyParams
+                                 , params
+                                 , body
+                                 , resultTy
+                                 , attr
+                                 }
                              , dests
                              } = TypedSyntax.VIdMap.lookup (map, vid)
                          in
                            if TypedSyntax.VIdSet.member (dests, vid) then
                              C.RecDec [def]
                            else
-                             ( #simplificationOccurred ctx := true
-                             ; C.ValDec
+                             let
+                               val fnTy = FSyntax.MultiFnType
+                                 (List.map #2 params, resultTy)
+                             in
+                               #simplificationOccurred ctx := true;
+                               C.ValDec
                                  { exp = C.Abs
                                      { contParam = contParam
+                                     , tyParams = tyParams
                                      , params = params
                                      , body = body
+                                     , resultTy = resultTy
                                      , attr = attr
                                      }
-                                 , results = [SOME name]
+                                 , results = [(SOME name, fnTy)]
                                  }
-                             )
+                             end
                          end
                      | scc =>
                          C.RecDec
@@ -98,6 +118,7 @@ struct
                    dec :: decs
                  end) acc sccs
           end
+      | C.UnpackDec _ => dec :: acc
       | C.ContDec {name, params, body, attr} =>
           C.ContDec
             { name = name
