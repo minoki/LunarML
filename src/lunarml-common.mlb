@@ -45,6 +45,7 @@ pattern-match.sml
 ftransform.sml
 lua-syntax.sml
 cps.sml
+cps/check.sml
 cps/dead-code.sml
 cps/uncurry.sml
 cps/loop.sml

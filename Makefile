@@ -55,6 +55,7 @@ sources = \
   src/pattern-match.sml \
   src/ftransform.sml \
   src/cps.sml \
+  src/cps/check.sml \
   src/cps/dead-code.sml \
   src/cps/uncurry.sml \
   src/cps/loop.sml \

@@ -24,6 +24,7 @@ sig
     Var of Var
   | Unit (* : unit *)
   | Nil (* : forall 'a. 'a list *)
+  | TypedNil of Ty (* : 'a list *)
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
@@ -65,12 +66,13 @@ sig
       { tyVar: FSyntax.TyVar
       , kind: FSyntax.Kind
       , vid: Var
-      , payloadTy: Ty
+      , unpackedTy: Ty
       , package: Value
       }
   | ContDec of
       {name: CVar, params: (Var option * Ty) list, body: Stat, attr: ContAttr}
   | RecContDec of (CVar * (Var option * Ty) list * Stat) list
+  | DatatypeDec of FSyntax.TyVar * FSyntax.Kind
   | ESImportDec of
       { pure: bool
       , specs: (Syntax.ESImportName * Var * Ty) list
@@ -92,6 +94,7 @@ sig
       , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
+      , resultTy: Ty
       }
   | Raise of SourcePos.span * Value
   | Unreachable
@@ -139,6 +142,7 @@ struct
     Var of Var
   | Unit (* : unit *)
   | Nil (* : forall 'a. 'a list *)
+  | TypedNil of Ty (* : 'a list *)
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
@@ -183,12 +187,13 @@ struct
       { tyVar: FSyntax.TyVar
       , kind: FSyntax.Kind
       , vid: Var
-      , payloadTy: Ty
+      , unpackedTy: Ty (* type of the variable *)
       , package: Value
       }
   | ContDec of
       {name: CVar, params: (Var option * Ty) list, body: Stat, attr: ContAttr}
   | RecContDec of (CVar * (Var option * Ty) list * Stat) list
+  | DatatypeDec of FSyntax.TyVar * FSyntax.Kind
   | ESImportDec of
       { pure: bool
       , specs: (Syntax.ESImportName * Var * Ty) list
@@ -210,12 +215,14 @@ struct
       , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
+      , resultTy: Ty
       }
   | Raise of SourcePos.span * Value
   | Unreachable
   fun extractVarFromValue (Var v) = SOME v
     | extractVarFromValue Unit = NONE
     | extractVarFromValue Nil = NONE
+    | extractVarFromValue (TypedNil _) = NONE
     | extractVarFromValue (BoolConst _) = NONE
     | extractVarFromValue (IntConst _) = NONE
     | extractVarFromValue (WordConst _) = NONE
@@ -302,6 +309,7 @@ struct
           containsApp body
       | containsAppDec (RecContDec defs) =
           List.exists (fn (_, _, body) => containsApp body) defs
+      | containsAppDec (DatatypeDec _) = false
       | containsAppDec (ESImportDec _) = false
     and containsApp (Let {decs, cont}) =
           containsApp cont orelse List.exists containsAppDec decs
@@ -396,6 +404,7 @@ struct
           in
             (bound, acc)
           end
+      | freeVarsInDec (DatatypeDec _, (bound, acc)) = (bound, acc)
       | freeVarsInDec
           (ESImportDec {pure = _, specs, moduleName = _}, (bound, acc)) =
           ( List.foldl
@@ -423,6 +432,7 @@ struct
               , handler = (e, h)
               , successfulExitIn = _
               , successfulExitOut = _
+              , resultTy = _
               }
           , acc
           ) =
@@ -473,6 +483,7 @@ struct
               RecContDec
                 (List.map
                    (fn (name, params, body) => (name, params, goExp body)) defs)
+          | goDec (dec as DatatypeDec _) = dec
           | goDec (dec as ESImportDec _) = dec
         and goExp e =
           f (case e of
@@ -487,12 +498,18 @@ struct
                    , elseCont = goExp elseCont
                    }
              | Handle
-                 {body, handler = (k, h), successfulExitIn, successfulExitOut} =>
+                 { body
+                 , handler = (k, h)
+                 , successfulExitIn
+                 , successfulExitOut
+                 , resultTy
+                 } =>
                  Handle
                    { body = goExp body
                    , handler = (k, goExp h)
                    , successfulExitIn = successfulExitIn
                    , successfulExitOut = successfulExitOut
+                   , resultTy = resultTy
                    }
              | Raise _ => e
              | Unreachable => e)
@@ -503,6 +520,7 @@ struct
           "Var(" ^ TypedSyntax.print_VId v ^ ")"
       | valueToString Unit = "Unit"
       | valueToString Nil = "Nil"
+      | valueToString (TypedNil _) = "TypedNil"
       | valueToString (BoolConst x) =
           "Bool(" ^ Bool.toString x ^ ")"
       | valueToString (IntConst (Primitives.INT, x)) =
@@ -1133,7 +1151,7 @@ struct
                            { tyVar = tv
                            , kind = kind
                            , vid = vid
-                           , payloadTy = ty
+                           , unpackedTy = ty
                            , package = package
                            }
                        in
@@ -1147,8 +1165,14 @@ struct
                   transform (ctx, env) exp
                     {revDecs = revDecs, resultHint = NONE}
                     (fn (revDecs, _, _) => doDecs (env, decs, revDecs))
-              | doDecs (env, F.DatatypeDec _ :: decs, revDecs) =
-                  doDecs (env, decs, revDecs)
+              | doDecs (env, F.DatatypeDec datbinds :: decs, revDecs) =
+                  doDecs (env, decs, List.revAppend
+                    ( List.map
+                        (fn F.DatBind (params, tv, _) =>
+                           C.DatatypeDec
+                             (tv, F.arityToKind (List.length params))) datbinds
+                    , revDecs
+                    ))
               | doDecs
                   ( env
                   , F.ExceptionDec {name, tagName, payloadTy} :: decs
@@ -1231,6 +1255,7 @@ struct
                       (transformBlock (ctx, handlerEnv) handler j))
                   , successfulExitIn = success
                   , successfulExitOut = j
+                  , resultTy = resultTy
                   }
               )
             end)
@@ -1528,6 +1553,7 @@ struct
         | C.RecContDec defs =>
             List.foldl (fn ((_, _, body), t) => sizeOfStat (body, t)) threshold
               defs
+        | C.DatatypeDec _ => 0
         | C.ESImportDec _ => 0
     and sizeOfStat (e, threshold) =
       if threshold < 0 then
@@ -1546,6 +1572,7 @@ struct
             , handler = (_, h)
             , successfulExitIn = _
             , successfulExitOut = _
+            , resultTy = _
             } => sizeOfStat (body, sizeOfStat (h, threshold - 1))
         | C.Raise _ => threshold
         | C.Unreachable => threshold
@@ -1568,6 +1595,8 @@ struct
                 }
           | goVal (v as C.Unit) = v
           | goVal (v as C.Nil) = v
+          | goVal (C.TypedNil ty) =
+              C.TypedNil (goTy ty)
           | goVal (v as C.BoolConst _) = v
           | goVal (v as C.IntConst _) = v
           | goVal (v as C.WordConst _) = v
@@ -1644,12 +1673,12 @@ struct
                   , attr = attr
                   }) defs)
         end
-       | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+       | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
         C.UnpackDec
           { tyVar = tyVar
           , kind = kind
           , vid = vid
-          , payloadTy = substTy tysubst payloadTy
+          , unpackedTy = substTy tysubst unpackedTy
           , package = substValue (tysubst, subst) package
           }
        | C.ContDec {name, params, body, attr} =>
@@ -1664,10 +1693,18 @@ struct
             }
         end
        | C.RecContDec defs =>
-        C.RecContDec
-          (List.map
-             (fn (f, params, body) =>
-                (f, params, substStat (tysubst, subst, csubst, body))) defs)
+        let
+          val sTy = substTy tysubst
+        in
+          C.RecContDec
+            (List.map
+               (fn (f, params, body) =>
+                  ( f
+                  , List.map (fn (v, ty) => (v, sTy ty)) params
+                  , substStat (tysubst, subst, csubst, body)
+                  )) defs)
+        end
+       | dec as C.DatatypeDec _ => dec
        | C.ESImportDec {pure, specs, moduleName} =>
         let
           val sTy = substTy tysubst
@@ -1713,13 +1750,19 @@ struct
           , subst
           , csubst
           , C.Handle
-              {body, handler = (e, h), successfulExitIn, successfulExitOut}
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy
+              }
           ) =
           C.Handle
             { body = substStat (tysubst, subst, csubst, body)
             , handler = (e, substStat (tysubst, subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = substCVar csubst successfulExitOut
+            , resultTy = substTy tysubst resultTy
             }
       | substStat (tysubst, subst, _, C.Raise (span, x)) =
           C.Raise (span, substValue (tysubst, subst) x)
@@ -1790,7 +1833,7 @@ struct
                      , TypedSyntax.VIdMap.insert (subst, result, C.Var result')
                      )
                    end
-                  | (a as (NONE, _), (acc, subst)) => (a :: acc, subst))
+                  | ((NONE, ty), (acc, subst)) => ((NONE, sTy ty) :: acc, subst))
                 ([], subst) results
             val dec' = C.ValDec
               { exp = alphaConvertSimpleExp (ctx, tysubst, subst, csubst, exp)
@@ -1846,7 +1889,7 @@ struct
                       , contParam = contParam'
                       , tyParams = tyParams'
                       , params = params'
-                      , body = alphaConvert (ctx, tysubst, subst, csubst, body)
+                      , body = alphaConvert (ctx, tysubst', subst, csubst, body)
                       , resultTy = sTy resultTy
                       , attr = attr
                       }
@@ -1854,7 +1897,7 @@ struct
           in
             (tysubst, subst, csubst, dec' :: acc)
           end
-      | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+      | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
           let
             val package' = substValue (tysubst, subst) package
             val vid' = renewVId (ctx, vid)
@@ -1862,12 +1905,12 @@ struct
             val subst' = TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')
             val tysubst' =
               TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')
-            val payloadTy' = substTy tysubst' payloadTy
+            val unpackedTy' = substTy tysubst' unpackedTy
             val dec = C.UnpackDec
               { tyVar = tyVar'
               , kind = kind
               , vid = vid'
-              , payloadTy = payloadTy'
+              , unpackedTy = unpackedTy'
               , package = package'
               }
           in
@@ -1886,8 +1929,8 @@ struct
                      , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                      )
                    end
-                  | (a as (NONE, _), (params', subst)) => (a :: params', subst))
-                ([], subst) params
+                  | ((NONE, ty), (params', subst)) =>
+                   ((NONE, sTy ty) :: params', subst)) ([], subst) params
             val body = alphaConvert (ctx, tysubst, subst', csubst, body)
             val name' = renewCVar (ctx, name)
             val csubst = C.CVarMap.insert (csubst, name, name')
@@ -1924,8 +1967,9 @@ struct
                                , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
                                )
                              end
-                            | (a as (NONE, _), (params', subst)) =>
-                             (a :: params', subst)) ([], subst) params
+                            | ((NONE, ty), (params', subst)) =>
+                             ((NONE, sTy ty) :: params', subst)) ([], subst)
+                          params
                     in
                       ( f'
                       , params'
@@ -1934,6 +1978,14 @@ struct
                     end) defs)
           in
             (tysubst, subst, csubst, dec' :: acc)
+          end
+      | C.DatatypeDec (tyVar, kind) =>
+          let
+            val tyVar' = renewTyVar (ctx, tyVar)
+            val tysubst' =
+              TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')
+          in
+            (tysubst', subst, csubst, C.DatatypeDec (tyVar', kind) :: acc)
           end
       | C.ESImportDec {pure, specs, moduleName} =>
           let
@@ -1999,7 +2051,12 @@ struct
           , subst
           , csubst
           , C.Handle
-              {body, handler = (e, h), successfulExitIn, successfulExitOut}
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy
+              }
           ) =
           let
             val successfulExitIn' = renewCVar (ctx, successfulExitIn)
@@ -2013,6 +2070,7 @@ struct
               , handler = (e', alphaConvert (ctx, tysubst, subst', csubst, h))
               , successfulExitIn = successfulExitIn'
               , successfulExitOut = substCVar csubst successfulExitOut
+              , resultTy = substTy tysubst resultTy
               }
           end
       | alphaConvert (_, tysubst, subst, _, C.Raise (span, x)) =
@@ -2046,6 +2104,7 @@ struct
       | C.ContDec {name = _, params = _, body, attr = _} =>
           if isDiscardableExp (env, body) then SOME env else NONE
       | C.RecContDec _ => NONE
+      | C.DatatypeDec _ => SOME env
       | C.ESImportDec {pure = _, specs = _, moduleName = _} => SOME env
     and isDiscardableExp
           (env: value_info TypedSyntax.VIdMap.map, C.Let {decs, cont}) =
@@ -2077,6 +2136,7 @@ struct
               , handler = (_, h)
               , successfulExitIn = _
               , successfulExitOut = _
+              , resultTy = _
               }
           ) =
           isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
@@ -2165,7 +2225,7 @@ struct
           in
             (dec :: decs, cont)
           end
-      | dec as C.UnpackDec _ => (dec :: decs, cont)
+      | C.UnpackDec _ => (dec :: decs, cont)
       | C.ContDec {name, params, body, attr} =>
           let
             val dec = C.ContDec
@@ -2186,6 +2246,7 @@ struct
           in
             (dec :: decs, cont)
           end
+      | C.DatatypeDec _ => (dec :: decs, cont)
       | C.ESImportDec _ => (dec :: decs, cont)
     and finalizeStat (ctx, C.Let {decs, cont}) =
           prependDecs
@@ -2201,13 +2262,19 @@ struct
       | finalizeStat
           ( ctx
           , C.Handle
-              {body, handler = (e, h), successfulExitIn, successfulExitOut}
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy
+              }
           ) =
           C.Handle
             { body = finalizeStat (ctx, body)
             , handler = (e, finalizeStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
+            , resultTy = resultTy
             }
       | finalizeStat (_, e as C.Raise _) = e
       | finalizeStat (_, e as C.Unreachable) = e
@@ -2341,6 +2408,7 @@ struct
                    C.CVarSet.union (acc, free)
                  end) acc defs
           )
+      | C.DatatypeDec _ => acc
       | C.ESImportDec _ => acc
     and go (table, level, C.Let {decs, cont}, acc) =
           go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
@@ -2358,7 +2426,12 @@ struct
           ( table
           , level
           , C.Handle
-              {body, handler = (_, h), successfulExitIn, successfulExitOut}
+              { body
+              , handler = (_, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy = _
+              }
           , acc
           ) =
           let

@@ -5,6 +5,7 @@
 (* This module erases polymorphic types *)
 structure CpsErasePoly:
 sig
+  val goTy: FSyntax.Ty TypedSyntax.TyVarMap.map -> FSyntax.Ty -> FSyntax.Ty
   val transform: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
 end =
 struct
@@ -42,7 +43,10 @@ struct
              NONE => v
            | SOME replacement => replacement)
       | goValue _ (v as C.Unit) = v
-      | goValue _ (v as C.Nil) = v
+      | goValue _ C.Nil =
+          C.TypedNil (F.AnyType F.TypeKind)
+      | goValue {tyMap, ...} (C.TypedNil ty) =
+          C.TypedNil (goTy tyMap ty)
       | goValue _ (v as C.BoolConst _) = v
       | goValue _ (v as C.IntConst _) = v
       | goValue _ (v as C.WordConst _) = v
@@ -195,7 +199,9 @@ struct
                                  , params =
                                      List.map (fn (v, ty) => (v, goTy tyMap ty))
                                        params
-                                 , body = goStat (env, body)
+                                 , body =
+                                     goStat
+                                       ({tyMap = tyMap, valMap = valMap}, body)
                                  , resultTy = goTy tyMap resultTy
                                  , attr = attr
                                  }
@@ -243,10 +249,12 @@ struct
                        , goDecs (env, decs, cont)
                        )
                    end
-               | C.UnpackDec {tyVar, kind, vid, payloadTy = _, package} =>
+               | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
                    let
                      val tyMap = TyVarMap.insert (tyMap, tyVar, F.AnyType kind)
-                     val package = (* cast? *) goValue env package
+                     val package =
+                       goValue env
+                         package (* C.Cast { value = _, from = F.AnyType F.TypeKind (* TODO *), to = F.substituteTy (tyVar, F.AnyType kind) unpackedTy } *)
                      val valMap = VIdMap.insert (valMap, vid, package)
                      val env = {tyMap = tyMap, valMap = valMap}
                    in
@@ -276,6 +284,7 @@ struct
                        , goDecs (env, decs, cont)
                        )
                    end
+               | C.DatatypeDec _ => prependDec (dec, goDecs (env, decs, cont))
                | C.ESImportDec {pure, specs, moduleName} =>
                    prependDec
                      ( C.ESImportDec
@@ -312,15 +321,21 @@ struct
                 , elseCont = goStat (env, elseCont)
                 }
           | goStat
-              ( env
+              ( env as {tyMap, ...}
               , C.Handle
-                  {body, handler = (v, h), successfulExitIn, successfulExitOut}
+                  { body
+                  , handler = (v, h)
+                  , successfulExitIn
+                  , successfulExitOut
+                  , resultTy
+                  }
               ) =
               C.Handle
                 { body = goStat (env, body)
                 , handler = (v, goStat (env, h))
                 , successfulExitIn = successfulExitIn
                 , successfulExitOut = successfulExitOut
+                , resultTy = goTy tyMap resultTy
                 }
           | goStat (env, C.Raise (span, v)) =
               C.Raise (span, goValue env v)

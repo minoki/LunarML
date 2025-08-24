@@ -14,9 +14,10 @@ sig
     , valConEnv:
         ({tyParams: FSyntax.TyVar list, payload: FSyntax.Ty option} StringMap.map) TypedSyntax.TyVarMap.map
     }
-  val sameType: FSyntax.Ty TypedSyntax.TyVarMap.map
-                -> FSyntax.Ty * FSyntax.Ty
-                -> bool
+  val checkKind: FSyntax.Kind TypedSyntax.TyVarMap.map * FSyntax.Kind
+                 -> FSyntax.Ty
+                 -> unit
+  val sameType: FSyntax.Ty * FSyntax.Ty -> bool
   val checkSame:
     FSyntax.Ty TypedSyntax.TyVarMap.map * (unit -> string) * FSyntax.Ty
     -> FSyntax.Ty
@@ -75,7 +76,7 @@ struct
       | kindOf env (F.TypeFn (tv, kind, ty)) =
           F.ArrowKind
             (kind, kindOf (TypedSyntax.TyVarMap.insert (env, tv, kind)) ty)
-      | kindOf env (F.AnyType kind) = kind
+      | kindOf _ (F.AnyType kind) = kind
     and checkKind (env, expectedKind) ty =
       let
         val kind = kindOf env ty
@@ -134,7 +135,9 @@ struct
       | normalizeType _ (ty as F.AnyType _) = ty
 
     (*: val sameType' : int * int TypedSyntax.TyVarMap.map * int TypedSyntax.TyVarMap.map -> F.Ty * F.Ty -> bool *)
-    fun sameType' (_: int, tvmap, tvmap') (F.TyVar tv, F.TyVar tv') =
+    fun sameType' env (ty, ty') =
+      sameType'' env (F.weakNormalizeTy ty, F.weakNormalizeTy ty')
+    and sameType'' (_: int, tvmap, tvmap') (F.TyVar tv, F.TyVar tv') =
           (case
              ( TypedSyntax.TyVarMap.find (tvmap, tv)
              , TypedSyntax.TyVarMap.find (tvmap', tv')
@@ -143,7 +146,7 @@ struct
              (SOME x, SOME x') => x = x'
            | (NONE, NONE) => TypedSyntax.eqTyVar (tv, tv')
            | _ => false)
-      | sameType' env (F.RecordType fields, F.RecordType fields') =
+      | sameType'' env (F.RecordType fields, F.RecordType fields') =
           Syntax.LabelMap.numItems fields = Syntax.LabelMap.numItems fields'
           andalso
           Syntax.LabelMap.alli
@@ -151,14 +154,14 @@ struct
                case Syntax.LabelMap.find (fields', label) of
                  SOME ty' => sameType' env (ty, ty')
                | NONE => false) fields
-      | sameType' env
+      | sameType'' env
           (F.AppType {applied, arg}, F.AppType {applied = applied', arg = arg'}) =
           sameType' env (applied, applied') andalso sameType' env (arg, arg')
-      | sameType' env
+      | sameType'' env
           (F.MultiFnType (params, result), F.MultiFnType (params', result')) =
           ListPair.allEq (sameType' env) (params, params')
           andalso sameType' env (result, result')
-      | sameType' (i, tvmap, tvmap')
+      | sameType'' (i, tvmap, tvmap')
           (F.ForallType (tv, kind, ty), F.ForallType (tv', kind', ty')) =
           kind = kind'
           andalso
@@ -171,7 +174,7 @@ struct
           in
             sameType' env' (ty, ty')
           end
-      | sameType' (i, tvmap, tvmap')
+      | sameType'' (i, tvmap, tvmap')
           (F.ExistsType (tv, kind, ty), F.ExistsType (tv', kind', ty')) =
           kind = kind'
           andalso
@@ -184,7 +187,7 @@ struct
           in
             sameType' env' (ty, ty')
           end
-      | sameType' (i, tvmap, tvmap')
+      | sameType'' (i, tvmap, tvmap')
           (F.TypeFn (tv, kind, ty), F.TypeFn (tv', kind', ty')) =
           kind = kind'
           andalso
@@ -197,22 +200,26 @@ struct
           in
             sameType' env' (ty, ty')
           end
-      | sameType' _ (F.AnyType _, _) = true
-      | sameType' _ (_, F.AnyType _) = true
-      | sameType' _ _ = false
-    (*: val sameType : F.Ty TypedSyntax.TyVarMap.map -> F.Ty * F.Ty -> bool *)
-    fun sameType env (ty, ty') =
+      | sameType'' _ (F.AnyType _, _) = true
+      | sameType'' _ (_, F.AnyType _) = true
+      | sameType'' _ _ = false
+    (*: val sameType : F.Ty * F.Ty -> bool *)
+    val sameType =
       sameType' (0, TypedSyntax.TyVarMap.empty, TypedSyntax.TyVarMap.empty)
-        (normalizeType env ty, normalizeType env ty')
     (*: val checkSame : F.Ty TypedSyntax.TyVarMap.map * (unit -> string) * F.Ty -> F.Ty -> unit *)
     fun checkSame (env, comment, expectedTy) actualTy =
-      if sameType env (expectedTy, actualTy) then
-        ()
-      else
-        raise TypeError
-          ("type mismatch: expected "
-           ^ Printer.build (FPrinter.doTy 0 expectedTy) ^ ", but got "
-           ^ Printer.build (FPrinter.doTy 0 actualTy) ^ " (" ^ comment () ^ ")")
+      let
+        val substTy = #doTy (F.substTy env)
+      in
+        if sameType (substTy expectedTy, substTy actualTy) then
+          ()
+        else
+          raise TypeError
+            ("type mismatch: expected "
+             ^ Printer.build (FPrinter.doTy 0 expectedTy) ^ ", but got "
+             ^ Printer.build (FPrinter.doTy 0 actualTy) ^ " (" ^ comment ()
+             ^ ")")
+      end
 
     type ValEnv = (F.Ty (* * Syntax.IdStatus *)) TypedSyntax.VIdMap.map
     val emptyValEnv: ValEnv = TypedSyntax.VIdMap.empty

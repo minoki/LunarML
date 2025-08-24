@@ -86,6 +86,7 @@ struct
         in
           (env, C.RecContDec defs :: acc)
         end
+    | C.DatatypeDec _ => (env, dec :: acc)
     | C.ESImportDec _ => (env, dec :: acc)
   and goStat (env, exp) =
     case exp of
@@ -109,12 +110,14 @@ struct
           , thenCont = goStat (env, thenCont)
           , elseCont = goStat (env, elseCont)
           }
-    | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+    | C.Handle
+        {body, handler = (e, h), successfulExitIn, successfulExitOut, resultTy} =>
         C.Handle
           { body = goFunction body
           , handler = (e, goStat (env, h))
           , successfulExitIn = successfulExitIn
           , successfulExitOut = goCont (env, successfulExitOut)
+          , resultTy = resultTy
           }
     | C.Raise _ => exp
     | C.Unreachable => exp

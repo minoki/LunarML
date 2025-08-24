@@ -321,6 +321,7 @@ struct
          | id => L.VarExp id)
     | doValue _ C.Unit = L.ConstExp L.Nil
     | doValue _ C.Nil = L.ConstExp L.Nil (* empty list *)
+    | doValue _ (C.TypedNil _) = L.ConstExp L.Nil (* empty list *)
     | doValue _ (C.BoolConst false) = L.ConstExp L.False
     | doValue _ (C.BoolConst true) = L.ConstExp L.True
     | doValue _ (C.IntConst (Primitives.INT, x)) =

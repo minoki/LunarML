@@ -95,9 +95,9 @@ struct
          , wordSize = 32
          })
   fun optimizeCps
-        (_: {nextTyVar: int ref, nextVId: int ref, printTimings: bool}) cexp 0 =
+        (_: {nextTyVar: int ref, nextVId: int ref, printTimings: bool}) _ cexp 0 =
         cexp
-    | optimizeCps ctx cexp n =
+    | optimizeCps ctx checkCps cexp n =
         let
           val () =
             if #printTimings ctx then
@@ -111,13 +111,21 @@ struct
             , simplificationOccurred = ref false
             }
           val cexp = CpsDeadCodeElimination.goStat (ctx', cexp)
+          val () = checkCps ("CpsDeadCodeElimination", cexp)
           val cexp = CpsUncurry.goStat (ctx', cexp)
+          val () = checkCps ("CpsUncurry", cexp)
           val cexp = CpsUnpackRecordParameter.goStat (ctx', cexp)
+          val () = checkCps ("CpsUnpackRecordParameter", cexp)
           val cexp = CpsLoopOptimization.goStat (ctx', cexp)
+          val () = checkCps ("CpsLoopOptimization", cexp)
           val cexp = CpsDecomposeRecursive.goStat (ctx', cexp)
+          val () = checkCps ("CpsDecomposeRecursive", cexp)
           val cexp = CpsConstantRefCell.goStat (ctx', cexp)
+          val () = checkCps ("CpsConstantRefCell", cexp)
           val cexp = CpsInline.goStat (ctx', cexp)
+          val () = checkCps ("CpsInline", cexp)
           val cexp = CpsEtaConvert.go (ctx', cexp)
+          val () = checkCps ("CpsEtaConvert", cexp)
         in
           if #printTimings ctx then
             print
@@ -127,8 +135,10 @@ struct
                  (#usr (Timer.checkCPUTimer timer))) ^ " us\n")
           else
             ();
-          if !(#simplificationOccurred ctx') then optimizeCps ctx cexp (n - 1)
-          else cexp
+          if !(#simplificationOccurred ctx') then
+            optimizeCps ctx checkCps cexp (n - 1)
+          else
+            cexp
         end
   fun emit (opts as {backend as BACKEND_LUA runtime, ...}: options)
         (_ (* targetInfo *)) fileName cont nextId cexp _ =
@@ -347,6 +357,85 @@ struct
         in
           ()
         end
+  structure CheckFInit =
+  struct
+    fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
+      | toFTy (TypedSyntax.AnonymousTyVar (_, x)) = Void.absurd x
+      | toFTy (TypedSyntax.RecordType (_, fields)) =
+          FSyntax.RecordType (Syntax.LabelMap.map toFTy fields)
+      | toFTy (TypedSyntax.RecordExtType (_, _, _)) =
+          raise Fail "unexpected record extension"
+      | toFTy (TypedSyntax.TyCon (_, tyargs, tyname)) =
+          if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2) then
+            case List.map toFTy tyargs of
+              [a, b, result] => FSyntax.MultiFnType ([a, b], result)
+            | _ => raise Fail "invalid use of function2"
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3) then
+            case List.map toFTy tyargs of
+              [a, b, c, result] => FSyntax.MultiFnType ([a, b, c], result)
+            | _ => raise Fail "invalid use of function3"
+          else
+            FSyntax.TyCon (List.map toFTy tyargs, tyname)
+      | toFTy (TypedSyntax.FnType (_, paramTy, resultTy)) =
+          FSyntax.FnType (toFTy paramTy, toFTy resultTy)
+    fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty)) =
+      let
+        fun go [] = toFTy ty
+          | go ((tv, NONE) :: xs) =
+              FSyntax.ForallType (tv, FSyntax.TypeKind, go xs)
+          | go ((tv, SOME TypedSyntax.IsEqType) :: xs) =
+              FSyntax.ForallType (tv, FSyntax.TypeKind, FSyntax.FnType
+                (FSyntax.EqualityType (FSyntax.TyVar tv), go xs))
+          | go ((_, SOME _) :: _) = raise Fail "invalid type scheme"
+      in
+        go vars
+      end
+    val initialValEnv =
+      Syntax.VIdMap.foldl
+        (fn ((tysc, _, vid), m) =>
+           TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
+        TypedSyntax.VIdMap.empty InitialEnv.initialValEnv
+    val initialValEnvAfterErasure =
+      TypedSyntax.VIdMap.map (CpsErasePoly.goTy TypedSyntax.TyVarMap.empty)
+        initialValEnv
+    val initialTyVarEnv =
+      TypedSyntax.TyNameMap.foldli
+        (fn (tn, {arity, ...}, acc) =>
+           TypedSyntax.TyVarMap.insert (acc, tn, FSyntax.arityToKind arity))
+        TypedSyntax.TyVarMap.empty (#tyNameMap InitialEnv.initialEnv)
+    val initialValConMap =
+      Syntax.TyConMap.foldl
+        (fn ({typeFunction, valEnv}, acc) =>
+           let
+             val tyName =
+               case typeFunction of
+                 TypedSyntax.TypeFunction (_, TypedSyntax.TyCon (_, _, tyName)) =>
+                   tyName
+               | _ => raise Fail "invalid type function"
+             val valConMap =
+               Syntax.VIdMap.foldli
+                 (fn (vid, (TypedSyntax.TypeScheme (tvs, ty), _), acc) =>
+                    StringMap.insert
+                      ( acc
+                      , Syntax.getVIdName vid
+                      , { tyParams = List.map #1 tvs
+                        , payload =
+                            case ty of
+                              TypedSyntax.FnType (_, payloadTy, _) =>
+                                SOME (toFTy payloadTy)
+                            | _ => NONE
+                        }
+                      )) StringMap.empty valEnv
+           in
+             TypedSyntax.TyVarMap.insert (acc, tyName, valConMap)
+           end) TypedSyntax.TyVarMap.empty (#tyConMap InitialEnv.initialEnv)
+    val checkEnv =
+      { valEnv = initialValEnv
+      , tyVarEnv = initialTyVarEnv
+      , aliasEnv = TypedSyntax.TyVarMap.empty
+      , valConEnv = initialValConMap
+      }
+  end
   fun doCompile (opts: options) fileName
     (f: MLBEval.Context -> MLBEval.Env * MLBEval.Code) =
     let
@@ -503,98 +592,15 @@ struct
           ()
       val () =
         if #internalConsistencyCheck opts then
-          let
-            fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
-              | toFTy (TypedSyntax.AnonymousTyVar (_, x)) = Void.absurd x
-              | toFTy (TypedSyntax.RecordType (_, fields)) =
-                  FSyntax.RecordType (Syntax.LabelMap.map toFTy fields)
-              | toFTy (TypedSyntax.RecordExtType (_, _, _)) =
-                  raise Fail "unexpected record extension"
-              | toFTy (TypedSyntax.TyCon (_, tyargs, tyname)) =
-                  if
-                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function2)
-                  then
-                    case List.map toFTy tyargs of
-                      [a, b, result] => FSyntax.MultiFnType ([a, b], result)
-                    | _ => raise Fail "invalid use of function2"
-                  else if
-                    TypedSyntax.eqTyName (tyname, PrimTypes.Names.function3)
-                  then
-                    case List.map toFTy tyargs of
-                      [a, b, c, result] =>
-                        FSyntax.MultiFnType ([a, b, c], result)
-                    | _ => raise Fail "invalid use of function3"
-                  else
-                    FSyntax.TyCon (List.map toFTy tyargs, tyname)
-              | toFTy (TypedSyntax.FnType (_, paramTy, resultTy)) =
-                  FSyntax.FnType (toFTy paramTy, toFTy resultTy)
-            fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty)) =
-              let
-                fun go [] = toFTy ty
-                  | go ((tv, NONE) :: xs) =
-                      FSyntax.ForallType (tv, FSyntax.TypeKind, go xs)
-                  | go ((tv, SOME TypedSyntax.IsEqType) :: xs) =
-                      FSyntax.ForallType (tv, FSyntax.TypeKind, FSyntax.FnType
-                        (FSyntax.EqualityType (FSyntax.TyVar tv), go xs))
-                  | go ((_, SOME _) :: _) = raise Fail "invalid type scheme"
-              in
-                go vars
-              end
-            val initialValEnv =
-              Syntax.VIdMap.foldl
-                (fn ((tysc, _, vid), m) =>
-                   TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy tysc))
-                TypedSyntax.VIdMap.empty InitialEnv.initialValEnv
-            val initialTyVarEnv =
-              TypedSyntax.TyNameMap.foldli
-                (fn (tn, {arity, ...}, acc) =>
-                   TypedSyntax.TyVarMap.insert
-                     (acc, tn, FSyntax.arityToKind arity))
-                TypedSyntax.TyVarMap.empty (#tyNameMap InitialEnv.initialEnv)
-            val initialValConMap =
-              Syntax.TyConMap.foldl
-                (fn ({typeFunction, valEnv}, acc) =>
-                   let
-                     val tyName =
-                       case typeFunction of
-                         TypedSyntax.TypeFunction
-                           (_, TypedSyntax.TyCon (_, _, tyName)) => tyName
-                       | _ => raise Fail "invalid type function"
-                     val valConMap =
-                       Syntax.VIdMap.foldli
-                         (fn (vid, (TypedSyntax.TypeScheme (tvs, ty), _), acc) =>
-                            StringMap.insert
-                              ( acc
-                              , Syntax.getVIdName vid
-                              , { tyParams = List.map #1 tvs
-                                , payload =
-                                    case ty of
-                                      TypedSyntax.FnType (_, payloadTy, _) =>
-                                        SOME (toFTy payloadTy)
-                                    | _ => NONE
-                                }
-                              )) StringMap.empty valEnv
-                   in
-                     TypedSyntax.TyVarMap.insert (acc, tyName, valConMap)
-                   end) TypedSyntax.TyVarMap.empty
-                (#tyConMap InitialEnv.initialEnv)
-            val checkEnv =
-              { valEnv = initialValEnv
-              , tyVarEnv = initialTyVarEnv
-              , aliasEnv = TypedSyntax.TyVarMap.empty
-              , valConEnv = initialValConMap
-              }
-          in
-            CheckF.checkExp
-              ( checkEnv
-              , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
-              , fexp
-              )
-            handle CheckF.TypeError message =>
-              ( print ("internal type check failed: " ^ message ^ "\n")
-              ; raise Message.Abort
-              )
-          end
+          CheckF.checkExp
+            ( CheckFInit.checkEnv
+            , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+            , fexp
+            )
+          handle CheckF.TypeError message =>
+            ( print ("internal type check failed: " ^ message ^ "\n")
+            ; raise Message.Abort
+            )
         else
           ()
       val () =
@@ -621,8 +627,53 @@ struct
         | _ => ()
       val fexp =
         #doExp (DesugarPatternMatches.desugarPatternMatches toFContext) fexp
+      val () =
+        if #internalConsistencyCheck opts then
+          CheckF.checkExp
+            ( CheckFInit.checkEnv
+            , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+            , fexp
+            )
+          handle CheckF.TypeError message =>
+            ( print
+                ("internal type check failed after desugarPatternMatches: "
+                 ^ message ^ "\n")
+            ; raise Message.Abort
+            )
+        else
+          ()
       val fexp = DecomposeValRec.doExp fexp
+      val () =
+        if #internalConsistencyCheck opts then
+          CheckF.checkExp
+            ( CheckFInit.checkEnv
+            , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+            , fexp
+            )
+          handle CheckF.TypeError message =>
+            ( print
+                ("internal type check failed after DecomposeValRec: " ^ message
+                 ^ "\n")
+            ; raise Message.Abort
+            )
+        else
+          ()
       val (_, fexp) = DeadCodeElimination.doExp fexp TypedSyntax.VIdSet.empty
+      val () =
+        if #internalConsistencyCheck opts then
+          CheckF.checkExp
+            ( CheckFInit.checkEnv
+            , FSyntax.RecordType Syntax.LabelMap.empty (* dummy *)
+            , fexp
+            )
+          handle CheckF.TypeError message =>
+            ( print
+                ("internal type check failed after basic transformations: "
+                 ^ message ^ "\n")
+            ; raise Message.Abort
+            )
+        else
+          ()
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #dump opts = DUMP_FINAL then
@@ -675,7 +726,68 @@ struct
           ( print ("internal type check failed: " ^ message ^ "\n")
           ; raise Message.Abort
           )
+      val checkCps =
+        if #internalConsistencyCheck opts then
+          fn (phase, program) =>
+            CpsCheck.checkStat
+              ( { valEnv = CheckFInit.initialValEnv
+                , tyEnv = CheckFInit.initialTyVarEnv
+                , contEnv =
+                    case Option.getOpt (#outputMode opts, ExecutableMode) of
+                      ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
+                    | LibraryMode =>
+                        CSyntax.CVarMap.singleton
+                          (cont, [FSyntax.AnyType FSyntax.TypeKind])
+                }
+              , program
+              )
+            handle
+              CpsCheck.TypeError message =>
+                ( print
+                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                     ^ message ^ "\n")
+                ; raise Message.Abort
+                )
+            | CheckF.TypeError message =>
+                ( print
+                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                     ^ message ^ "\n")
+                ; raise Message.Abort
+                )
+        else
+          fn _ => ()
+      val checkCpsAfterErasure =
+        if #internalConsistencyCheck opts then
+          fn (phase, program) =>
+            CpsCheck.checkStat
+              ( { valEnv = CheckFInit.initialValEnvAfterErasure
+                , tyEnv = CheckFInit.initialTyVarEnv
+                , contEnv =
+                    case Option.getOpt (#outputMode opts, ExecutableMode) of
+                      ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
+                    | LibraryMode =>
+                        CSyntax.CVarMap.singleton
+                          (cont, [FSyntax.AnyType FSyntax.TypeKind])
+                }
+              , program
+              )
+            handle
+              CpsCheck.TypeError message =>
+                ( print
+                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                     ^ message ^ "\n")
+                ; raise Message.Abort
+                )
+            | CheckF.TypeError message =>
+                ( print
+                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                     ^ message ^ "\n")
+                ; raise Message.Abort
+                )
+        else
+          fn _ => ()
       val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+      val () = checkCps ("init", cexp)
       val () =
         if #printTimings opts then
           print
@@ -687,7 +799,8 @@ struct
           { nextTyVar = nextTyVar
           , nextVId = nextId
           , printTimings = #printTimings opts
-          } cexp (3 * (#optimizationLevel opts + 3))
+          } checkCps cexp (3 * (#optimizationLevel opts + 3))
+      val () = checkCps ("optimization #1", cexp)
       val cexp =
         let
           val context =
@@ -698,12 +811,14 @@ struct
         in
           CpsSimplify.finalizeStat (context, cexp)
         end
+      val () = checkCps ("after finalizeStat", cexp)
       val cexp =
         optimizeCps
           { nextTyVar = nextTyVar
           , nextVId = nextId
           , printTimings = #printTimings opts
-          } cexp (3 * (#optimizationLevel opts + 3))
+          } checkCps cexp (3 * (#optimizationLevel opts + 3))
+      val () = checkCps ("optimization #2", cexp)
       val cexp =
         let
           val context =
@@ -714,12 +829,14 @@ struct
         in
           CpsErasePoly.transform (context, cexp)
         end
+      val () = checkCpsAfterErasure ("after erasePoly", cexp)
       val cexp =
         optimizeCps
           { nextTyVar = nextTyVar
           , nextVId = nextId
           , printTimings = #printTimings opts
-          } cexp (3 * (#optimizationLevel opts + 3))
+          } checkCpsAfterErasure cexp (3 * (#optimizationLevel opts + 3))
+      val () = checkCpsAfterErasure ("optimization #3", cexp)
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then

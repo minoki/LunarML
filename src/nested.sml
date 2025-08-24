@@ -139,9 +139,9 @@ struct
             , attr = attr
             }
     and goDec (C.ValDec {exp, results}) =
-          ValDec {exp = goSimpleExp exp, results = List.map #1 results}
+          SOME (ValDec {exp = goSimpleExp exp, results = List.map #1 results})
       | goDec (C.RecDec decs) =
-          RecDec
+          SOME (RecDec
             (List.map
                (fn { name
                    , contParam
@@ -156,24 +156,26 @@ struct
                   , params = List.map #1 params
                   , body = goStat body
                   , attr = attr
-                  }) decs)
-      | goDec (C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package}) =
-          ValDec {exp = Value package, results = [SOME vid]}
+                  }) decs))
+      | goDec (C.UnpackDec {tyVar = _, kind = _, vid, unpackedTy = _, package}) =
+          SOME (ValDec {exp = Value package, results = [SOME vid]})
       | goDec (C.ContDec {name, params, body, attr = _}) =
-          ContDec {name = name, params = List.map #1 params, body = goStat body}
+          SOME (ContDec
+            {name = name, params = List.map #1 params, body = goStat body})
       | goDec (C.RecContDec decs) =
-          RecContDec
+          SOME (RecContDec
             (List.map
                (fn (name, params, body) =>
-                  (name, List.map #1 params, goStat body)) decs)
+                  (name, List.map #1 params, goStat body)) decs))
+      | goDec (C.DatatypeDec _) = NONE
       | goDec (C.ESImportDec {pure, specs, moduleName}) =
-          ESImportDec
+          SOME (ESImportDec
             { pure = pure
             , specs = List.map (fn (name, v, _) => (name, v)) specs
             , moduleName = moduleName
-            }
+            })
     and goStat (C.Let {decs, cont}) =
-          Let {decs = List.map goDec decs, cont = goStat cont}
+          Let {decs = List.mapPartial goDec decs, cont = goStat cont}
       | goStat (C.App {applied, cont, tyArgs = _, args, attr}) =
           App
             { applied = Value applied
@@ -191,7 +193,12 @@ struct
             }
       | goStat
           (C.Handle
-             {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
+             { body
+             , handler = (e, h)
+             , successfulExitIn
+             , successfulExitOut
+             , resultTy = _
+             }) =
           Handle
             { body = goStat body
             , handler = (e, goStat h)

@@ -218,7 +218,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package} =>
+           | C.UnpackDec {tyVar = _, kind = _, vid, unpackedTy = _, package} =>
             (useValue env package; add (env, vid))
            | C.ContDec {name, params, body, attr = _} =>
             ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ()) params
@@ -247,6 +247,7 @@ local
                 (fn (f, _, _) => C.CVarTable.insert cenv (f, ref neverUsedCont))
                 defs
             end
+           | C.DatatypeDec _ => ()
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
             List.app (fn (_, vid, _) => add (env, vid)) specs
         and goStat
@@ -274,7 +275,12 @@ local
               ; goStat (env, renv, cenv, crenv, elseCont)
               )
           | C.Handle
-              {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy = _
+              } =>
               ( useContVarIndirect cenv successfulExitOut
               ; addC (cenv, successfulExitIn)
               ; goStat (env, renv, cenv, crenv, body)
@@ -351,7 +357,8 @@ in
                         | recordTy =>
                             raise Fail
                               ("invalid record type: "
-                               ^ Printer.build (FPrinter.doTy 0 recordTy))
+                               ^ Printer.build (FPrinter.doTy 0 recordTy) ^ "; "
+                               ^ TypedSyntax.print_VId param)
                     in
                       (CpsSimplify.newVId (#base ctx, name), label, fieldTy)
                       :: acc
@@ -480,15 +487,24 @@ in
                     val wrapper =
                       let
                         val k = CpsSimplify.genContSym (#base ctx)
-                        val wrapperTyParams =
-                          List.map
-                            (fn (tv, kind) =>
-                               (CpsSimplify.renewTyVar (#base ctx, tv), kind))
-                            tyParams
+                        val (tysubst, wrapperTyParams) =
+                          List.foldr
+                            (fn ((tv, kind), (tysubst, acc)) =>
+                               let
+                                 val tv' =
+                                   CpsSimplify.renewTyVar (#base ctx, tv)
+                               in
+                                 ( TypedSyntax.TyVarMap.insert
+                                     (tysubst, tv, FSyntax.TyVar tv')
+                                 , (tv', kind) :: acc
+                                 )
+                               end) (TypedSyntax.TyVarMap.empty, []) tyParams
+                        val substTy = #doTy (FSyntax.substTy tysubst)
                         val wrapperParams =
                           List.map
                             (fn (p, ty) =>
-                               (CpsSimplify.renewVId (#base ctx, p), ty)) params
+                               (CpsSimplify.renewVId (#base ctx, p), substTy ty))
+                            params
                         val (decs, args) =
                           ListPair.foldrEq
                             (fn ((p, _), KEEP, (decs, args)) =>
@@ -508,7 +524,7 @@ in
                                               , fieldTypes =
                                                   Syntax.LabelMap.empty (* dummy *)
                                               }
-                                        , results = [(SOME v, ty)]
+                                        , results = [(SOME v, substTy ty)]
                                         }
                                     in
                                       (dec :: decs, C.Var v :: args)
@@ -531,12 +547,16 @@ in
                                   , attr = {typeOnly = typeOnly}
                                   }
                               }
-                          , resultTy = resultTy
+                          , resultTy = substTy resultTy
                           , attr = {alwaysInline = true, typeOnly = typeOnly}
                           }
                       end
                     val workerTy = FSyntax.MultiFnType
                       (List.map #2 workerParams, resultTy)
+                    val workerTy =
+                      List.foldr
+                        (fn ((tv, kind), ty) =>
+                           FSyntax.ForallType (tv, kind, ty)) workerTy tyParams
                     val workerDec = C.ValDec
                       {exp = worker, results = [(SOME workerName, workerTy)]}
                     val wrapperDec = C.ValDec
@@ -1163,6 +1183,7 @@ in
                      } :: acc
                   | (_, acc) => acc) (dec :: acc) defs'
             end
+        | C.DatatypeDec _ => dec :: acc
         | C.ESImportDec _ => dec :: acc
       and simplifyStat (ctx: Context, e) =
         case e of
@@ -1178,12 +1199,19 @@ in
               , thenCont = simplifyStat (ctx, thenCont)
               , elseCont = simplifyStat (ctx, elseCont)
               }
-        | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+        | C.Handle
+            { body
+            , handler = (e, h)
+            , successfulExitIn
+            , successfulExitOut
+            , resultTy
+            } =>
             C.Handle
               { body = simplifyStat (ctx, body)
               , handler = (e, simplifyStat (ctx, h))
               , successfulExitIn = successfulExitIn
               , successfulExitOut = successfulExitOut
+              , resultTy = resultTy
               }
         | C.Raise _ => e
         | C.Unreachable => e

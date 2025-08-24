@@ -309,7 +309,7 @@ struct
                    F.SimplifyingAndalsoExp
                      ( F.PrimExp
                          ( F.PrimCall equalTag
-                         , [ty]
+                         , []
                          , [ F.PrimExp (dataTagOp info, [ty], [exp])
                            , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                            ]
@@ -1087,6 +1087,7 @@ struct
             end
         end
     | doDec (used, F.UnpackDec (tv, kind, vid, ty, exp)) =
+        (* TODO: Take types into account
         if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
             (used, [])
@@ -1094,10 +1095,10 @@ struct
             let val (used', exps) = doIgnoredExp exp used
             in (used', List.map F.IgnoreDec exps)
             end
-        else
-          let val (used', exp') = doExp exp used
-          in (used', [F.UnpackDec (tv, kind, vid, ty, exp')])
-          end
+        else *)
+        let val (used', exp') = doExp exp used
+        in (used', [F.UnpackDec (tv, kind, vid, ty, exp')])
+        end
     | doDec (used, F.IgnoreDec exp) =
         let val (used', exps) = doIgnoredExp exp used
         in (used', List.map F.IgnoreDec exps)

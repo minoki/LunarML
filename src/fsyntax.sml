@@ -483,6 +483,29 @@ struct
       check
     end
 
+  fun freshTyVarIndexFromTypes types =
+    let
+      fun go (TyVar (TypedSyntax.MkTyVar (_, i)), j) = Int.min (i, j)
+        | go (RecordType fields, i) =
+            Syntax.LabelMap.foldl go i fields
+        | go (AppType {applied, arg}, i) =
+            go (applied, go (arg, i))
+        | go (MultiFnType (params, result), i) =
+            List.foldl go (go (result, i)) params
+        | go (ForallType (TypedSyntax.MkTyVar (_, i), _, ty), j) =
+            go (ty, Int.min (i, j))
+        | go (ExistsType (TypedSyntax.MkTyVar (_, i), _, ty), j) =
+            go (ty, Int.min (i, j))
+        | go (TypeFn (TypedSyntax.MkTyVar (_, i), _, ty), j) =
+            go (ty, Int.min (i, j))
+        | go (AnyType _, i) = i
+    in
+      List.foldl go 0 types - 1
+    end
+
+  fun freshTyVarFromTypes (TypedSyntax.MkTyVar (name, _), types) =
+    TypedSyntax.MkTyVar (name, freshTyVarIndexFromTypes types)
+
   (*: val substituteTy : TyVar * Ty -> Ty -> Ty *)
   fun substituteTy (tv, replacement) =
     let
@@ -498,10 +521,8 @@ struct
             if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
-              (* TODO: generate fresh type variable *)
               let
-                val tv'' =
-                  raise Fail "FSyntax.substituteTy: not implemented yet"
+                val tv'' = freshTyVarFromTypes (tv', [ty', replacement])
               in
                 ForallType (tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
               end
@@ -511,10 +532,8 @@ struct
             if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
-              (* TODO: generate fresh type variable *)
               let
-                val tv'' =
-                  raise Fail "FSyntax.substituteTy: not implemented yet"
+                val tv'' = freshTyVarFromTypes (tv', [ty', replacement])
               in
                 ExistsType (tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
               end
@@ -524,12 +543,8 @@ struct
             if TypedSyntax.eqTyVar (tv, tv') then
               ty
             else if occurCheck tv' replacement then
-              (* TODO: generate fresh type variable *)
-              let
-                val tv'' =
-                  raise Fail "FSyntax.substituteTy: not implemented yet"
-              in
-                TypeFn (tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
+              let val tv'' = freshTyVarFromTypes (tv', [ty', replacement])
+              in TypeFn (tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
               end
             else
               TypeFn (tv', kind, go ty')
@@ -563,32 +578,69 @@ struct
         | doTy (MultiFnType (params, result)) =
             MultiFnType (List.map doTy params, doTy result)
         | doTy (ForallType (tv, kind, ty)) =
-            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
-               SOME (subst, _) =>
-                 ForallType
-                   ( tv
-                   , kind
-                   , #doTy (substTy subst) ty
-                   ) (* TODO: use fresh tyvar if necessary *)
-             | NONE => ForallType (tv, kind, doTy ty))
+            let
+              val tv' = freshTyVarFromTypes
+                (tv, ty :: TypedSyntax.TyVarMap.foldl (op::) [] subst)
+            in
+              ForallType
+                ( tv'
+                , kind
+                , #doTy
+                    (substTy
+                       (TypedSyntax.TyVarMap.insert (subst, tv, TyVar tv'))) ty
+                )
+            end
+        (*
+        (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+           SOME (subst, _) =>
+             ForallType
+               ( tv
+               , kind
+               , #doTy (substTy subst) ty
+               ) (* TODO: use fresh tyvar if necessary *)
+         | NONE => ForallType (tv, kind, doTy ty)) *)
         | doTy (ExistsType (tv, kind, ty)) =
-            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
-               SOME (subst, _) =>
-                 ExistsType
-                   ( tv
-                   , kind
-                   , #doTy (substTy subst) ty
-                   ) (* TODO: use fresh tyvar if necessary *)
-             | NONE => ExistsType (tv, kind, doTy ty))
+            let
+              val tv' = freshTyVarFromTypes
+                (tv, ty :: TypedSyntax.TyVarMap.foldl (op::) [] subst)
+            in
+              ExistsType
+                ( tv'
+                , kind
+                , #doTy
+                    (substTy
+                       (TypedSyntax.TyVarMap.insert (subst, tv, TyVar tv'))) ty
+                )
+            end
+        (* (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+           SOME (subst, _) =>
+             ExistsType
+               ( tv
+               , kind
+               , #doTy (substTy subst) ty
+               ) (* TODO: use fresh tyvar if necessary *)
+         | NONE => ExistsType (tv, kind, doTy ty)) *)
         | doTy (TypeFn (tv, kind, ty)) =
-            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
-               SOME (subst, _) =>
-                 TypeFn
-                   ( tv
-                   , kind
-                   , #doTy (substTy subst) ty
-                   ) (* TODO: use fresh tyvar if necessary *)
-             | NONE => TypeFn (tv, kind, doTy ty))
+            let
+              val tv' = freshTyVarFromTypes
+                (tv, ty :: TypedSyntax.TyVarMap.foldl (op::) [] subst)
+            in
+              TypeFn
+                ( tv'
+                , kind
+                , #doTy
+                    (substTy
+                       (TypedSyntax.TyVarMap.insert (subst, tv, TyVar tv'))) ty
+                )
+            end
+        (* (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+           SOME (subst, _) =>
+             TypeFn
+               ( tv
+               , kind
+               , #doTy (substTy subst) ty
+               ) (* TODO: use fresh tyvar if necessary *)
+         | NONE => TypeFn (tv, kind, doTy ty)) *)
         | doTy (ty as AnyType _) = ty
       val doTy = fn ty =>
         if isRelevant ty then doTy ty else ty (* optimization *)

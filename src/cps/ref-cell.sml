@@ -162,7 +162,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.UnpackDec {tyVar = _, kind = _, vid, payloadTy = _, package = _} =>
+           | C.UnpackDec {tyVar = _, kind = _, vid, unpackedTy = _, package = _} =>
             add (env, vid)
            | C.ContDec {name = _, params, body, attr = _} =>
             ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ()) params
@@ -175,6 +175,7 @@ local
                      params
                  ; goStat (env, renv, body)
                  )) defs
+           | C.DatatypeDec _ => ()
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
             List.app (fn (_, vid, _) => add (env, vid)) specs
         and goStat
@@ -195,6 +196,7 @@ local
               , handler = (e, h)
               , successfulExitIn = _
               , successfulExitOut = _
+              , resultTy = _
               } =>
               (goStat (env, renv, body); add (env, e); goStat (env, renv, h))
           | C.Raise (_, x) => useValue env x
@@ -370,6 +372,7 @@ in
             in
               (env, subst, dec :: acc)
             end
+        | C.DatatypeDec _ => (env, subst, dec :: acc)
         | C.ESImportDec _ => (env, subst, dec :: acc)
       and simplifyStat
         ( ctx: Context
@@ -416,12 +419,19 @@ in
               , thenCont = simplifyStat (ctx, env, subst, thenCont)
               , elseCont = simplifyStat (ctx, env, subst, elseCont)
               }
-        | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+        | C.Handle
+            { body
+            , handler = (e, h)
+            , successfulExitIn
+            , successfulExitOut
+            , resultTy
+            } =>
             C.Handle
               { body = simplifyStat (ctx, env, subst, body)
               , handler = (e, simplifyStat (ctx, env, subst, h))
               , successfulExitIn = successfulExitIn
               , successfulExitOut = successfulExitOut
+              , resultTy = resultTy
               }
         | C.Raise _ => e
         | C.Unreachable => e

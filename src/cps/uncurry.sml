@@ -65,8 +65,9 @@ struct
             val allTyParams = List.concat (List.map #1 allParams)
             val allValParams = List.concat (List.map #2 allParams)
             val workerName = CpsSimplify.renewVId (ctx, name)
-            val workerTy = FSyntax.MultiFnType
-              (List.map #2 allValParams, resultTy)
+            val workerTy =
+              if typeOnly then resultTy
+              else FSyntax.MultiFnType (List.map #2 allValParams, resultTy)
             val workerTy =
               List.foldr
                 (fn ((tv, kind), ty) => FSyntax.ForallType (tv, kind, ty))
@@ -83,18 +84,48 @@ struct
                   }
               , results = [(SOME workerName, workerTy)]
               }
-            val allParams' =
-              List.map
-                (fn (tyParams, params, typeOnly) =>
-                   ( List.map
-                       (fn (tv, kind) =>
-                          (CpsSimplify.renewTyVar (ctx, tv), kind)) tyParams
-                   , List.map
-                       (fn (p, ty) => (CpsSimplify.renewVId (ctx, p), ty))
-                       params
-                   , typeOnly
-                   )) allParams
-            fun mkWrapperBody (k, []) =
+            val (tysubst, allParamsRev') =
+              List.foldl
+                (fn ((tyParams, params, typeOnly), (tysubst, acc)) =>
+                   let
+                     val (tysubst, tyParams) =
+                       List.foldr
+                         (fn ((tv, kind), (tysubst, acc)) =>
+                            let
+                              val tv' = CpsSimplify.renewTyVar (ctx, tv)
+                            in
+                              ( TypedSyntax.TyVarMap.insert
+                                  (tysubst, tv, FSyntax.TyVar tv')
+                              , (tv', kind) :: acc
+                              )
+                            end) (tysubst, []) tyParams
+                   in
+                     ( tysubst
+                     , ( tyParams
+                       , List.map
+                           (fn (p, ty) =>
+                              ( CpsSimplify.renewVId (ctx, p)
+                              , #doTy (FSyntax.substTy tysubst) ty
+                              )) params
+                       , typeOnly
+                       ) :: acc
+                     )
+                   end) (TypedSyntax.TyVarMap.empty, []) allParams
+            val allParams' = List.rev allParamsRev'
+            val wrapperResultTy = #doTy (FSyntax.substTy tysubst) resultTy
+            val wrapperTy =
+              List.foldr
+                (fn ((tyParams, params, typeOnly), ty) =>
+                   let
+                     val ty =
+                       if typeOnly then ty
+                       else FSyntax.MultiFnType (List.map #2 params, ty)
+                   in
+                     List.foldr
+                       (fn ((tv, kind), ty) => FSyntax.ForallType (tv, kind, ty))
+                       ty tyParams
+                   end) wrapperResultTy allParams'
+            fun mkWrapperBody (k, _, []) =
                   C.App
                     { applied = C.Var workerName
                     , cont = k
@@ -105,41 +136,58 @@ struct
                         (List.map #2 allParams'))
                     , attr = {typeOnly = typeOnly}
                     }
-              | mkWrapperBody (k, p as (tyParams, params, _) :: _) =
+              | mkWrapperBody (k, absTy, p as (tyParams, params, _) :: _) =
                   let
                     val name = CpsSimplify.renewVId (ctx, name)
+                  (* val absTy = FSyntax.MultiFnType
+                    (List.map #2 params, wrapperResultTy)
+                  val absTy =
+                    List.foldr
+                      (fn ((tv, kind), ty) =>
+                         FSyntax.ForallType (tv, kind, ty)) absTy tyParams *)
                   in
                     C.Let
                       { decs =
                           [C.ValDec
-                             { exp = mkWrapperAbs p
-                             , results =
-                                 [( SOME name
-                                  , FSyntax.MultiFnType
-                                      (List.map #2 params, resultTy)
-                                  )]
+                             { exp = mkWrapperAbs (absTy, p)
+                             , results = [(SOME name, absTy)]
                              }]
                       , cont = C.AppCont {applied = k, args = [C.Var name]}
                       }
                   end
-            and mkWrapperAbs ((tyParams, params, typeOnly) :: rest) =
+            and mkWrapperAbs (absTy, (tyParams, params, typeOnly) :: rest) =
                   let
                     val k = CpsSimplify.genContSym ctx
+                    val absTy' =
+                      List.foldl
+                        (fn (_, FSyntax.ForallType (_, _, ty)) => ty
+                          | _ => raise Fail "mkWrapperAbs: expected ForallType")
+                        absTy tyParams
+                    val absTy' =
+                      case (typeOnly, absTy') of
+                        (true, ty) => ty
+                      | (false, FSyntax.MultiFnType (_, ty)) => ty
+                      | (false, _) =>
+                          raise Fail "mkWrapperAbs: expected MultiFnType"
                   in
                     C.Abs
                       { contParam = k
                       , tyParams = tyParams
                       , params = params
-                      , body = mkWrapperBody (k, rest)
-                      , resultTy = resultTy
+                      , body = mkWrapperBody (k, absTy', rest)
+                      , resultTy = absTy'
                       , attr = {alwaysInline = true, typeOnly = typeOnly}
                       }
                   end
-              | mkWrapperAbs [] = raise Fail "mkWrapperAbs"
+              | mkWrapperAbs (_, []) = raise Fail "mkWrapperAbs"
+          (* val () = print ("CpsUncurry: wrapperTy=" ^ Printer.build (FPrinter.doTy 0 wrapperTy) ^ "\n")
+          val () = print ("CpsUncurry: workerTy=" ^ Printer.build (FPrinter.doTy 0 workerTy) ^ "\n")
+          val () = print ("CpsUncurry: ty=" ^ Printer.build (FPrinter.doTy 0 ty) ^ "\n") *)
           in
             C.ValDec
-              {exp = mkWrapperAbs allParams', results = [(SOME name, ty)]}
-            :: workerDec :: acc
+              { exp = mkWrapperAbs (wrapperTy, allParams')
+              , results = [(SOME name, ty)]
+              } :: workerDec :: acc
           end
       | _ => C.ValDec {exp = exp, results = [(SOME name, ty)]} :: acc
     and simplifyDec ctx (dec, acc) =
@@ -172,6 +220,7 @@ struct
             , body = simplifyStat (ctx, body)
             , attr = attr
             } :: acc
+      | C.DatatypeDec _ => dec :: acc
       | C.RecContDec defs =>
           let
             val defs =
@@ -197,12 +246,19 @@ struct
             , thenCont = simplifyStat (ctx, thenCont)
             , elseCont = simplifyStat (ctx, elseCont)
             }
-      | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+      | C.Handle
+          { body
+          , handler = (e, h)
+          , successfulExitIn
+          , successfulExitOut
+          , resultTy
+          } =>
           C.Handle
             { body = simplifyStat (ctx, body)
             , handler = (e, simplifyStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
+            , resultTy = resultTy
             }
       | C.Raise _ => exp
       | C.Unreachable => exp

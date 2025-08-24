@@ -47,7 +47,10 @@ struct
     fun simplifySimpleExp (_: Context, _: env, C.Record _) = NOT_SIMPLIFIED
       | simplifySimpleExp (ctx, env, C.PrimOp {primOp, tyargs, args}) =
           (case (primOp, args) of
-             (F.ListOp, []) => VALUE C.Nil (* empty list *)
+             (F.ListOp, []) =>
+               (case tyargs of
+                  [elemTy] => VALUE (C.TypedNil elemTy) (* empty list *)
+                | _ => raise Fail "invalid ListOp")
            | (F.PrimCall P.JavaScript_call, [f, C.Var args]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
@@ -862,7 +865,7 @@ struct
                  VALUE (C.Char16Const (Int.fromLarge c))
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Vector_fromList, [C.Nil]) =>
+           | (F.PrimCall P.Vector_fromList, [C.TypedNil _]) =>
                SIMPLE_EXP (C.PrimOp
                  {primOp = F.VectorOp, tyargs = [List.hd tyargs], args = []})
            | (F.PrimCall P.Vector_fromList, [C.Var v]) =>
@@ -1097,13 +1100,13 @@ struct
           in
             (env, cenv, tysubst, subst, csubst, C.RecDec defs :: acc)
           end
-      | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
+      | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
           (case CpsSimplify.substValue (tysubst, subst) package of
-             C.Pack {value, payloadTy = payloadTy', packageTy = _} =>
+             C.Pack {value, payloadTy, packageTy = _} =>
                let
                  val subst = TypedSyntax.VIdMap.insert (subst, vid, value)
                  val tysubst =
-                   TypedSyntax.TyVarMap.insert (tysubst, tyVar, payloadTy')
+                   TypedSyntax.TyVarMap.insert (tysubst, tyVar, payloadTy)
                in
                  (env, cenv, tysubst, subst, csubst, acc)
                end
@@ -1117,7 +1120,7 @@ struct
                    { tyVar = tyVar
                    , kind = kind
                    , vid = vid
-                   , payloadTy = payloadTy
+                   , unpackedTy = CpsSimplify.substTy tysubst unpackedTy
                    , package = package
                    } :: acc
                ))
@@ -1158,6 +1161,7 @@ struct
           in
             (env, cenv, tysubst, subst, csubst, dec :: acc)
           end
+      | C.DatatypeDec _ => (env, cenv, tysubst, subst, csubst, dec :: acc)
       | C.ESImportDec {pure, specs, moduleName} =>
           let
             val dec = C.ESImportDec
@@ -1307,7 +1311,13 @@ struct
                  , elseCont = simplifyStat
                      (ctx, env, cenv, tysubst, subst, csubst, elseCont)
                  })
-      | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+      | C.Handle
+          { body
+          , handler = (e, h)
+          , successfulExitIn
+          , successfulExitOut
+          , resultTy
+          } =>
           C.Handle
             { body = simplifyStat
                 ( ctx
@@ -1322,6 +1332,7 @@ struct
                 (ctx, env, cenv, tysubst, subst, csubst, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = CpsSimplify.substCVar csubst successfulExitOut
+            , resultTy = CpsSimplify.substTy tysubst resultTy
             }
       | C.Raise (span, x) =>
           C.Raise (span, CpsSimplify.substValue (tysubst, subst) x)

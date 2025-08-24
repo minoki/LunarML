@@ -62,15 +62,21 @@ local
                 (fn {name, ...} => TypedSyntax.VIdTable.insert g (name, s)) defs;
               acc
             end
-        | goDec g (C.UnpackDec {tyVar, kind, vid, payloadTy, package}, acc) =
-            ( TypedSyntax.VIdTable.insert g
-                (vid, addValue (package, TypedSyntax.VIdSet.empty))
-            ; acc
-            )
+        | goDec g
+            ( C.UnpackDec {tyVar = _, kind = _, vid, unpackedTy = _, package}
+            , acc
+            ) =
+            let
+              val s = addValue (package, TypedSyntax.VIdSet.empty)
+            in
+              TypedSyntax.VIdTable.insert g (vid, s);
+              TypedSyntax.VIdSet.union (acc, s) (* TODO: just return acc *)
+            end
         | goDec g (C.ContDec {name = _, params = _, body, attr = _}, acc) =
             goExp (g, body, acc)
         | goDec g (C.RecContDec defs, acc) =
             List.foldl (fn ((_, _, body), acc) => goExp (g, body, acc)) acc defs
+        | goDec _ (C.DatatypeDec _, acc) = acc
         | goDec g (C.ESImportDec {pure = _, specs, moduleName = _}, acc) =
             ( List.app
                 (fn (_, vid, _) =>
@@ -93,6 +99,7 @@ local
                 , handler = (_, h)
                 , successfulExitIn = _
                 , successfulExitOut = _
+                , resultTy = _
                 }
             , acc
             ) =
@@ -279,7 +286,7 @@ local
                 (fn {name, ...} =>
                    TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
             end
-           | C.UnpackDec {tyVar, kind, vid, package, payloadTy} =>
+           | C.UnpackDec {tyVar = _, kind = _, vid, package, unpackedTy = _} =>
             (useValue env package; add (env, vid))
            | C.ContDec {name, params, body, attr = _} =>
             ( List.app (fn (SOME p, _) => add (env, p) | (NONE, _) => ()) params
@@ -308,6 +315,7 @@ local
                 (fn (f, _, _) => C.CVarTable.insert cenv (f, ref neverUsedCont))
                 defs
             end
+           | C.DatatypeDec _ => ()
            | C.ESImportDec {pure = _, specs, moduleName = _} =>
             List.app (fn (_, vid, _) => add (env, vid)) specs
         and goStat
@@ -335,7 +343,12 @@ local
               ; goStat (env, renv, cenv, crenv, elseCont)
               )
           | C.Handle
-              {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy = _
+              } =>
               ( useContVarIndirect cenv successfulExitOut
               ; addC (cenv, successfulExitIn)
               ; goStat (env, renv, cenv, crenv, body)
@@ -385,6 +398,7 @@ in
         , cont_rec_usage: CpsUsageAnalysis.cont_usage_table
         , dead_code_analysis: CpsDeadCodeAnalysis.usage
         }
+      (* TODO: Eliminate subst and csubst *)
       fun simplifyDec (ctx: Context, appliedCont: C.CVar option)
         (dec, (env, cenv, subst, csubst, acc: C.Dec list)) =
         case dec of
@@ -515,13 +529,28 @@ in
               ( #simplificationOccurred (#base ctx) := true
               ; (env, cenv, subst, csubst, acc)
               )
-        | C.UnpackDec {tyVar, kind, vid, payloadTy, package} =>
-            (case CpsUsageAnalysis.getValueUsage (#usage ctx, vid) of
-               SOME {call = NEVER, other = NEVER} =>
-                 ( #simplificationOccurred (#base ctx) := true
-                 ; (env, cenv, subst, csubst, acc)
-                 )
-             | _ => (env, cenv, subst, csubst, dec :: acc))
+        | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
+            ( (* case CpsUsageAnalysis.getValueUsage (#usage ctx, vid) of
+                SOME {call = NEVER, other = NEVER} =>
+                  ( #simplificationOccurred (#base ctx) := true
+                  ; (env, cenv, subst, csubst, acc)
+                  )
+              | _ => *)
+              (* print ("DCE.UnpackDec: " ^ TypedSyntax.print_VId vid ^ " / " ^ C.valueToString package ^ "\n"); *)
+              ( env
+              , cenv
+              , subst
+              , csubst
+              , C.UnpackDec
+                  { tyVar = tyVar
+                  , kind = kind
+                  , vid = vid
+                  , unpackedTy = unpackedTy
+                  , package =
+                      CpsSimplify.substValue (TypedSyntax.TyVarMap.empty, subst)
+                        package
+                  } :: acc
+              ))
         | C.ContDec {name, params, body, attr} =>
             (case CpsUsageAnalysis.getContUsage (#cont_usage ctx, name) of
                SOME {direct = NEVER, indirect = NEVER} =>
@@ -558,11 +587,48 @@ in
                                  (NONE, ty)
                              | _ => (SOME p, ty))
                            | (NONE, ty) => (NONE, ty)) params
-                     val cenv = C.CVarMap.insert (cenv, name, (params, NONE))
-                     val dec = C.ContDec
-                       {name = name, params = params, body = body, attr = attr}
                    in
-                     (env, cenv, subst, csubst, dec :: acc)
+                     if
+                       List.exists (fn (p, _) => Option.isSome p) params
+                       orelse List.null params
+                     then
+                       let
+                         val cenv =
+                           C.CVarMap.insert (cenv, name, (params, NONE))
+                         val dec = C.ContDec
+                           { name = name
+                           , params = params
+                           , body = body
+                           , attr = attr
+                           }
+                       in
+                         (env, cenv, subst, csubst, dec :: acc)
+                       end
+                     else
+                       let
+                         val workerName =
+                           CpsSimplify.renewCVar (#base ctx, name)
+                         val wrapperBody =
+                           C.AppCont {applied = workerName, args = []}
+                         val cenv = C.CVarMap.insert
+                           (cenv, name, (params, SOME wrapperBody))
+                         val cenv =
+                           C.CVarMap.insert (cenv, workerName, ([], NONE))
+                         val dec1 = C.ContDec
+                           { name = workerName
+                           , params = []
+                           , body = body
+                           , attr = attr
+                           }
+                         val dec2 = C.ContDec
+                           { name = name
+                           , params = params
+                           , body = wrapperBody
+                           , attr = {alwaysInline = true}
+                           }
+                       in
+                         (env, cenv, subst, csubst, dec2 :: dec1 :: acc)
+                       end
                    end
              | NONE =>
                  raise Fail "CpsDeadCodeElimination: undefined continuation")
@@ -592,6 +658,8 @@ in
               in
                 (env, cenv, subst, csubst, dec :: acc)
               end
+        | C.DatatypeDec _ =>
+            (env, cenv, subst, csubst, dec :: acc) (* TODO: DCE for types *)
         | C.ESImportDec {pure, specs, moduleName} =>
             let
               val specs =
@@ -646,35 +714,25 @@ in
                   (case TypedSyntax.VIdMap.find (env, applied) of
                      SOME {exp, isDiscardableFunction} =>
                        let
-                         val isDiscardable =
-                           if isDiscardableFunction then
-                             case C.CVarMap.find (cenv, cont) of
-                               SOME (params, _) =>
-                                 if
-                                   List.exists (fn (v, _) => Option.isSome v)
-                                     params
-                                 then NONE
-                                 else SOME params
-                             | _ => NONE
-                           else
-                             NONE
+                         val contBody =
+                           case CSyntax.CVarMap.find (cenv, cont) of
+                             SOME (_, body) => body
+                           | NONE => NONE
                        in
-                         case isDiscardable of
-                           SOME params =>
+                         case (isDiscardableFunction, contBody) of
+                           ( true
+                           , SOME (C.AppCont {applied = worker, args = []})
+                           ) =>
+                             (* Eliminate function calls like `val _ = f ()` *)
                              ( #simplificationOccurred (#base ctx) := true
-                             ; C.AppCont
-                                 { applied = cont
-                                 , args =
-                                     List.map (fn _ => C.Unit (* dummy *))
-                                       params
-                                 }
+                             ; C.AppCont {applied = worker, args = []}
                              )
-                         | NONE =>
+                         | _ =>
                              case exp of
                                SOME
                                  (C.Abs
                                     { contParam
-                                    , tyParams = _
+                                    , tyParams
                                     , params
                                     , body
                                     , resultTy = _
@@ -683,6 +741,13 @@ in
                                  let
                                    val () =
                                      #simplificationOccurred (#base ctx) := true
+                                   val tysubst =
+                                     ListPair.foldl
+                                       (fn ((p, _), a, acc) =>
+                                          TypedSyntax.TyVarMap.insert
+                                            (acc, p, a))
+                                       TypedSyntax.TyVarMap.empty
+                                       (tyParams, tyArgs)
                                    val subst =
                                      ListPair.foldlEq
                                        (fn ((p, _), a, subst) =>
@@ -706,19 +771,14 @@ in
                                  in
                                    if canOmitAlphaConversion then
                                      CpsSimplify.substStat
-                                       ( TypedSyntax.TyVarMap.empty
+                                       ( tysubst
                                        , subst
                                        , csubst
                                        , body
                                        ) (* no alpha conversion *)
                                    else
                                      CpsSimplify.alphaConvert
-                                       ( #base ctx
-                                       , TypedSyntax.TyVarMap.empty
-                                       , subst
-                                       , csubst
-                                       , body
-                                       )
+                                       (#base ctx, tysubst, subst, csubst, body)
                                  end
                              | _ =>
                                  C.App
@@ -814,7 +874,13 @@ in
                    , elseCont = simplifyStat
                        (ctx, env, cenv, subst, csubst, elseCont)
                    })
-        | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+        | C.Handle
+            { body
+            , handler = (e, h)
+            , successfulExitIn
+            , successfulExitOut
+            , resultTy
+            } =>
             C.Handle
               { body = simplifyStat
                   ( ctx
@@ -828,6 +894,7 @@ in
               , successfulExitIn = successfulExitIn
               , successfulExitOut =
                   CpsSimplify.substCVar csubst successfulExitOut
+              , resultTy = resultTy
               }
         | C.Raise (span, x) =>
             C.Raise

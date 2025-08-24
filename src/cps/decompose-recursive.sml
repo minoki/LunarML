@@ -82,7 +82,7 @@ struct
                                  , params
                                  , body
                                  , resultTy
-                                 , attr
+                                 , attr as {typeOnly, ...}
                                  }
                              , dests
                              } = TypedSyntax.VIdMap.lookup (map, vid)
@@ -91,8 +91,17 @@ struct
                              C.RecDec [def]
                            else
                              let
-                               val fnTy = FSyntax.MultiFnType
-                                 (List.map #2 params, resultTy)
+                               val fnTy =
+                                 if typeOnly then
+                                   resultTy
+                                 else
+                                   FSyntax.MultiFnType
+                                     (List.map #2 params, resultTy)
+                               val fnTy =
+                                 List.foldr
+                                   (fn ((tv, kind), ty) =>
+                                      FSyntax.ForallType (tv, kind, ty)) fnTy
+                                   tyParams
                              in
                                #simplificationOccurred ctx := true;
                                C.ValDec
@@ -135,6 +144,7 @@ struct
           in
             C.RecContDec defs :: acc
           end
+      | C.DatatypeDec _ => dec :: acc
       | C.ESImportDec _ => dec :: acc
     and goStat (ctx: CpsSimplify.Context, exp) =
       case exp of
@@ -151,12 +161,19 @@ struct
             , thenCont = goStat (ctx, thenCont)
             , elseCont = goStat (ctx, elseCont)
             }
-      | C.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut} =>
+      | C.Handle
+          { body
+          , handler = (e, h)
+          , successfulExitIn
+          , successfulExitOut
+          , resultTy
+          } =>
           C.Handle
             { body = goStat (ctx, body)
             , handler = (e, goStat (ctx, h))
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
+            , resultTy = resultTy
             }
       | C.Raise _ => exp
       | C.Unreachable => exp

@@ -218,6 +218,7 @@ struct
              | id => J.VarExp id)
     | doValue _ C.Unit = J.UndefinedExp
     | doValue _ C.Nil = J.ConstExp J.Null (* empty list *)
+    | doValue _ (C.TypedNil _) = J.ConstExp J.Null (* empty list *)
     | doValue _ (C.BoolConst false) = J.ConstExp J.False
     | doValue _ (C.BoolConst true) = J.ConstExp J.True
     | doValue _ (C.IntConst (Primitives.INT, _)) =
