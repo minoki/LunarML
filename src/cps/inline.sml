@@ -1732,11 +1732,11 @@ struct
                          , tyargs = []
                          , args = [C.Var xs]
                          }
-                     , results = [(SOME result, FSyntax.Types.string)]
+                     , results = [(SOME result, FSyntax.Types.string16)]
                      }]
               , cont = C.AppCont {applied = k, args = [C.Var result]}
               }
-          , resultTy = FSyntax.Types.string
+          , resultTy = FSyntax.Types.string16
           , attr = {alwaysInline = true, typeOnly = false}
           }
       end

@@ -105,6 +105,7 @@ sig
                      -> TypedSyntax.VIdSet.set
   val recurseStat: (Stat -> Stat) -> Stat -> Stat
   val valueToString: Value -> string
+  val simpleExpToString: SimpleExp -> string
 end =
 struct
   exception InvalidCode of string
@@ -554,6 +555,41 @@ struct
           "Cast(" ^ valueToString value ^ ")"
       | valueToString (Pack {value, ...}) =
           "Pack(" ^ valueToString value ^ ")"
+    fun simpleExpToString (PrimOp {primOp, ...}) =
+          (case primOp of
+             F.PrimCall p => "PrimOp(" ^ Primitives.toString p ^ ")"
+           | F.IntConstOp _ => "PrimOp(IntConstOp)"
+           | F.WordConstOp _ => "PrimOp(WordConstOp)"
+           | F.RealConstOp _ => "PrimOp(RealConstOp)"
+           | F.Char8ConstOp _ => "PrimOp(Char8ConstOp)"
+           | F.Char16ConstOp _ => "PrimOp(Char16ConstOp)"
+           | F.String8ConstOp _ => "PrimOp(String8ConstOp)"
+           | F.String16ConstOp _ => "PrimOp(String16ConstOp)"
+           | F.RaiseOp _ => "PrimOp(RaiseOp)"
+           | F.ListOp => "PrimOp(ListOp)"
+           | F.VectorOp => "PrimOp(VectorOp)"
+           | F.DataTagAsStringOp _ => "PrimOp(DataTagAsStringOp)"
+           | F.DataTagAsString16Op _ => "PrimOp(DataTagAsString16Op)"
+           | F.DataPayloadOp _ => "PrimOp(DataPayloadOp)"
+           | F.ExnPayloadOp => "PrimOp(ExnPayloadOp)"
+           | F.ConstructValOp _ => "PrimOp(ConstructValOp)"
+           | F.ConstructValWithPayloadOp _ =>
+               "PrimOp(ConstructValWithPayloadOp)"
+           | F.ConstructExnOp => "PrimOp(ConstructExnOp)"
+           | F.ConstructExnWithPayloadOp => "PrimOp(ConstructExnWithPayloadOp)"
+           | F.JsCallOp => "PrimOp(JsCallOp)"
+           | F.JsMethodOp => "PrimOp(JsMethodOp)"
+           | F.JsNewOp => "PrimOp(JsNewOp)"
+           | F.LuaCallOp => "PrimOp(LuaCallOp)"
+           | F.LuaCall1Op => "PrimOp(LuaCall1Op)"
+           | F.LuaCallNOp _ => "PrimOp(LuaCallNOp)"
+           | F.LuaMethodOp _ => "PrimOp(LuaMethodOp)"
+           | F.LuaMethod1Op _ => "PrimOp(LuaMethod1Op)"
+           | F.LuaMethodNOp _ => "PrimOp(LuaMethodNOp)")
+      | simpleExpToString (Record _) = "Record"
+      | simpleExpToString (ExnTag _) = "ExnTag"
+      | simpleExpToString (Projection _) = "Projection"
+      | simpleExpToString (Abs _) = "Abs"
   end
 end
 

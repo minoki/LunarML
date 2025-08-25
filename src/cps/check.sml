@@ -350,7 +350,9 @@ struct
            val actualTy = inferSimpleExp (env, exp)
          in
            ListPair.appEq
-             (fn ((_, e), a) => checkCompatibility (fn () => "ValDec", e) a)
+             (fn ((_, e), a) =>
+                checkCompatibility
+                  (fn () => "ValDec " ^ C.simpleExpToString exp, e) a)
              (results, actualTy);
            { valEnv =
                List.foldl
