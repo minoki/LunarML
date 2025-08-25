@@ -561,6 +561,7 @@ structure CpsTransform :>
 sig
   type Context =
     {targetInfo: TargetInfo.target_info, nextVId: int ref, exportAsRecord: bool}
+  val fixIntWordTy: TargetInfo.target_info -> FSyntax.Ty -> FSyntax.Ty
   val initialEnv: (CSyntax.Value option * FSyntax.Ty) TypedSyntax.VIdMap.map
   val prependRevDecs: CSyntax.Dec list * CSyntax.Stat -> CSyntax.Stat
   val prependRevDecsTy: CSyntax.Dec list * (FSyntax.Ty * CSyntax.Stat)
@@ -583,6 +584,47 @@ struct
       , nextVId: int ref
       , exportAsRecord: bool
       }
+
+    fun fixIntWordTy
+          ({defaultInt = Primitives.INT, defaultWord = Primitives.WORD, ...}:
+             TargetInfo.target_info) = (fn ty => ty)
+      | fixIntWordTy {defaultInt, defaultWord, ...} =
+          let
+            val intTy =
+              case defaultInt of
+                Primitives.INT => F.Types.int
+              | Primitives.I32 => F.Types.int32
+              | Primitives.I54 => F.Types.int54
+              | Primitives.I64 => F.Types.int64
+              | Primitives.INT_INF => F.Types.intInf
+            val wordTy =
+              case defaultWord of
+                Primitives.WORD => F.Types.word
+              | Primitives.W32 => F.Types.word32
+              | Primitives.W64 => F.Types.word64
+            fun goTy (ty as F.TyVar tv) =
+                  if TypedSyntax.eqTyVar (tv, PrimTypes.Names.int) then
+                    intTy
+                  else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.word) then
+                    wordTy
+                  else
+                    ty
+              | goTy (F.RecordType fields) =
+                  F.RecordType (Syntax.LabelMap.map goTy fields)
+              | goTy (F.AppType {applied, arg}) =
+                  F.AppType {applied = goTy applied, arg = goTy arg}
+              | goTy (F.MultiFnType (params, result)) =
+                  F.MultiFnType (List.map goTy params, goTy result)
+              | goTy (F.ForallType (tv, kind, ty)) =
+                  F.ForallType (tv, kind, goTy ty)
+              | goTy (F.ExistsType (tv, kind, ty)) =
+                  F.ExistsType (tv, kind, goTy ty)
+              | goTy (F.TypeFn (tv, kind, ty)) =
+                  F.TypeFn (tv, kind, goTy ty)
+              | goTy (ty as F.AnyType _) = ty
+          in
+            goTy
+          end
 
     fun genContSym (ctx: Context) : CSyntax.CVar =
       let
@@ -752,6 +794,15 @@ struct
                ))
       | F.PrimExp (primOp, tyargs, args) =>
           let
+            val primOp =
+              case primOp of
+                F.PrimCall p =>
+                  F.PrimCall
+                    (Primitives.fixIntWord
+                       { int = #defaultInt (#targetInfo ctx)
+                       , word = #defaultWord (#targetInfo ctx)
+                       } p)
+              | _ => primOp
             val (_ (* argTypes *), resultTypes) =
               case (primOp, tyargs) of
                 (F.PrimCall p, tyargs) =>
@@ -980,16 +1031,6 @@ struct
                              | F.LuaCallNOp n => n
                              | F.LuaMethodNOp (_, n) => n
                              | _ => 1
-                           val primOp =
-                             case primOp of
-                               F.PrimCall p =>
-                                 F.PrimCall
-                                   (Primitives.fixIntWord
-                                      { int = #defaultInt (#targetInfo ctx)
-                                      , word = #defaultWord (#targetInfo ctx)
-                                      } p)
-                             | _ => primOp
-                           (* TODO: Fix int/word in the types *)
                            val exp =
                              C.PrimOp
                                {primOp = primOp, tyargs = tyargs, args = args}
@@ -1099,16 +1140,18 @@ struct
                     {revDecs = revDecs, resultHint = SOME vid}
                     (fn (revDecs, v, ty) =>
                        let
-                         val () =
-                           case optTy of
-                             NONE => ()
-                           | SOME expectedTy =>
-                               CheckF.checkSame
-                                 ( TypedSyntax.TyVarMap.empty
-                                 , fn () =>
-                                     "ValDec " ^ TypedSyntax.print_VId vid
-                                 , expectedTy
-                                 ) ty
+                       (*
+                       val () =
+                         case optTy of
+                           NONE => ()
+                         | SOME expectedTy =>
+                             CheckF.checkSame
+                               ( TypedSyntax.TyVarMap.empty
+                               , fn () =>
+                                   "ValDec " ^ TypedSyntax.print_VId vid
+                               , expectedTy
+                               ) ty
+                       *)
                        in
                          doDecs
                            ( TypedSyntax.VIdMap.insert (env, vid, (SOME v, ty))

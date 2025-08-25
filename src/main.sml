@@ -714,76 +714,120 @@ struct
         | BACKEND_LUAJIT => true
         | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => false
         | BACKEND_JS {style = Backend.CPS, ...} => true
+      val fexp =
+        case targetInfo of
+          {defaultInt = Primitives.INT, defaultWord = Primitives.WORD, ...} =>
+            fexp
+        | {defaultInt, defaultWord, ...} =>
+            let
+              val intTy =
+                case defaultInt of
+                  Primitives.INT => FSyntax.Types.int
+                | Primitives.I32 => FSyntax.Types.int32
+                | Primitives.I54 => FSyntax.Types.int54
+                | Primitives.I64 => FSyntax.Types.int64
+                | Primitives.INT_INF => FSyntax.Types.intInf
+              val wordTy =
+                case defaultWord of
+                  Primitives.WORD => FSyntax.Types.word
+                | Primitives.W32 => FSyntax.Types.word32
+                | Primitives.W64 => FSyntax.Types.word64
+              val subst =
+                List.foldl TypedSyntax.TyVarMap.insert'
+                  TypedSyntax.TyVarMap.empty
+                  [(PrimTypes.Names.int, intTy), (PrimTypes.Names.word, wordTy)]
+            in
+              #doExp (FSyntax.substTy subst) fexp
+            end
+      val fixIntWordTy = CpsTransform.fixIntWordTy targetInfo
       val (_, cexp) =
-        CpsTransform.transformBlock
-          ( { targetInfo = targetInfo
-            , nextVId = nextId
-            , exportAsRecord = exportAsRecord
-            }
-          , CpsTransform.initialEnv
-          ) fexp cont
-        handle CheckF.TypeError message =>
-          ( print ("internal type check failed: " ^ message ^ "\n")
-          ; raise Message.Abort
-          )
+        let
+          val initialEnv =
+            TypedSyntax.VIdMap.map (fn (v, ty) => (v, fixIntWordTy ty))
+              CpsTransform.initialEnv
+        in
+          CpsTransform.transformBlock
+            ( { targetInfo = targetInfo
+              , nextVId = nextId
+              , exportAsRecord = exportAsRecord
+              }
+            , initialEnv
+            ) fexp cont
+          handle CheckF.TypeError message =>
+            ( print ("internal type check failed: " ^ message ^ "\n")
+            ; raise Message.Abort
+            )
+        end
       val checkCps =
         if #internalConsistencyCheck opts then
-          fn (phase, program) =>
-            CpsCheck.checkStat
-              ( { valEnv = CheckFInit.initialValEnv
-                , tyEnv = CheckFInit.initialTyVarEnv
-                , contEnv =
-                    case Option.getOpt (#outputMode opts, ExecutableMode) of
-                      ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
-                    | LibraryMode =>
-                        CSyntax.CVarMap.singleton
-                          (cont, [FSyntax.AnyType FSyntax.TypeKind])
-                }
-              , program
-              )
-            handle
-              CpsCheck.TypeError message =>
-                ( print
-                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
-                     ^ message ^ "\n")
-                ; raise Message.Abort
+          let
+            val initialValEnv =
+              TypedSyntax.VIdMap.map fixIntWordTy CheckFInit.initialValEnv
+            val contEnv =
+              case Option.getOpt (#outputMode opts, ExecutableMode) of
+                ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
+              | LibraryMode =>
+                  CSyntax.CVarMap.singleton
+                    (cont, [FSyntax.AnyType FSyntax.TypeKind])
+          in
+            fn (phase, program) =>
+              CpsCheck.checkStat
+                ( { valEnv = initialValEnv
+                  , tyEnv = CheckFInit.initialTyVarEnv
+                  , contEnv = contEnv
+                  }
+                , program
                 )
-            | CheckF.TypeError message =>
-                ( print
-                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
-                     ^ message ^ "\n")
-                ; raise Message.Abort
-                )
+              handle
+                CpsCheck.TypeError message =>
+                  ( print
+                      ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                       ^ message ^ "\n")
+                  ; raise Message.Abort
+                  )
+              | CheckF.TypeError message =>
+                  ( print
+                      ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                       ^ message ^ "\n")
+                  ; raise Message.Abort
+                  )
+          end
         else
           fn _ => ()
       val checkCpsAfterErasure =
         if #internalConsistencyCheck opts then
-          fn (phase, program) =>
-            CpsCheck.checkStat
-              ( { valEnv = CheckFInit.initialValEnvAfterErasure
-                , tyEnv = CheckFInit.initialTyVarEnv
-                , contEnv =
-                    case Option.getOpt (#outputMode opts, ExecutableMode) of
-                      ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
-                    | LibraryMode =>
-                        CSyntax.CVarMap.singleton
-                          (cont, [FSyntax.AnyType FSyntax.TypeKind])
-                }
-              , program
-              )
-            handle
-              CpsCheck.TypeError message =>
-                ( print
-                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
-                     ^ message ^ "\n")
-                ; raise Message.Abort
+          let
+            val initialValEnv = TypedSyntax.VIdMap.map fixIntWordTy
+              CheckFInit.initialValEnvAfterErasure
+            val contEnv =
+              case Option.getOpt (#outputMode opts, ExecutableMode) of
+                ExecutableMode => CSyntax.CVarMap.singleton (cont, [])
+              | LibraryMode =>
+                  CSyntax.CVarMap.singleton
+                    (cont, [FSyntax.AnyType FSyntax.TypeKind])
+          in
+            fn (phase, program) =>
+              CpsCheck.checkStat
+                ( { valEnv = initialValEnv
+                  , tyEnv = CheckFInit.initialTyVarEnv
+                  , contEnv = contEnv
+                  }
+                , program
                 )
-            | CheckF.TypeError message =>
-                ( print
-                    ("internal type check (CPS IR) failed at " ^ phase ^ ": "
-                     ^ message ^ "\n")
-                ; raise Message.Abort
-                )
+              handle
+                CpsCheck.TypeError message =>
+                  ( print
+                      ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                       ^ message ^ "\n")
+                  ; raise Message.Abort
+                  )
+              | CheckF.TypeError message =>
+                  ( print
+                      ("internal type check (CPS IR) failed at " ^ phase ^ ": "
+                       ^ message ^ "\n")
+                  ; raise Message.Abort
+                  )
+          end
         else
           fn _ => ()
       val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
