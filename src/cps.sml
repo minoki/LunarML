@@ -923,20 +923,49 @@ struct
                               end
                           | _ => raise Fail "WordConstOp: invalid type")
                      | F.Char8ConstOp x =>
-                         apply revDecs k valueTransforms
-                           ( C.CharConst x
-                           , FSyntax.Types.char
-                           ) (* assume the type is correct *)
+                         (case tyargs of
+                            [ty as F.TyVar tv] =>
+                              let
+                                val t =
+                                  if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.char)
+                                  then
+                                    []
+                                  else
+                                    [TCast {from = FSyntax.Types.char, to = ty}]
+                              in
+                                apply revDecs k (t @ valueTransforms)
+                                  ( C.CharConst x
+                                  , FSyntax.Types.char
+                                  ) (* assume the type is correct *)
+                              end
+                          | _ => raise Fail "Char8ConstOp: invalid type")
                      | F.Char16ConstOp x =>
                          apply revDecs k valueTransforms
                            ( C.Char16Const x
                            , FSyntax.Types.char16
                            ) (* assume the type is correct *)
                      | F.String8ConstOp x =>
-                         apply revDecs k valueTransforms
-                           ( C.StringConst x
-                           , FSyntax.Types.string
-                           ) (* assume the type is correct *)
+                         (case tyargs of
+                            [ty as F.TyVar tv] =>
+                              let
+                                val t =
+                                  if
+                                    TypedSyntax.eqTyVar
+                                      (tv, PrimTypes.Names.string)
+                                  then
+                                    []
+                                  else
+                                    [TCast
+                                       {from = FSyntax.Types.string, to = ty}]
+                              in
+                                apply revDecs k (t @ valueTransforms)
+                                  ( C.StringConst x
+                                  , FSyntax.Types.string
+                                  ) (* assume the type is correct *)
+                              end
+                          | _ => raise Fail "String8ConstOp: invalid type")
                      | F.String16ConstOp x =>
                          apply revDecs k valueTransforms
                            ( C.String16Const x
