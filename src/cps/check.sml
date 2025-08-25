@@ -208,7 +208,7 @@ struct
              (case (tyargs, args) of
                 ([], f :: name :: args) =>
                   ( checkValue (env, fn () => "JsMethodOp", F.Types.js_value) f
-                  ; checkValue (env, fn () => "JsMethodOp", F.Types.js_value)
+                  ; checkValue (env, fn () => "JsMethodOp", F.Types.string16)
                       name
                   ; List.app
                       (checkValue (env, fn () => "JsMethodOp", F.Types.js_value))
