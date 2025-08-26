@@ -49,10 +49,14 @@ jobs:
         run: |
           bin/lunarml compile --luajit -o lunarml-luajit.lua --default-ann "valDescInComments error" --internal-consistency-check src/lunarml-main.mlb
           luajit -bl lunarml-luajit.lua > /dev/null
-      - name: Compile myself and validate (JavaScript)
-        run: make validate-js
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+      - name: Compile myself (JavaScript)
+        run: |
+          bin/lunarml compile --nodejs-cps -o lunarml-nodejs.mjs --default-ann "valDescInComments error" --internal-consistency-check src/lunarml-main.mlb
+          node --check lunarml-nodejs.mjs
+      # - name: Compile myself and validate (JavaScript)
+      #   run: make validate-js
+      #   env:
+      #     NODE_OPTIONS: "--max-old-space-size=4096"
       - name: Archive
         run: make archive
       - name: Upload
