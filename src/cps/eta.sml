@@ -54,20 +54,24 @@ struct
     | C.UnpackDec _ => (env, dec :: acc)
     | C.ContDec {name, params, body as C.AppCont {applied, args}, attr} =>
         (* Eta conversion *)
-        if
-          ListPair.allEq (fn ((SOME p, _), C.Var q) => p = q | _ => false)
-            (params, args)
-        then
-          (C.CVarMap.insert (env, name, goCont (env, applied)), acc)
-        else
-          ( env
-          , C.ContDec
-              { name = name
-              , params = params
-              , body = goStat (env, body)
-              , attr = attr
-              } :: acc
-          )
+        let
+          fun sameValue ((SOME p, _), C.Var q) = p = q
+            | sameValue ((_, FSyntax.RecordType fields), C.Unit) =
+                Syntax.LabelMap.isEmpty fields
+            | sameValue _ = false
+        in
+          if ListPair.allEq sameValue (params, args) then
+            (C.CVarMap.insert (env, name, goCont (env, applied)), acc)
+          else
+            ( env
+            , C.ContDec
+                { name = name
+                , params = params
+                , body = goStat (env, body)
+                , attr = attr
+                } :: acc
+            )
+        end
     | C.ContDec {name, params, body, attr} =>
         ( env
         , C.ContDec
