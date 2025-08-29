@@ -1262,6 +1262,20 @@ struct
                        , args = args
                        , attr = attr
                        })
+            | C.Nil =>
+                (case (tyArgs, args, attr) of
+                   ([ty], [], {typeOnly = true, ...}) =>
+                     ( #simplificationOccurred ctx := true
+                     ; C.AppCont {applied = cont, args = [C.TypedNil ty]}
+                     )
+                 | _ =>
+                     C.App
+                       { applied = applied
+                       , cont = cont
+                       , tyArgs = tyArgs
+                       , args = args
+                       , attr = attr
+                       } (* should not occur *))
             | _ =>
                 C.App
                   { applied = applied
