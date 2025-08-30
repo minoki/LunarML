@@ -4,6 +4,8 @@ NODE = node
 MKDIR = mkdir -p
 CP = cp -fpR
 INSTALL_EXEC = install -p -m 0755
+MLTON = mlton
+MLYACC = mlyacc
 SMLFMT = smlfmt
 
 include version.mk
@@ -96,7 +98,7 @@ formatted_sources = \
   src/main-esmod.sml
 
 typecheck: src/lunarml-main.mlb $(sources)
-	mlton -stop tc -default-ann "warnUnused true" $<
+	$(MLTON) -stop tc -default-ann "warnUnused true" $<
 
 .PHONY: format
 format:
@@ -107,7 +109,10 @@ check-format:
 	$(SMLFMT) --check $(formatted_sources)
 
 bin/lunarml: src/lunarml-main.mlb $(sources)
-	mlton -output $@ $<
+	$(MLTON) -output $@ $<
+
+bin/lunarml.debug: src/lunarml-main.mlb $(sources)
+	$(MLTON) -output $@ -const 'Exn.keepHistory true' $<
 
 bin/lunarml.gen2.lua: src/lunarml-main.mlb bin/lunarml $(sources)
 	bin/lunarml compile --default-ann "valDescInComments error" --internal-consistency-check -o $@ $<
@@ -129,7 +134,7 @@ bin/lunarml.mjs: bin/lunarml.gen2.mjs
 	chmod +x $@
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
-	mlyacc $<
+	$(MLYACC) $<
 
 src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null
@@ -191,7 +196,7 @@ PREFIX = /usr/local
 libdir = $(PREFIX)/lib/lunarml
 
 install: bin/lunarml
-	make -C thirdparty install
+	$(MAKE) -C thirdparty install
 	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
 	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper > $(PREFIX)/bin/lunarml
 	chmod a+x $(PREFIX)/bin/lunarml
@@ -199,7 +204,7 @@ install: bin/lunarml
 	$(INSTALL_EXEC) bin/lunarml $(libdir)/lunarml
 
 install-precompiled-lua:
-	make -C thirdparty install
+	$(MAKE) -C thirdparty install
 	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
 	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper > $(PREFIX)/bin/lunarml
 	chmod a+x $(PREFIX)/bin/lunarml
@@ -207,7 +212,7 @@ install-precompiled-lua:
 	$(INSTALL_EXEC) bin/lunarml.lua $(libdir)/lunarml
 
 install-precompiled-node:
-	make -C thirdparty install
+	$(MAKE) -C thirdparty install
 	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
 	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper-node > $(PREFIX)/bin/lunarml
 	chmod a+x $(PREFIX)/bin/lunarml
@@ -224,7 +229,7 @@ package/npm/lunarml.mjs: src/lunarml-esmod.mlb bin/lunarml $(sources) src/main-e
 	bin/lunarml compile --nodejs-cps --lib --default-ann "valDescInComments error" --internal-consistency-check -o $@ $<
 
 install-npm: package/npm/lunarml.mjs
-	make -C thirdparty install
+	$(MAKE) -C thirdparty install
 	cp -R lib/ package/npm/lib
 
 .PHONY: install-npm

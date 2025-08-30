@@ -9,6 +9,7 @@ test/*/*.mjs
 test/*/*/*.mjs
 test/**/*.output
 bin/lunarml
+bin/lunarml.debug
 thirdparty/smlnj-lib/
 thirdparty/smlnj-lib-original/
 thirdparty/smlnj-lib-lunarml/
