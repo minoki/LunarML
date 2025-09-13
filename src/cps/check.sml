@@ -99,7 +99,7 @@ struct
                  (fn (e, a) =>
                     checkValue (env, fn () => Primitives.toString primOp, e) a)
                  ( Vector.foldr
-                     (fn (a, acc) => #doTy (F.substTy subst) a :: acc) []
+                     (fn (a, acc) => #doTy (F.lazySubstTy subst) a :: acc) []
                      argTypes
                  , args
                  )
@@ -107,7 +107,7 @@ struct
                  raise TypeError
                    ("number of arguments mismatch: "
                     ^ Primitives.toString primOp);
-               List.map (#doTy (F.substTy subst)) results
+               List.map (#doTy (F.lazySubstTy subst)) results
              end
          | F.IntConstOp _ => raise TypeError "unexpected IntConstOp"
          | F.WordConstOp _ => raise TypeError "unexpected WordConstOp"

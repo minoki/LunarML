@@ -15,6 +15,10 @@ sig
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
   | AnyType of Kind (* erased type *)
+  | DelayedSubst of DelayedSubst ref
+  and DelayedSubst =
+    UnevaluatedSubst of Ty TypedSyntax.TyVarMap.map * Ty
+  | EvaluatedSubst of Ty
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
   datatype PrimOp =
@@ -190,6 +194,7 @@ sig
   val arityToKind: int -> Kind
   val occurCheck: TyVar -> Ty -> bool
   val substituteTy: TyVar * Ty -> Ty -> Ty
+  val substAndForceTy: Ty TypedSyntax.TyVarMap.map -> Ty -> Ty
   val substTy:
     Ty TypedSyntax.TyVarMap.map
     -> { doTy: Ty -> Ty
@@ -199,7 +204,17 @@ sig
        , doDec: Dec -> Dec
        , doDecs: Dec list -> Dec list
        }
+  val lazySubstTy:
+    Ty TypedSyntax.TyVarMap.map
+    -> { doTy: Ty -> Ty
+       , doConBind: ConBind -> ConBind
+       , doPat: Pat -> Pat
+       , doExp: Exp -> Exp
+       , doDec: Dec -> Dec
+       , doDecs: Dec list -> Dec list
+       }
   val weakNormalizeTy: Ty -> Ty
+  val forceTy: Ty -> Ty
   val freeVarsInExp: TypedSyntax.VIdSet.set * Exp
                      -> TypedSyntax.VIdSet.set
                      -> TypedSyntax.VIdSet.set
@@ -223,6 +238,10 @@ struct
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
   | AnyType of Kind (* erased type *)
+  | DelayedSubst of DelayedSubst ref
+  and DelayedSubst =
+    UnevaluatedSubst of Ty TypedSyntax.TyVarMap.map * Ty
+  | EvaluatedSubst of Ty
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
   datatype PrimOp =
@@ -464,6 +483,144 @@ struct
     | arityToKind n =
         ArrowKind (TypeKind, arityToKind (n - 1))
 
+  (*: val substAndForceTy : Ty TypedSyntax.TyVarMap.map -> Ty -> Ty *)
+  val substAndForceTy =
+    let
+      fun go subst (ty as TyVar tv) =
+            (case TypedSyntax.TyVarMap.find (subst, tv) of
+               NONE => ty
+             | SOME replacement =>
+                 go TypedSyntax.TyVarMap.empty replacement (* force *))
+        | go subst (RecordType fields) =
+            RecordType (Syntax.LabelMap.map (go subst) fields)
+        | go subst (AppType {applied, arg}) =
+            let
+              val arg = go subst arg
+            in
+              case go subst applied of
+                TypeFn (tv, _, ty) =>
+                  go (TypedSyntax.TyVarMap.insert (subst, tv, arg)) ty
+              | AnyType (ArrowKind (_, kind)) => AnyType kind
+              | applied => AppType {applied = applied, arg = arg}
+            end
+        | go subst (MultiFnType (params, ret)) =
+            MultiFnType (List.map (go subst) params, go subst ret)
+        | go subst (ForallType (tv, kind, ty)) =
+            let
+              val ty =
+                case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+                  SOME (subst, _) => go subst ty
+                | NONE => go subst ty
+            in
+              ForallType (tv, kind, ty)
+            end
+        | go subst (ExistsType (tv, kind, ty)) =
+            let
+              val ty =
+                case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+                  SOME (subst, _) => go subst ty
+                | NONE => go subst ty
+            in
+              ExistsType (tv, kind, ty)
+            end
+        | go subst (TypeFn (tv, kind, ty)) =
+            let
+              val ty =
+                case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+                  SOME (subst, _) => go subst ty
+                | NONE => go subst ty
+            in
+              TypeFn (tv, kind, ty)
+            end
+        | go subst (ty as AnyType _) = ty
+        | go subst (DelayedSubst r) =
+            (case !r of
+               EvaluatedSubst ty => go subst ty
+             | UnevaluatedSubst (innerSubst, ty) =>
+                 let
+                   (* val subst = TypedSyntax.TyVarMap.foldli
+                     (fn (tv, replacement, acc) => TypedSyntax.TyVarMap.insert (acc, tv, go subst replacement)) subst innerSubst *)
+                   val ty = go innerSubst ty
+                 in
+                   r := EvaluatedSubst ty;
+                   go subst ty
+                 end)
+    in
+      go
+    end
+
+  val forceTy = substAndForceTy TypedSyntax.TyVarMap.empty
+
+  (*: val substAndWeakNormalizeTy : Ty TypedSyntax.TyVarMap.map -> Ty -> Ty *)
+  val substAndWeakNormalizeTy =
+    let
+      fun lazySubstTy subst (ty as TyVar tv) =
+            (case TypedSyntax.TyVarMap.find (subst, tv) of
+               NONE => ty
+             | SOME replacement => replacement)
+        | lazySubstTy subst (ty as AnyType _) = ty
+        | lazySubstTy subst ty =
+            if TypedSyntax.TyVarMap.isEmpty subst then ty
+            else DelayedSubst (ref (UnevaluatedSubst (subst, ty)))
+      fun go subst (ty as TyVar tv) =
+            (case TypedSyntax.TyVarMap.find (subst, tv) of
+               NONE => ty
+             | SOME replacement => go TypedSyntax.TyVarMap.empty replacement)
+        | go subst (RecordType fields) =
+            RecordType (Syntax.LabelMap.map (lazySubstTy subst) fields)
+        | go subst (AppType {applied, arg}) =
+            let
+              val arg = lazySubstTy subst arg
+            in
+              case go subst applied of
+                TypeFn (tv, _, ty) =>
+                  go (TypedSyntax.TyVarMap.insert (subst, tv, arg)) ty
+              | AnyType (ArrowKind (_, kind)) => AnyType kind
+              | applied => AppType {applied = applied, arg = arg}
+            end
+        | go subst (MultiFnType (params, ret)) =
+            MultiFnType
+              (List.map (lazySubstTy subst) params, lazySubstTy subst ret)
+        | go subst (ForallType (tv, kind, ty)) =
+            ForallType (tv, kind, lazySubstTy subst ty)
+        | go subst (ExistsType (tv, kind, ty)) =
+            ExistsType (tv, kind, lazySubstTy subst ty)
+        | go subst (TypeFn (tv, kind, ty)) =
+            TypeFn (tv, kind, lazySubstTy subst ty)
+        | go subst (ty as AnyType _) = ty
+        | go subst (DelayedSubst r) =
+            (case !r of
+               EvaluatedSubst ty => go subst ty
+             | UnevaluatedSubst (innerSubst, ty) =>
+                 let
+                   (* val subst = TypedSyntax.TyVarMap.foldli
+                     (fn (tv, replacement, acc) => TypedSyntax.TyVarMap.insert (acc, tv, go subst replacement)) subst innerSubst *)
+                   val ty = substAndForceTy innerSubst ty
+                 in
+                   r := EvaluatedSubst ty;
+                   go subst ty
+                 end)
+    in
+      go
+    end
+
+  fun weakNormalizeTy (ty as TyVar _) = ty
+    | weakNormalizeTy (ty as RecordType _) = ty
+    | weakNormalizeTy (AppType {applied, arg}) =
+        (case weakNormalizeTy applied of
+           TypeFn (tv, _, ty) =>
+             substAndWeakNormalizeTy (TypedSyntax.TyVarMap.singleton (tv, arg))
+               ty
+         | AnyType (ArrowKind (_, kind)) => AnyType kind
+         | applied => AppType {applied = applied, arg = arg})
+    | weakNormalizeTy (ty as MultiFnType _) = ty
+    | weakNormalizeTy (ty as ForallType _) = ty
+    | weakNormalizeTy (ty as ExistsType _) = ty
+    | weakNormalizeTy (ty as TypeFn _) = ty
+    | weakNormalizeTy (ty as AnyType _) = ty
+    | weakNormalizeTy (ty as DelayedSubst _) =
+        substAndWeakNormalizeTy TypedSyntax.TyVarMap.empty ty
+
   (*: val occurCheck : TyVar -> Ty -> bool *)
   fun occurCheck tv =
     let
@@ -479,6 +636,8 @@ struct
         | check (TypeFn (tv', _, ty)) =
             if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (AnyType _) = false
+        | check (ty as DelayedSubst _) =
+            check (forceTy ty)
     in
       check
     end
@@ -499,6 +658,8 @@ struct
         | go (TypeFn (TypedSyntax.MkTyVar (_, i), _, ty), j) =
             go (ty, Int.min (i, j))
         | go (AnyType _, i) = i
+        | go (ty as DelayedSubst _, i) =
+            go (forceTy ty, i)
     in
       List.foldl go 0 types - 1
     end
@@ -549,6 +710,8 @@ struct
             else
               TypeFn (tv', kind, go ty')
         | go (ty as AnyType _) = ty
+        | go (ty as DelayedSubst _) =
+            go (forceTy ty)
     in
       go
     end
@@ -567,6 +730,7 @@ struct
         | isRelevant (ExistsType (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (TypeFn (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (AnyType _) = false
+        | isRelevant (DelayedSubst _) = true (* conservative *)
       fun doTy (ty as TyVar tv) =
             (case TypedSyntax.TyVarMap.find (subst, tv) of
                NONE => ty
@@ -642,6 +806,7 @@ struct
                ) (* TODO: use fresh tyvar if necessary *)
          | NONE => TypeFn (tv, kind, doTy ty)) *)
         | doTy (ty as AnyType _) = ty
+        | doTy (ty as DelayedSubst _) = substAndForceTy subst ty
       val doTy = fn ty =>
         if isRelevant ty then doTy ty else ty (* optimization *)
       fun doConBind (ConBind (vid, optTy)) =
@@ -804,18 +969,177 @@ struct
       }
     end
 
-  fun weakNormalizeTy (ty as TyVar _) = ty
-    | weakNormalizeTy (ty as RecordType _) = ty
-    | weakNormalizeTy (AppType {applied, arg}) =
-        (case weakNormalizeTy applied of
-           TypeFn (tv, _, ty) => weakNormalizeTy (substituteTy (tv, arg) ty)
-         | AnyType (ArrowKind (_, kind)) => AnyType kind
-         | applied => AppType {applied = applied, arg = arg})
-    | weakNormalizeTy (ty as MultiFnType _) = ty
-    | weakNormalizeTy (ty as ForallType _) = ty
-    | weakNormalizeTy (ty as ExistsType _) = ty
-    | weakNormalizeTy (ty as TypeFn _) = ty
-    | weakNormalizeTy (ty as AnyType _) = ty
+  (*: val lazySubstTy : Ty TypedSyntax.TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list } *)
+  fun lazySubstTy (subst: Ty TypedSyntax.TyVarMap.map) =
+    let
+      fun doTy (ty as TyVar tv) =
+            (case TypedSyntax.TyVarMap.find (subst, tv) of
+               NONE => ty
+             | SOME replacement => replacement)
+        | doTy (ty as AnyType _) = ty
+        | doTy ty =
+            DelayedSubst (ref (UnevaluatedSubst (subst, ty)))
+      val doTy =
+        if TypedSyntax.TyVarMap.isEmpty subst then fn ty => ty else doTy
+      fun doConBind (ConBind (vid, optTy)) =
+        ConBind (vid, Option.map doTy optTy)
+      fun doDatBind (DatBind (tyvars, tyname, conbinds)) =
+        let
+          val subst' =
+            List.foldl
+              (fn (tv, subst) =>
+                 case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of
+                   SOME (subst, _) => subst
+                 | NONE => subst) subst
+              tyvars (* TODO: use fresh tyvar if necessary *)
+        in
+          DatBind
+            (tyvars, tyname, List.map (#doConBind (substTy subst')) conbinds)
+        end
+      fun doPat (pat as WildcardPat _) = pat
+        | doPat (SConPat {sourceSpan, scon, equality, cookedValue}) =
+            SConPat
+              { sourceSpan = sourceSpan
+              , scon = scon
+              , equality = doExp equality
+              , cookedValue = doExp cookedValue
+              }
+        | doPat (VarPat (span, vid, ty)) =
+            VarPat (span, vid, doTy ty)
+        | doPat (RecordPat {sourceSpan, fields, ellipsis, allFields}) =
+            RecordPat
+              { sourceSpan = sourceSpan
+              , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
+              , ellipsis = Option.map doPat ellipsis
+              , allFields = allFields
+              }
+        | doPat (ValConPat {sourceSpan, info, payload}) =
+            ValConPat
+              { sourceSpan = sourceSpan
+              , info = info
+              , payload =
+                  Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload
+              }
+        | doPat (ExnConPat {sourceSpan, predicate, payload}) =
+            ExnConPat
+              { sourceSpan = sourceSpan
+              , predicate = doExp predicate
+              , payload =
+                  Option.map
+                    (fn (ty, get, pat) => (doTy ty, doExp get, doPat pat))
+                    payload
+              }
+        | doPat (LayeredPat (span, vid, ty, pat)) =
+            LayeredPat (span, vid, doTy ty, doPat pat)
+        | doPat (VectorPat (span, pats, ellipsis, elemTy)) =
+            VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
+        | doPat (BogusPat (span, ty, pats)) =
+            BogusPat
+              ( span
+              , doTy ty
+              , List.map (fn (ty, pat) => (doTy ty, doPat pat)) pats
+              )
+      and doExp (PrimExp (primOp, tyargs, args)) =
+            PrimExp (primOp, List.map doTy tyargs, List.map doExp args)
+        | doExp (exp as VarExp _) = exp
+        | doExp (RecordExp fields) =
+            RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+        | doExp (LetExp (decs, exp)) =
+            LetExp (List.map doDec decs, doExp exp)
+        | doExp (MultiAppExp (f, args)) =
+            MultiAppExp (doExp f, List.map doExp args)
+        | doExp (HandleExp {body, exnName, handler, resultTy}) =
+            HandleExp
+              { body = doExp body
+              , exnName = exnName
+              , handler = doExp handler
+              , resultTy = doTy resultTy
+              }
+        | doExp (IfThenElseExp (exp1, exp2, exp3)) =
+            IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
+        | doExp
+            (CaseExp
+               {sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy}) =
+            CaseExp
+              { sourceSpan = sourceSpan
+              , subjectExp = doExp subjectExp
+              , subjectTy = doTy subjectTy
+              , matches =
+                  List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches
+              , matchType = matchType
+              , resultTy = doTy resultTy
+              }
+        | doExp (MultiFnExp (params, exp)) =
+            MultiFnExp
+              (List.map (fn (vid, ty) => (vid, doTy ty)) params, doExp exp)
+        | doExp (ProjectionExp {label, record, fieldTypes}) =
+            ProjectionExp
+              { label = label
+              , record = doExp record
+              , fieldTypes = Syntax.LabelMap.map doTy fieldTypes
+              }
+        | doExp (TyAbsExp (tv, kind, exp)) =
+            (case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of (* TODO: use fresh tyvar if necessary *)
+               SOME (subst, _) =>
+                 TyAbsExp (tv, kind, #doExp (substTy subst) exp)
+             | NONE => TyAbsExp (tv, kind, doExp exp))
+        | doExp (PackExp {payloadTy, exp, packageTy}) =
+            PackExp
+              { payloadTy = doTy payloadTy
+              , exp = doExp exp
+              , packageTy = doTy packageTy
+              }
+        | doExp (TyAppExp (exp, ty)) =
+            TyAppExp (doExp exp, doTy ty)
+        | doExp (BogusExp ty) =
+            BogusExp (doTy ty)
+        | doExp (exp as ExitProgram) = exp
+        | doExp (ExportValue x) =
+            ExportValue (doExp x)
+        | doExp (ExportModule entities) =
+            ExportModule (Vector.map (fn (name, x) => (name, doExp x)) entities)
+      and doDec (ValDec (vid, optTy, exp)) =
+            ValDec (vid, Option.map doTy optTy, doExp exp)
+        | doDec (RecValDec valbinds) =
+            RecValDec
+              (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp))
+                 valbinds)
+        | doDec (UnpackDec (tv, kind, vid, ty, exp)) =
+            UnpackDec
+              ( tv
+              , kind
+              , vid
+              , case TypedSyntax.TyVarMap.findAndRemove (subst, tv) of (* TODO: use fresh tyvar if necessary *)
+                  SOME (subst, _) => #doTy (substTy subst) ty
+                | NONE => doTy ty
+              , doExp exp
+              )
+        | doDec (IgnoreDec exp) =
+            IgnoreDec (doExp exp)
+        | doDec (DatatypeDec datbinds) =
+            DatatypeDec (List.map doDatBind datbinds)
+        | doDec (ExceptionDec {name, tagName, payloadTy}) =
+            ExceptionDec
+              { name = name
+              , tagName = tagName
+              , payloadTy = Option.map doTy payloadTy
+              }
+        | doDec (ESImportDec {pure, specs, moduleName}) =
+            ESImportDec
+              { pure = pure
+              , specs =
+                  List.map (fn (name, vid, ty) => (name, vid, doTy ty)) specs
+              , moduleName = moduleName
+              }
+    in
+      { doTy = doTy
+      , doConBind = doConBind
+      , doPat = doPat
+      , doExp = doExp
+      , doDec = doDec
+      , doDecs = List.map doDec
+      }
+    end
 
   fun freeTyVarsInTy (bound: TypedSyntax.TyVarSet.set, TyVar tv) acc =
         if TypedSyntax.TyVarSet.member (bound, tv) then acc
@@ -835,6 +1159,8 @@ struct
     | freeTyVarsInTy (bound, TypeFn (tv, _, ty)) acc =
         freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
     | freeTyVarsInTy (_, AnyType _) acc = acc
+    | freeTyVarsInTy (bound, ty as DelayedSubst _) acc =
+        freeTyVarsInTy (bound, forceTy ty) acc
   fun freeTyVarsInPat (_, WildcardPat _) acc = acc
     | freeTyVarsInPat
         (bound, SConPat {sourceSpan = _, scon = _, equality, cookedValue}) acc =
@@ -1242,6 +1568,8 @@ struct
       | print_Ty (TypeFn (tv, _, x)) =
           "TypeFn(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
       | print_Ty (AnyType _) = "AnyType"
+      | print_Ty (ty as DelayedSubst _) =
+          print_Ty (forceTy ty)
     fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
       | print_PrimOp (WordConstOp x) = "WordConstOp " ^ IntInf.toString x
       | print_PrimOp (RealConstOp x) =

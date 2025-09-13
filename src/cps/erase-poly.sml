@@ -38,6 +38,8 @@ struct
              F.AnyType kind2 => F.AnyType (F.ArrowKind (kind, kind2))
            | ty => F.TypeFn (tv, kind, goTy env ty))
       | goTy _ (ty as F.AnyType _) = ty
+      | goTy env (ty as F.DelayedSubst _) =
+          goTy env (F.forceTy ty)
     fun goValue ({valMap, ...}: env) (v as C.Var vid) =
           (case VIdMap.find (valMap, vid) of
              NONE => v

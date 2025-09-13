@@ -69,6 +69,8 @@ struct
            doTyVar tv
            @ P.Fragment " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
     | doTy _ (F.AnyType _) = [P.Fragment "Any"]
+    | doTy prec (ty as F.DelayedSubst _) =
+        doTy prec (F.forceTy ty)
   fun doPrimOp (F.IntConstOp x) =
         [P.Fragment ("int " ^ IntInf.toString x)]
     | doPrimOp (F.WordConstOp x) =

@@ -105,14 +105,14 @@ struct
                        , List.map
                            (fn (p, ty) =>
                               ( CpsSimplify.renewVId (ctx, p)
-                              , #doTy (FSyntax.substTy tysubst) ty
+                              , #doTy (FSyntax.lazySubstTy tysubst) ty
                               )) params
                        , typeOnly
                        ) :: acc
                      )
                    end) (TypedSyntax.TyVarMap.empty, []) allParams
             val allParams' = List.rev allParamsRev'
-            val wrapperResultTy = #doTy (FSyntax.substTy tysubst) resultTy
+            val wrapperResultTy = #doTy (FSyntax.lazySubstTy tysubst) resultTy
             val wrapperTy =
               List.foldr
                 (fn ((tyParams, params, typeOnly), ty) =>

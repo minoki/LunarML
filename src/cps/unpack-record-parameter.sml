@@ -499,7 +499,7 @@ in
                                  , (tv', kind) :: acc
                                  )
                                end) (TypedSyntax.TyVarMap.empty, []) tyParams
-                        val substTy = #doTy (FSyntax.substTy tysubst)
+                        val substTy = #doTy (FSyntax.lazySubstTy tysubst)
                         val wrapperParams =
                           List.map
                             (fn (p, ty) =>

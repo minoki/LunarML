@@ -77,6 +77,8 @@ struct
           F.ArrowKind
             (kind, kindOf (TypedSyntax.TyVarMap.insert (env, tv, kind)) ty)
       | kindOf _ (F.AnyType kind) = kind
+      | kindOf env (ty as F.DelayedSubst _) =
+          kindOf env (F.forceTy ty)
     and checkKind (env, expectedKind) ty =
       let
         val kind = kindOf env ty
@@ -133,6 +135,8 @@ struct
       | normalizeType env (F.TypeFn (tv, kind, ty)) =
           F.TypeFn (tv, kind, normalizeType env ty)
       | normalizeType _ (ty as F.AnyType _) = ty
+      | normalizeType env (ty as F.DelayedSubst _) =
+          normalizeType env (F.forceTy ty)
 
     (*: val sameType' : int * int TypedSyntax.TyVarMap.map * int TypedSyntax.TyVarMap.map -> F.Ty * F.Ty -> bool *)
     fun sameType' env (ty, ty') =

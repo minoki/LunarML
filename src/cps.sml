@@ -658,6 +658,8 @@ struct
               | goTy (F.TypeFn (tv, kind, ty)) =
                   F.TypeFn (tv, kind, goTy ty)
               | goTy (ty as F.AnyType _) = ty
+              | goTy (ty as F.DelayedSubst _) =
+                  goTy (F.forceTy ty)
           in
             goTy
           end
@@ -849,7 +851,7 @@ struct
                         (fn ((v, _), t, acc) =>
                            TypedSyntax.TyVarMap.insert (acc, v, t))
                         TypedSyntax.TyVarMap.empty (vars, tyargs)
-                    val goTy = #doTy (F.substTy m)
+                    val goTy = #doTy (F.lazySubstTy m)
                     val results' = List.map goTy results
                   in
                     ( Vector.foldr (fn (ty, acc) => goTy ty :: acc) [] args
@@ -1322,7 +1324,7 @@ struct
             (fn (revDecs, f, tyF) =>
                let
                  val resultTy =
-                   case tyF of
+                   case F.weakNormalizeTy tyF of
                      F.MultiFnType (_, resultTy) => resultTy
                    | _ =>
                        raise Fail
@@ -1685,7 +1687,7 @@ struct
         | C.Raise _ => threshold
         | C.Unreachable => threshold
     fun substTy (tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map) =
-      #doTy (FSyntax.substTy tysubst)
+      #doTy (FSyntax.lazySubstTy tysubst)
     fun substValue (tysubst, subst: C.Value TypedSyntax.VIdMap.map) =
       let
         val goTy = substTy tysubst
