@@ -10,9 +10,9 @@ functor FFIMonoSequence (type elem; val ctype : string) :> sig
             sharing type MonoArray.array = MonoArraySlice.array = UnsafeMonoArray.array
             val arrayEq : MonoArray.array * MonoArray.array -> bool
         end = struct
-val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
-val arraytype = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString (ctype ^ "[?]")]) ()
-val elemSize : int = LunarML.assumeDiscardable (fn () => Lua.unsafeFromValue (Lua.call1 (Lua.field (ffi, "sizeof")) #[Lua.fromString ctype])) ()
+val ffi = Lua.call1WithEffect Lua.PrimEffect.pure Lua.Lib.require #[Lua.fromString "ffi"]
+val arraytype = Lua.call1WithEffect Lua.PrimEffect.pure (Lua.fieldWithEffect (ffi, "typeof", Lua.PrimEffect.pure)) #[Lua.fromString (ctype ^ "[?]")]
+val elemSize : int = Lua.unsafeFromValue (Lua.call1WithEffect Lua.PrimEffect.pure (Lua.fieldWithEffect (ffi, "sizeof", Lua.PrimEffect.pure)) #[Lua.fromString ctype])
 structure P = struct
 type elem = elem
 type vector = Lua.value * int

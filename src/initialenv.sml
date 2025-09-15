@@ -100,6 +100,9 @@ sig
   val VId_DelimCont_withSubCont: TypedSyntax.VId
   val VId_DelimCont_pushSubCont: TypedSyntax.VId
   val VId_DelimCont_topLevel: TypedSyntax.VId
+  val VId_PrimEffect_pure: TypedSyntax.VId
+  val VId_PrimEffect_discardable: TypedSyntax.VId
+  val VId_PrimEffect_impure: TypedSyntax.VId
   val initialValEnv:
     (TypedSyntax.PureTypeScheme
      * Syntax.ValueConstructorInfo Syntax.IdStatus
@@ -284,6 +287,10 @@ struct
   val VId_DelimCont_withSubCont = newVId "_Prim.DelimCont.withSubCont"
   val VId_DelimCont_pushSubCont = newVId "_Prim.DelimCont.pushSubCont"
   val VId_DelimCont_topLevel = newVId "_Prim.DelimCont.topLevel"
+
+  val VId_PrimEffect_pure = newVId "PrimEffect.pure"
+  val VId_PrimEffect_discardable = newVId "PrimEffect.discardable"
+  val VId_PrimEffect_impure = newVId "PrimEffect.impure"
 
   local
     open Typing
@@ -702,6 +709,18 @@ struct
               , VId_DelimCont_topLevel
               , TypeScheme ([], PT.prompt_tag PT.unit)
               )
+            , ( "_Prim.PrimEffect.pure"
+              , VId_PrimEffect_pure
+              , TypeScheme ([], PT.prim_effect)
+              )
+            , ( "_Prim.PrimEffect.discardable"
+              , VId_PrimEffect_discardable
+              , TypeScheme ([], PT.prim_effect)
+              )
+            , ( "_Prim.PrimEffect.impure"
+              , VId_PrimEffect_impure
+              , TypeScheme ([], PT.prim_effect)
+              )
             ]
         ]
     val initialTyConMap: TypedSyntax.TypeStructure Syntax.TyConMap.map =
@@ -831,6 +850,11 @@ struct
             , valEnv = emptyValEnv
             }
           )
+        , ( "_Prim.PrimEffect.prim_effect"
+          , { typeFunction = TypeFunction ([], PT.prim_effect)
+            , valEnv = emptyValEnv
+            }
+          )
         ]
     val initialTyNameMap: Typing.TyNameAttr TypedSyntax.TyNameMap.map =
       List.foldl TypedSyntax.TyNameMap.insert' TypedSyntax.TyNameMap.empty
@@ -953,6 +977,9 @@ struct
           )
         , ( PT.Names.subcont
           , {arity = 2, admitsEquality = false, overloadClass = NONE}
+          )
+        , ( PT.Names.prim_effect
+          , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
         ]
     val initialEnv: Typing.Env =
@@ -1109,6 +1136,7 @@ struct
         , PT.Names.function3
         , PT.Names.prompt_tag
         , PT.Names.subcont
+        , PT.Names.prim_effect
         ]
     end
 end

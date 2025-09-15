@@ -51,18 +51,17 @@ struct
                (case tyargs of
                   [elemTy] => VALUE (C.TypedNil elemTy) (* empty list *)
                 | _ => raise Fail "invalid ListOp")
-           | (F.PrimCall P.JavaScript_call, [f, C.Var args]) =>
+           | (F.PrimCall P.JavaScript_call, [f, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         {primOp = F.JsCallOp, tyargs = [], args = f :: args})
+                    SIMPLE_EXP (C.PrimOp
+                      {primOp = F.JsCallOp, tyargs = [], args = e :: f :: args})
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.JavaScript_method, [obj, name, C.Var args]) =>
+           | (F.PrimCall P.JavaScript_method, [obj, name, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
@@ -72,161 +71,155 @@ struct
                     SIMPLE_EXP (C.PrimOp
                       { primOp = F.JsMethodOp
                       , tyargs = []
-                      , args = obj :: name :: args
+                      , args = e :: obj :: name :: args
                       })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.JavaScript_new, [ctor, C.Var args]) =>
+           | (F.PrimCall P.JavaScript_new, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         {primOp = F.JsNewOp, tyargs = [], args = ctor :: args})
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.JsNewOp
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallOp
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallOp
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call1, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call1, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCall1Op
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCall1Op
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call2, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call2, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 2
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 2
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call3, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call3, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 3
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 3
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call4, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call4, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 4
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 4
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call5, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call5, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 5
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 5
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call6, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call6, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 6
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 6
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call7, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call7, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 7
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 7
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call8, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call8, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 8
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 8
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_call9, [ctor, C.Var args]) =>
+           | (F.PrimCall P.Lua_call9, [ctor, C.Var args, e]) =>
                (case TypedSyntax.VIdMap.find (env, args) of
                   SOME
                     { exp =
                         SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                     , ...
                     } =>
-                    SIMPLE_EXP
-                      (C.PrimOp
-                         { primOp = F.LuaCallNOp 9
-                         , tyargs = []
-                         , args = ctor :: args
-                         })
+                    SIMPLE_EXP (C.PrimOp
+                      { primOp = F.LuaCallNOp 9
+                      , tyargs = []
+                      , args = e :: ctor :: args
+                      })
                 | _ => NOT_SIMPLIFIED)
-           | (F.PrimCall P.Lua_method, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -234,16 +227,17 @@ struct
                          SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                      , ...
                      } =>
-                     SIMPLE_EXP
-                       (C.PrimOp
-                          { primOp = F.LuaMethodOp name
-                          , tyargs = []
-                          , args = ctor :: args
-                          })
+                     SIMPLE_EXP (C.PrimOp
+                       { primOp = F.LuaMethodOp name
+                       , tyargs = []
+                       , args = e :: ctor :: args
+                       })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method1, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method1
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -251,16 +245,17 @@ struct
                          SOME (C.PrimOp {primOp = F.VectorOp, tyargs = _, args})
                      , ...
                      } =>
-                     SIMPLE_EXP
-                       (C.PrimOp
-                          { primOp = F.LuaMethod1Op name
-                          , tyargs = []
-                          , args = ctor :: args
-                          })
+                     SIMPLE_EXP (C.PrimOp
+                       { primOp = F.LuaMethod1Op name
+                       , tyargs = []
+                       , args = e :: ctor :: args
+                       })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method2, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method2
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -271,12 +266,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 2)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method3, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method3
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -287,12 +284,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 3)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method4, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method4
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -303,12 +302,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 4)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method5, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method5
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -319,12 +320,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 5)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method6, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method6
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -335,12 +338,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 6)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method7, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method7
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -351,12 +356,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 7)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method8, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method8
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -367,12 +374,14 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 8)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall P.Lua_method9, [ctor, C.StringConst name, C.Var args]) =>
+           | ( F.PrimCall P.Lua_method9
+             , [ctor, C.StringConst name, C.Var args, e]
+             ) =>
                if LuaWriter.isLuaIdentifier name then
                  case TypedSyntax.VIdMap.find (env, args) of
                    SOME
@@ -383,7 +392,7 @@ struct
                      SIMPLE_EXP (C.PrimOp
                        { primOp = F.LuaMethodNOp (name, 9)
                        , tyargs = []
-                       , args = ctor :: args
+                       , args = e :: ctor :: args
                        })
                  | _ => NOT_SIMPLIFIED
                else

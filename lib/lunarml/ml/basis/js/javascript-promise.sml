@@ -39,8 +39,8 @@ structure Promise :> sig
 end = struct
 type 'a promise = value
 datatype 'a result = FULFILLED of 'a | REJECTED of exn
-fun wrapThenable (x: 'a): value = _primCall "JavaScript.call" (_Prim.JavaScript.wrapThenable, #[_primCall "Unsafe.cast" (x)])
-fun unwrapThenable (x: value): 'a = _primCall "Unsafe.cast" (_primCall "JavaScript.call" (_Prim.JavaScript.unwrapThenable, #[x]))
+fun wrapThenable (x: 'a): value = _primCall "JavaScript.call" (_Prim.JavaScript.wrapThenable, #[_primCall "Unsafe.cast" (x)], _Prim.PrimEffect.discardable)
+fun unwrapThenable (x: value): 'a = _primCall "Unsafe.cast" (_primCall "JavaScript.call" (_Prim.JavaScript.unwrapThenable, #[x], _Prim.PrimEffect.pure))
 fun newNested (callback : { resolve : 'a -> unit, resolveTo : 'a promise -> unit, reject : exn -> unit } -> unit): 'a promise
   = let fun callback' args
           = let val resolve = Unsafe.Vector.sub (args, 0)

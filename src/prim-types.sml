@@ -24,6 +24,7 @@ sig
     val exntag: TypedSyntax.TyName
     val lua_value: TypedSyntax.TyName
     val js_value: TypedSyntax.TyName
+    val prim_effect: TypedSyntax.TyName
     val ref_: TypedSyntax.TyName
     val list: TypedSyntax.TyName
     val vector: TypedSyntax.TyName
@@ -52,6 +53,7 @@ sig
   val exntag: 'l TypedSyntax.BaseTy
   val lua_value: 'l TypedSyntax.BaseTy
   val js_value: 'l TypedSyntax.BaseTy
+  val prim_effect: 'l TypedSyntax.BaseTy
   val ref_: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
   val list: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
   val vector: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
@@ -101,6 +103,7 @@ struct
     val int64 = TypedSyntax.MkTyName ("Int64.int", 23)
     val word32 = TypedSyntax.MkTyName ("Word32.word", 24)
     val word64 = TypedSyntax.MkTyName ("Word64.word", 25)
+    val prim_effect = TypedSyntax.MkTyName ("LunarML.prim_effect", 26)
   end
 
   val unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
@@ -122,6 +125,8 @@ struct
   val int64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.int64)
   val word32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.word32)
   val word64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.word64)
+  val prim_effect =
+    TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.prim_effect)
   fun ref_ ty =
     TypedSyntax.TyCon (SourcePos.nullSpan, [ty], Names.ref_)
   fun list ty =

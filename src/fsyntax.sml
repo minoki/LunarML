@@ -46,17 +46,18 @@ sig
   | ConstructExnOp (* value argument: exception tag *)
   | ConstructExnWithPayloadOp (* type argument: payload, value arguments: exception tag, payload *)
   | PrimCall of Primitives.PrimOp
-  | JsCallOp (* value argument: function, arguments *)
-  | JsMethodOp (* value argument: object, name, arguments *)
-  | JsNewOp (* value argument: constructor, arguments *)
-  | LuaCallOp (* value argument: function, arguments *)
-  | LuaCall1Op (* value argument: function, arguments *)
+  | JsCallOp (* value argument: prim_effect, function, arguments *)
+  | JsMethodOp (* value argument: prim_effect, object, name, arguments *)
+  | JsNewOp (* value argument: prim_effect, constructor, arguments *)
+  | LuaCallOp (* value argument: prim_effect, function, arguments *)
+  | LuaCall1Op (* value argument: prim_effect, function, arguments *)
   | LuaCallNOp of
-      int (* returnArity (int), value argument: function, arguments *)
-  | LuaMethodOp of string (* value argument: object, arguments *)
-  | LuaMethod1Op of string (* value argument: object, arguments *)
+      int (* returnArity (int), value argument: prim_effect, function, arguments *)
+  | LuaMethodOp of string (* value argument: prim_effect, object, arguments *)
+  | LuaMethod1Op of string (* value argument: prim_effect, object, arguments *)
   | LuaMethodNOp of
-      string * int (* returnArity (int), value argument: object, arguments *)
+      string
+      * int (* returnArity (int), value argument: prim_effect, object, arguments *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -183,6 +184,7 @@ sig
     val exntag: Ty
     val lua_value: Ty
     val js_value: Ty
+    val prim_effect: Ty
     val list: Ty -> Ty
     val vector: Ty -> Ty
     val array: Ty -> Ty
@@ -269,17 +271,18 @@ struct
   | ConstructExnOp (* value argument: exception tag *)
   | ConstructExnWithPayloadOp (* type argument: payload, value arguments: exception tag, payload *)
   | PrimCall of Primitives.PrimOp
-  | JsCallOp (* value argument: function, arguments *)
-  | JsMethodOp (* value argument: object, name, arguments *)
-  | JsNewOp (* value argument: constructor, arguments *)
-  | LuaCallOp (* value argument: function, arguments *)
-  | LuaCall1Op (* value argument: function, arguments *)
+  | JsCallOp (* value argument: prim_effect, function, arguments *)
+  | JsMethodOp (* value argument: prim_effect, object, name, arguments *)
+  | JsNewOp (* value argument: prim_effect, constructor, arguments *)
+  | LuaCallOp (* value argument: prim_effect, function, arguments *)
+  | LuaCall1Op (* value argument: prim_effect, function, arguments *)
   | LuaCallNOp of
-      int (* returnArity (int), value argument: function, arguments *)
-  | LuaMethodOp of string (* value argument: object, arguments *)
-  | LuaMethod1Op of string (* value argument: object, arguments *)
+      int (* returnArity (int), value argument: prim_effect, function, arguments *)
+  | LuaMethodOp of string (* value argument: prim_effect, object, arguments *)
+  | LuaMethod1Op of string (* value argument: prim_effect, object, arguments *)
   | LuaMethodNOp of
-      string * int (* returnArity (int), value argument: object, arguments *)
+      string
+      * int (* returnArity (int), value argument: prim_effect, object, arguments *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -410,6 +413,7 @@ struct
     val exntag = TyVar PrimTypes.Names.exntag
     val lua_value = TyVar PrimTypes.Names.lua_value
     val js_value = TyVar PrimTypes.Names.js_value
+    val prim_effect = TyVar PrimTypes.Names.prim_effect
     fun list ty =
       AppType {applied = TyVar PrimTypes.Names.list, arg = ty}
     fun vector ty =

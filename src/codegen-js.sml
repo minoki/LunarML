@@ -264,6 +264,7 @@ struct
           )
     | doValue _ (C.String16Const x) =
         J.ConstExp (J.WideString x)
+    | doValue _ (C.PrimEffect _) = J.ConstExp J.Null
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
@@ -278,7 +279,7 @@ struct
         JsSyntax.IntKey (n - 1)
     | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
 
-  datatype purity = PURE | DISCARDABLE | IMPURE
+  datatype prim_effect = datatype Primitives.prim_effect
 
   fun genSymNamed (ctx: Context, name) =
     let
@@ -491,6 +492,22 @@ struct
                      raise CodeGenError
                        ("primop " ^ Primitives.toString prim
                         ^ ": invalid number of arguments")
+               fun doUnaryExpE f =
+                 case args of
+                   [a, _] => f (doExp (ctx, env, a))
+                 | _ =>
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doBinaryExpE f =
+                 case args of
+                   [a, b, _] => f (doExp (ctx, env, a), doExp (ctx, env, b))
+                 | _ =>
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doBinaryOpE binop =
+                 doBinaryExpE (fn (a, b) => J.BinExp (binop, a, b))
              in
                case prim of
                  Primitives.mkFn2 =>
@@ -1085,31 +1102,31 @@ struct
                    doBinaryExp
                      (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), PURE)
                | Primitives.JavaScript_sub =>
-                   doBinaryExp (fn (a, b) => J.IndexExp (a, b), IMPURE)
+                   doBinaryExpE (fn (a, b) => J.IndexExp (a, b))
                | Primitives.JavaScript_set =>
                    raise CodeGenError "unexpected JavaScript.set"
                | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, PURE)
-               | Primitives.JavaScript_LT => doBinaryOp (J.LT, IMPURE)
-               | Primitives.JavaScript_GT => doBinaryOp (J.GT, IMPURE)
-               | Primitives.JavaScript_LE => doBinaryOp (J.LE, IMPURE)
-               | Primitives.JavaScript_GE => doBinaryOp (J.GE, IMPURE)
-               | Primitives.JavaScript_PLUS => doBinaryOp (J.PLUS, IMPURE)
-               | Primitives.JavaScript_MINUS => doBinaryOp (J.MINUS, IMPURE)
-               | Primitives.JavaScript_TIMES => doBinaryOp (J.TIMES, IMPURE)
-               | Primitives.JavaScript_DIVIDE => doBinaryOp (J.DIV, IMPURE)
-               | Primitives.JavaScript_MOD => doBinaryOp (J.MOD, IMPURE)
+               | Primitives.JavaScript_LT => doBinaryOpE J.LT
+               | Primitives.JavaScript_GT => doBinaryOpE J.GT
+               | Primitives.JavaScript_LE => doBinaryOpE J.LE
+               | Primitives.JavaScript_GE => doBinaryOpE J.GE
+               | Primitives.JavaScript_PLUS => doBinaryOpE J.PLUS
+               | Primitives.JavaScript_MINUS => doBinaryOpE J.MINUS
+               | Primitives.JavaScript_TIMES => doBinaryOpE J.TIMES
+               | Primitives.JavaScript_DIVIDE => doBinaryOpE J.DIV
+               | Primitives.JavaScript_MOD => doBinaryOpE J.MOD
                | Primitives.JavaScript_negate =>
-                   doUnaryExp (fn a => J.UnaryExp (J.NEGATE, a), IMPURE)
-               | Primitives.JavaScript_andb => doBinaryOp (J.BITAND, IMPURE)
-               | Primitives.JavaScript_orb => doBinaryOp (J.BITOR, IMPURE)
-               | Primitives.JavaScript_xorb => doBinaryOp (J.BITXOR, IMPURE)
+                   doUnaryExpE (fn a => J.UnaryExp (J.NEGATE, a))
+               | Primitives.JavaScript_andb => doBinaryOpE J.BITAND
+               | Primitives.JavaScript_orb => doBinaryOpE J.BITOR
+               | Primitives.JavaScript_xorb => doBinaryOpE J.BITXOR
                | Primitives.JavaScript_notb =>
-                   doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), IMPURE)
-               | Primitives.JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, IMPURE)
-               | Primitives.JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, IMPURE)
-               | Primitives.JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, IMPURE)
-               | Primitives.JavaScript_EXP => doBinaryOp (J.EXP, PURE)
+                   doUnaryExpE (fn a => J.UnaryExp (J.BITNOT, a))
+               | Primitives.JavaScript_LSHIFT => doBinaryOpE J.LSHIFT
+               | Primitives.JavaScript_RSHIFT => doBinaryOpE J.RSHIFT
+               | Primitives.JavaScript_URSHIFT => doBinaryOpE J.URSHIFT
+               | Primitives.JavaScript_EXP => doBinaryOpE J.EXP
                | Primitives.JavaScript_isFalsy =>
                    doUnaryExp (fn a => J.UnaryExp (J.NOT, a), DISCARDABLE)
                | Primitives.JavaScript_isNullOrUndefined =>
@@ -1126,14 +1143,14 @@ struct
                | Primitives.JavaScript_setGlobal =>
                    raise CodeGenError "unexpected JavaScript.setGlobal"
                | Primitives.JavaScript_call =>
-                   doBinary (fn (f, args) =>
+                   doTernary (fn (f, args, _) =>
                      J.MethodExp (f, "apply", vector [J.UndefinedExp, args]))
                | Primitives.JavaScript_method =>
                    doTernary (fn (obj, method, args) =>
                      J.MethodExp
                        (J.IndexExp (obj, method), "apply", vector [obj, args]))
                | Primitives.JavaScript_new =>
-                   doBinary (fn (ctor, args) =>
+                   doTernary (fn (ctor, args, _) =>
                      J.MethodExp
                        ( J.VarExp (J.PredefinedId "Reflect")
                        , "construct"
@@ -1163,17 +1180,17 @@ struct
                      ("primop " ^ Primitives.toString prim
                       ^ " is not supported on JavaScript backend")
              end
-         | (F.JsCallOp, f :: args) =>
+         | (F.JsCallOp, _ :: f :: args) =>
              J.CallExp
                ( doExp (ctx, env, f)
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                )
-         | (F.JsMethodOp, obj :: name :: args) =>
+         | (F.JsMethodOp, _ :: obj :: name :: args) =>
              J.CallExp
                ( J.IndexExp (doExp (ctx, env, obj), doExp (ctx, env, name))
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                )
-         | (F.JsNewOp, ctor :: args) =>
+         | (F.JsNewOp, _ :: ctor :: args) =>
              J.NewExp
                ( doExp (ctx, env, ctor)
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)

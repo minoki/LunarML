@@ -274,6 +274,7 @@ struct
          val exntag = F.TyVar PrimTypes.Names.exntag
          val LuaValue = F.TyVar PrimTypes.Names.lua_value
          val JavaScriptValue = F.TyVar PrimTypes.Names.js_value
+         val prim_effect = F.TyVar PrimTypes.Names.prim_effect
          fun refOf ty =
            F.AppType {applied = F.TyVar PrimTypes.Names.ref_, arg = ty}
          fun listOf ty =
@@ -518,33 +519,38 @@ struct
           ; checkExp (env, payloadTy, payload)
           ; F.Types.exn
           )
-      | inferExp (env, F.PrimExp (F.JsCallOp, [], f :: args)) =
-          ( checkExp (env, F.Types.js_value, f)
+      | inferExp (env, F.PrimExp (F.JsCallOp, [], e :: f :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.js_value, f)
           ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
           ; F.Types.js_value
           )
-      | inferExp (env, F.PrimExp (F.JsMethodOp, [], f :: name :: args)) =
-          ( checkExp (env, F.Types.js_value, f)
+      | inferExp (env, F.PrimExp (F.JsMethodOp, [], e :: f :: name :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.js_value, f)
           ; checkExp (env, F.Types.js_value, name)
           ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
           ; F.Types.js_value
           )
-      | inferExp (env, F.PrimExp (F.JsNewOp, [], f :: args)) =
-          ( checkExp (env, F.Types.js_value, f)
+      | inferExp (env, F.PrimExp (F.JsNewOp, [], e :: f :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.js_value, f)
           ; List.app (fn a => checkExp (env, F.Types.js_value, a)) args
           ; F.Types.js_value
           )
-      | inferExp (env, F.PrimExp (F.LuaCallOp, [], f :: args)) =
-          ( checkExp (env, F.Types.lua_value, f)
+      | inferExp (env, F.PrimExp (F.LuaCallOp, [], e :: f :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.lua_value, f)
           ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
           ; F.Types.vector F.Types.lua_value
           )
-      | inferExp (env, F.PrimExp (F.LuaCall1Op, [], f :: args)) =
-          ( checkExp (env, F.Types.lua_value, f)
+      | inferExp (env, F.PrimExp (F.LuaCall1Op, [], e :: f :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.lua_value, f)
           ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
           ; F.Types.lua_value
           )
-      | inferExp (env, F.PrimExp (F.LuaCallNOp n, [], f :: args)) =
+      | inferExp (env, F.PrimExp (F.LuaCallNOp n, [], e :: f :: args)) =
           let
             val valueTy = F.Types.lua_value
             fun loop (0, acc) = F.RecordType acc
@@ -555,21 +561,24 @@ struct
                         (acc, Syntax.NumericLabel i, valueTy)
                     )
           in
+            checkExp (env, F.Types.prim_effect, e);
             checkExp (env, F.Types.lua_value, f);
             List.app (fn a => checkExp (env, F.Types.lua_value, a)) args;
             loop (n, Syntax.LabelMap.empty)
           end
-      | inferExp (env, F.PrimExp (F.LuaMethodOp _, [], obj :: args)) =
-          ( checkExp (env, F.Types.lua_value, obj)
+      | inferExp (env, F.PrimExp (F.LuaMethodOp _, [], e :: obj :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.lua_value, obj)
           ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
           ; F.Types.vector F.Types.lua_value
           )
-      | inferExp (env, F.PrimExp (F.LuaMethod1Op _, [], obj :: args)) =
-          ( checkExp (env, F.Types.lua_value, obj)
+      | inferExp (env, F.PrimExp (F.LuaMethod1Op _, [], e :: obj :: args)) =
+          ( checkExp (env, F.Types.prim_effect, e)
+          ; checkExp (env, F.Types.lua_value, obj)
           ; List.app (fn a => checkExp (env, F.Types.lua_value, a)) args
           ; F.Types.lua_value
           )
-      | inferExp (env, F.PrimExp (F.LuaMethodNOp (_, n), [], obj :: args)) =
+      | inferExp (env, F.PrimExp (F.LuaMethodNOp (_, n), [], e :: obj :: args)) =
           let
             val valueTy = F.Types.lua_value
             fun loop (0, acc) = F.RecordType acc
@@ -580,6 +589,7 @@ struct
                         (acc, Syntax.NumericLabel i, valueTy)
                     )
           in
+            checkExp (env, F.Types.prim_effect, e);
             checkExp (env, F.Types.lua_value, obj);
             List.app (fn a => checkExp (env, F.Types.lua_value, a)) args;
             loop (n, Syntax.LabelMap.empty)

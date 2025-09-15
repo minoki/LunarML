@@ -54,6 +54,7 @@ struct
      | C.Char16Const _ => FSyntax.Types.char16
      | C.StringConst _ => FSyntax.Types.string
      | C.String16Const _ => FSyntax.Types.string16
+     | C.PrimEffect _ => FSyntax.Types.prim_effect
      | C.Cast {value, from, to} =>
       (checkValue (env, fn () => "Cast", from) value; to)
      | C.Pack {value, payloadTy, packageTy} =>
@@ -196,8 +197,9 @@ struct
               | _ => raise TypeError "invalid ConstructExnWithPayloadOp")
          | F.JsCallOp =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "JsCallOp", F.Types.js_value) f
+                ([], e :: f :: args) =>
+                  ( checkValue (env, fn () => "JsCallOp", F.Types.prim_effect) e
+                  ; checkValue (env, fn () => "JsCallOp", F.Types.js_value) f
                   ; List.app
                       (checkValue (env, fn () => "JsCallOp", F.Types.js_value))
                       args
@@ -206,8 +208,10 @@ struct
               | _ => raise TypeError "invalid JsCallOp")
          | F.JsMethodOp =>
              (case (tyargs, args) of
-                ([], f :: name :: args) =>
-                  ( checkValue (env, fn () => "JsMethodOp", F.Types.js_value) f
+                ([], e :: f :: name :: args) =>
+                  ( checkValue (env, fn () => "JsMethodOp", F.Types.prim_effect)
+                      e
+                  ; checkValue (env, fn () => "JsMethodOp", F.Types.js_value) f
                   ; checkValue (env, fn () => "JsMethodOp", F.Types.string16)
                       name
                   ; List.app
@@ -218,8 +222,9 @@ struct
               | _ => raise TypeError "invalid JsMethodOp")
          | F.JsNewOp =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "JsNewOp", F.Types.js_value) f
+                ([], e :: f :: args) =>
+                  ( checkValue (env, fn () => "JsNewOp", F.Types.prim_effect) e
+                  ; checkValue (env, fn () => "JsNewOp", F.Types.js_value) f
                   ; List.app
                       (checkValue (env, fn () => "JsNewOp", F.Types.js_value))
                       args
@@ -228,8 +233,10 @@ struct
               | _ => raise TypeError "invalid JsNewOp")
          | F.LuaCallOp =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaCallOp", F.Types.lua_value) f
+                ([], e :: f :: args) =>
+                  ( checkValue (env, fn () => "LuaCallOp", F.Types.prim_effect)
+                      e
+                  ; checkValue (env, fn () => "LuaCallOp", F.Types.lua_value) f
                   ; List.app
                       (checkValue (env, fn () => "LuaCallOp", F.Types.lua_value))
                       args
@@ -238,8 +245,10 @@ struct
               | _ => raise TypeError "invalid LuaCallOp")
          | F.LuaCall1Op =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaCall1Op", F.Types.lua_value) f
+                ([], e :: f :: args) =>
+                  ( checkValue (env, fn () => "LuaCall1Op", F.Types.prim_effect)
+                      e
+                  ; checkValue (env, fn () => "LuaCall1Op", F.Types.lua_value) f
                   ; List.app
                       (checkValue
                          (env, fn () => "LuaCall1Op", F.Types.lua_value)) args
@@ -248,8 +257,10 @@ struct
               | _ => raise TypeError "invalid LuaCall1Op")
          | F.LuaCallNOp n =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaCallNOp", F.Types.lua_value) f
+                ([], e :: f :: args) =>
+                  ( checkValue (env, fn () => "LuaCallNOp", F.Types.prim_effect)
+                      e
+                  ; checkValue (env, fn () => "LuaCallNOp", F.Types.lua_value) f
                   ; List.app
                       (checkValue
                          (env, fn () => "LuaCallNOp", F.Types.lua_value)) args
@@ -258,8 +269,10 @@ struct
               | _ => raise TypeError "invalid LuaCallNOp")
          | F.LuaMethodOp _ =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaMethodOp", F.Types.lua_value)
+                ([], e :: f :: args) =>
+                  ( checkValue
+                      (env, fn () => "LuaMethodOp", F.Types.prim_effect) e
+                  ; checkValue (env, fn () => "LuaMethodOp", F.Types.lua_value)
                       f
                   ; List.app
                       (checkValue
@@ -269,8 +282,10 @@ struct
               | _ => raise TypeError "invalid LuaMethodOp")
          | F.LuaMethod1Op _ =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaMethod1Op", F.Types.lua_value)
+                ([], e :: f :: args) =>
+                  ( checkValue
+                      (env, fn () => "LuaMethod1Op", F.Types.prim_effect) e
+                  ; checkValue (env, fn () => "LuaMethod1Op", F.Types.lua_value)
                       f
                   ; List.app
                       (checkValue
@@ -280,8 +295,10 @@ struct
               | _ => raise TypeError "invalid LuaMethod1Op")
          | F.LuaMethodNOp (_, n) =>
              (case (tyargs, args) of
-                ([], f :: args) =>
-                  ( checkValue (env, fn () => "LuaMethodNOp", F.Types.lua_value)
+                ([], e :: f :: args) =>
+                  ( checkValue
+                      (env, fn () => "LuaMethodNOp", F.Types.prim_effect) e
+                  ; checkValue (env, fn () => "LuaMethodNOp", F.Types.lua_value)
                       f
                   ; List.app
                       (checkValue

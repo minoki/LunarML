@@ -2,8 +2,15 @@ structure Lua : sig
               type value
               exception Error of value
               exception TypeError of string
+              structure PrimEffect : sig
+                type prim_effect
+                val pure : prim_effect
+                val discardable : prim_effect
+                val impure : prim_effect
+              end
               val sub : value * value -> value  (* t[k] *)
               val field : value * string -> value  (* t[k] *)
+              val fieldWithEffect : value * string * PrimEffect.prim_effect -> value  (* t[k] *)
               val set : value * value * value -> unit  (* t[k] = v *)
               val setField : value * string * value -> unit  (* t[k] = v *)
               val global : string -> value  (* _ENV[name] *)
@@ -19,6 +26,16 @@ structure Lua : sig
               val call7 : value -> value vector -> value * value * value * value * value * value * value  (* f(args) *)
               val call8 : value -> value vector -> value * value * value * value * value * value * value * value  (* f(args) *)
               val call9 : value -> value vector -> value * value * value * value * value * value * value * value * value  (* f(args) *)
+              val callWithEffect : PrimEffect.prim_effect -> value -> value vector -> value vector  (* f(args) *)
+              val call1WithEffect : PrimEffect.prim_effect -> value -> value vector -> value  (* f(args) *)
+              val call2WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value  (* f(args) *)
+              val call3WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value  (* f(args) *)
+              val call4WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value  (* f(args) *)
+              val call5WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value * value  (* f(args) *)
+              val call6WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value * value * value  (* f(args) *)
+              val call7WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value * value * value * value  (* f(args) *)
+              val call8WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value * value * value * value * value  (* f(args) *)
+              val call9WithEffect : PrimEffect.prim_effect -> value -> value vector -> value * value * value * value * value * value * value * value * value  (* f(args) *)
               val method : value * string -> value vector -> value vector  (* f:name(args) *)
               val method0 : value * string -> value vector -> unit  (* f:name(args) *)
               val method1 : value * string -> value vector -> value  (* f:name(args) *)
@@ -30,6 +47,16 @@ structure Lua : sig
               val method7 : value * string -> value vector -> value * value * value * value * value * value * value  (* f:name(args) *)
               val method8 : value * string -> value vector -> value * value * value * value * value * value * value * value  (* f:name(args) *)
               val method9 : value * string -> value vector -> value * value * value * value * value * value * value * value * value  (* f:name(args) *)
+              val methodWithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value vector  (* f:name(args) *)
+              val method1WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value  (* f:name(args) *)
+              val method2WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value  (* f:name(args) *)
+              val method3WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value  (* f:name(args) *)
+              val method4WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value  (* f:name(args) *)
+              val method5WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value * value  (* f:name(args) *)
+              val method6WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value * value * value  (* f:name(args) *)
+              val method7WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value * value * value * value  (* f:name(args) *)
+              val method8WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value * value * value * value * value  (* f:name(args) *)
+              val method9WithEffect : PrimEffect.prim_effect -> value * string -> value vector -> value * value * value * value * value * value * value * value * value  (* f:name(args) *)
               val NIL : value  (* Lua nil *)
               val isNil : value -> bool  (* x == nil *)
               val isFalsy : value -> bool  (* not x *)
@@ -245,30 +272,56 @@ structure Lua : sig
           end = struct
 type value = _Prim.Lua.value
 exception Error = _Prim.Lua.Error
+structure PrimEffect = struct
+type prim_effect = _Prim.PrimEffect.prim_effect
+val pure = _Prim.PrimEffect.pure
+val discardable = _Prim.PrimEffect.discardable
+val impure = _Prim.PrimEffect.impure
+end
 fun global name = _primCall "Lua.global" (name)
 fun setGlobal (name, value) = _primCall "Lua.setGlobal" (name, value)
-fun call f args = _primCall "Lua.call" (f, args)
-fun call0 f args = (_primCall "Lua.call" (f, args); ())
-fun call1 f args = _primCall "Lua.call1" (f, args)
-fun call2 f args = _primCall "Lua.call2" (f, args)
-fun call3 f args = _primCall "Lua.call3" (f, args)
-fun call4 f args = _primCall "Lua.call4" (f, args)
-fun call5 f args = _primCall "Lua.call5" (f, args)
-fun call6 f args = _primCall "Lua.call6" (f, args)
-fun call7 f args = _primCall "Lua.call7" (f, args)
-fun call8 f args = _primCall "Lua.call8" (f, args)
-fun call9 f args = _primCall "Lua.call9" (f, args)
-fun method (obj, name) args = _primCall "Lua.method" (obj, name, args)
-fun method0 (obj, name) args = (_primCall "Lua.method" (obj, name, args); ())
-fun method1 (obj, name) args = _primCall "Lua.method1" (obj, name, args)
-fun method2 (obj, name) args = _primCall "Lua.method2" (obj, name, args)
-fun method3 (obj, name) args = _primCall "Lua.method3" (obj, name, args)
-fun method4 (obj, name) args = _primCall "Lua.method4" (obj, name, args)
-fun method5 (obj, name) args = _primCall "Lua.method5" (obj, name, args)
-fun method6 (obj, name) args = _primCall "Lua.method6" (obj, name, args)
-fun method7 (obj, name) args = _primCall "Lua.method7" (obj, name, args)
-fun method8 (obj, name) args = _primCall "Lua.method8" (obj, name, args)
-fun method9 (obj, name) args = _primCall "Lua.method9" (obj, name, args)
+fun call f args = _primCall "Lua.call" (f, args, _Prim.PrimEffect.impure)
+fun call0 f args = (_primCall "Lua.call" (f, args, _Prim.PrimEffect.impure); ())
+fun call1 f args = _primCall "Lua.call1" (f, args, _Prim.PrimEffect.impure)
+fun call2 f args = _primCall "Lua.call2" (f, args, _Prim.PrimEffect.impure)
+fun call3 f args = _primCall "Lua.call3" (f, args, _Prim.PrimEffect.impure)
+fun call4 f args = _primCall "Lua.call4" (f, args, _Prim.PrimEffect.impure)
+fun call5 f args = _primCall "Lua.call5" (f, args, _Prim.PrimEffect.impure)
+fun call6 f args = _primCall "Lua.call6" (f, args, _Prim.PrimEffect.impure)
+fun call7 f args = _primCall "Lua.call7" (f, args, _Prim.PrimEffect.impure)
+fun call8 f args = _primCall "Lua.call8" (f, args, _Prim.PrimEffect.impure)
+fun call9 f args = _primCall "Lua.call9" (f, args, _Prim.PrimEffect.impure)
+fun callWithEffect e f args = _primCall "Lua.call" (f, args, e)
+fun call1WithEffect e f args = _primCall "Lua.call1" (f, args, e)
+fun call2WithEffect e f args = _primCall "Lua.call2" (f, args, e)
+fun call3WithEffect e f args = _primCall "Lua.call3" (f, args, e)
+fun call4WithEffect e f args = _primCall "Lua.call4" (f, args, e)
+fun call5WithEffect e f args = _primCall "Lua.call5" (f, args, e)
+fun call6WithEffect e f args = _primCall "Lua.call6" (f, args, e)
+fun call7WithEffect e f args = _primCall "Lua.call7" (f, args, e)
+fun call8WithEffect e f args = _primCall "Lua.call8" (f, args, e)
+fun call9WithEffect e f args = _primCall "Lua.call9" (f, args, e)
+fun method (obj, name) args = _primCall "Lua.method" (obj, name, args, _Prim.PrimEffect.impure)
+fun method0 (obj, name) args = (_primCall "Lua.method" (obj, name, args, _Prim.PrimEffect.impure); ())
+fun method1 (obj, name) args = _primCall "Lua.method1" (obj, name, args, _Prim.PrimEffect.impure)
+fun method2 (obj, name) args = _primCall "Lua.method2" (obj, name, args, _Prim.PrimEffect.impure)
+fun method3 (obj, name) args = _primCall "Lua.method3" (obj, name, args, _Prim.PrimEffect.impure)
+fun method4 (obj, name) args = _primCall "Lua.method4" (obj, name, args, _Prim.PrimEffect.impure)
+fun method5 (obj, name) args = _primCall "Lua.method5" (obj, name, args, _Prim.PrimEffect.impure)
+fun method6 (obj, name) args = _primCall "Lua.method6" (obj, name, args, _Prim.PrimEffect.impure)
+fun method7 (obj, name) args = _primCall "Lua.method7" (obj, name, args, _Prim.PrimEffect.impure)
+fun method8 (obj, name) args = _primCall "Lua.method8" (obj, name, args, _Prim.PrimEffect.impure)
+fun method9 (obj, name) args = _primCall "Lua.method9" (obj, name, args, _Prim.PrimEffect.impure)
+fun methodWithEffect e (obj, name) args = _primCall "Lua.method" (obj, name, args, e)
+fun method1WithEffect e (obj, name) args = _primCall "Lua.method1" (obj, name, args, e)
+fun method2WithEffect e (obj, name) args = _primCall "Lua.method2" (obj, name, args, e)
+fun method3WithEffect e (obj, name) args = _primCall "Lua.method3" (obj, name, args, e)
+fun method4WithEffect e (obj, name) args = _primCall "Lua.method4" (obj, name, args, e)
+fun method5WithEffect e (obj, name) args = _primCall "Lua.method5" (obj, name, args, e)
+fun method6WithEffect e (obj, name) args = _primCall "Lua.method6" (obj, name, args, e)
+fun method7WithEffect e (obj, name) args = _primCall "Lua.method7" (obj, name, args, e)
+fun method8WithEffect e (obj, name) args = _primCall "Lua.method8" (obj, name, args, e)
+fun method9WithEffect e (obj, name) args = _primCall "Lua.method9" (obj, name, args, e)
 val NIL = _Prim.Lua.NIL
 fun newTable () = _primCall "Lua.newTable" ()
 val function = _Prim.Lua.function
@@ -279,200 +332,201 @@ val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
-fun sub (t, k) = _primCall "Lua.sub" (t, k)
+fun sub (t, k) = _primCall "Lua.sub" (t, k, _Prim.PrimEffect.impure)
 fun field (t : value, name : string) = sub (t, fromString name)
+fun fieldWithEffect (t : value, name : string, e) = _primCall "Lua.sub" (t, fromString name, e)
 fun set (t, k, v) = _primCall "Lua.set" (t, k, v)
 fun setField (t, name, v) = _primCall "Lua.set" (t, fromString name, v)
 fun isNil x = _primCall "Lua.isNil" (x)
 fun isFalsy x = _primCall "Lua.isFalsy" (x)
 fun isTruthy x = not (isFalsy x)
-fun x + y = _primCall "Lua.+" (x, y)
-fun x - y = _primCall "Lua.-" (x, y)
-fun x * y = _primCall "Lua.*" (x, y)
-fun x / y = _primCall "Lua./" (x, y)
-fun // (x, y) = _primCall "Lua.//" (x, y)
-fun % (x, y) = _primCall "Lua.%" (x, y)
-fun pow (x, y) = _primCall "Lua.pow" (x, y)
-fun negate x = _primCall "Lua.negate" (x)
-fun andb (x, y) = _primCall "Lua.andb" (x, y)
-fun orb (x, y) = _primCall "Lua.orb" (x, y)
-fun xorb (x, y) = _primCall "Lua.xorb" (x, y)
-fun notb x = _primCall "Lua.notb" (x)
-fun << (x, y) = _primCall "Lua.<<" (x, y)
-fun >> (x, y) = _primCall "Lua.>>" (x, y)
-fun == (x, y) = _primCall "Lua.==" (x, y)
-fun ~= (x, y) = _primCall "Lua.~=" (x, y)
-fun x < y = _primCall "Lua.<" (x, y)
-fun x > y = _primCall "Lua.>" (x, y)
-fun x <= y = _primCall "Lua.<=" (x, y)
-fun x >= y = _primCall "Lua.>=" (x, y)
-fun concat (x, y) = _primCall "Lua.concat" (x, y)
-fun length x = _primCall "Lua.length" (x)
+fun x + y = _primCall "Lua.+" (x, y, _Prim.PrimEffect.impure)
+fun x - y = _primCall "Lua.-" (x, y, _Prim.PrimEffect.impure)
+fun x * y = _primCall "Lua.*" (x, y, _Prim.PrimEffect.impure)
+fun x / y = _primCall "Lua./" (x, y, _Prim.PrimEffect.impure)
+fun // (x, y) = _primCall "Lua.//" (x, y, _Prim.PrimEffect.impure)
+fun % (x, y) = _primCall "Lua.%" (x, y, _Prim.PrimEffect.impure)
+fun pow (x, y) = _primCall "Lua.pow" (x, y, _Prim.PrimEffect.impure)
+fun negate x = _primCall "Lua.negate" (x, _Prim.PrimEffect.impure)
+fun andb (x, y) = _primCall "Lua.andb" (x, y, _Prim.PrimEffect.impure)
+fun orb (x, y) = _primCall "Lua.orb" (x, y, _Prim.PrimEffect.impure)
+fun xorb (x, y) = _primCall "Lua.xorb" (x, y, _Prim.PrimEffect.impure)
+fun notb x = _primCall "Lua.notb" (x, _Prim.PrimEffect.impure)
+fun << (x, y) = _primCall "Lua.<<" (x, y, _Prim.PrimEffect.impure)
+fun >> (x, y) = _primCall "Lua.>>" (x, y, _Prim.PrimEffect.impure)
+fun == (x, y) = _primCall "Lua.==" (x, y, _Prim.PrimEffect.impure)
+fun ~= (x, y) = _primCall "Lua.~=" (x, y, _Prim.PrimEffect.impure)
+fun x < y = _primCall "Lua.<" (x, y, _Prim.PrimEffect.impure)
+fun x > y = _primCall "Lua.>" (x, y, _Prim.PrimEffect.impure)
+fun x <= y = _primCall "Lua.<=" (x, y, _Prim.PrimEffect.impure)
+fun x >= y = _primCall "Lua.>=" (x, y, _Prim.PrimEffect.impure)
+fun concat (x, y) = _primCall "Lua.concat" (x, y, _Prim.PrimEffect.impure)
+fun length x = _primCall "Lua.length" (x, _Prim.PrimEffect.impure)
 structure Lib = struct
-val GLOBAL = LunarML.assumeDiscardable global "_G"
-val VERSION = LunarML.assumeDiscardable global "_VERSION"
+val GLOBAL = global "_G"
+val VERSION = global "_VERSION"
 val assert = _Prim.Lua.Lib.assert
-val collectgarbage = LunarML.assumeDiscardable global "collectgarbage"
-val coroutine = LunarML.assumeDiscardable global "coroutine"
-val debug = LunarML.assumeDiscardable global "debug"
-val dofile = LunarML.assumeDiscardable global "dofile"
+val collectgarbage = global "collectgarbage"
+val coroutine = global "coroutine"
+val debug = global "debug"
+val dofile = global "dofile"
 val error = _Prim.Lua.Lib.error
 val getmetatable = _Prim.Lua.Lib.getmetatable
-val io = LunarML.assumeDiscardable global "io"
-val ipairs = LunarML.assumeDiscardable global "ipairs"
-val load = LunarML.assumeDiscardable global "load"
-val loadfile = LunarML.assumeDiscardable global "loadfile"
+val io = global "io"
+val ipairs = global "ipairs"
+val load = global "load"
+val loadfile = global "loadfile"
 val math = _Prim.Lua.Lib.math
-val next = LunarML.assumeDiscardable global "next"
-val os = LunarML.assumeDiscardable global "os"
-val package = LunarML.assumeDiscardable global "package"
+val next = global "next"
+val os = global "os"
+val package = global "package"
 val pairs = _Prim.Lua.Lib.pairs
 val pcall = _Prim.Lua.Lib.pcall
-val print = LunarML.assumeDiscardable global "print"
-val rawequal = LunarML.assumeDiscardable global "rawequal"
-val rawget = LunarML.assumeDiscardable global "rawget"
-val rawlen = LunarML.assumeDiscardable global "rawlen"
-val rawset = LunarML.assumeDiscardable global "rawset"
-val require = LunarML.assumeDiscardable global "require"
-val select = LunarML.assumeDiscardable global "select"
+val print = global "print"
+val rawequal = global "rawequal"
+val rawget = global "rawget"
+val rawlen = global "rawlen"
+val rawset = global "rawset"
+val require = global "require"
+val select = global "select"
 val setmetatable = _Prim.Lua.Lib.setmetatable
 val string = _Prim.Lua.Lib.string
 val table = _Prim.Lua.Lib.table
-val tonumber = LunarML.assumeDiscardable global "tonumber"
-val tostring = LunarML.assumeDiscardable global "tostring"
-val type' = LunarML.assumeDiscardable global "type"
-val utf8 = LunarML.assumeDiscardable global "utf8"
-val xpcall = LunarML.assumeDiscardable global "xpcall"
+val tonumber = global "tonumber"
+val tostring = global "tostring"
+val type' = global "type"
+val utf8 = global "utf8"
+val xpcall = global "xpcall"
 structure coroutine = struct
-val create = LunarML.assumeDiscardable field (coroutine, "create")
-val isyieldable = LunarML.assumeDiscardable field (coroutine, "isyieldable")
-val resume = LunarML.assumeDiscardable field (coroutine, "resume")
-val running = LunarML.assumeDiscardable field (coroutine, "running")
-val status = LunarML.assumeDiscardable field (coroutine, "status")
-val wrap = LunarML.assumeDiscardable field (coroutine, "wrap")
-val yield = LunarML.assumeDiscardable field (coroutine, "yield")
+val create = fieldWithEffect (coroutine, "create", _Prim.PrimEffect.discardable)
+val isyieldable = fieldWithEffect (coroutine, "isyieldable", _Prim.PrimEffect.discardable)
+val resume = fieldWithEffect (coroutine, "resume", _Prim.PrimEffect.discardable)
+val running = fieldWithEffect (coroutine, "running", _Prim.PrimEffect.discardable)
+val status = fieldWithEffect (coroutine, "status", _Prim.PrimEffect.discardable)
+val wrap = fieldWithEffect (coroutine, "wrap", _Prim.PrimEffect.discardable)
+val yield = fieldWithEffect (coroutine, "yield", _Prim.PrimEffect.discardable)
 end
 structure debug = struct
-val gethook = LunarML.assumeDiscardable field (debug, "gethook")
-val getinfo = LunarML.assumeDiscardable field (debug, "getinfo")
-val getlocal = LunarML.assumeDiscardable field (debug, "getlocal")
-val getmetatable = LunarML.assumeDiscardable field (debug, "getmetatable")
-val getregistry = LunarML.assumeDiscardable field (debug, "getregistry")
-val getupvalue = LunarML.assumeDiscardable field (debug, "getupvalue")
-val getuservalue = LunarML.assumeDiscardable field (debug, "getuservalue")
-val sethook = LunarML.assumeDiscardable field (debug, "sethook")
-val setlocal = LunarML.assumeDiscardable field (debug, "setlocal")
-val setmetatable = LunarML.assumeDiscardable field (debug, "setmetatable")
-val setupvalue = LunarML.assumeDiscardable field (debug, "setupvalue")
-val setuservalue = LunarML.assumeDiscardable field (debug, "setuservalue")
-val traceback = LunarML.assumeDiscardable field (debug, "traceback")
-val upvalueid = LunarML.assumeDiscardable field (debug, "upvalueid")
-val upvaluejoin = LunarML.assumeDiscardable field (debug, "upvaluejoin")
-val debug = LunarML.assumeDiscardable field (debug, "debug")
+val gethook = fieldWithEffect (debug, "gethook", _Prim.PrimEffect.discardable)
+val getinfo = fieldWithEffect (debug, "getinfo", _Prim.PrimEffect.discardable)
+val getlocal = fieldWithEffect (debug, "getlocal", _Prim.PrimEffect.discardable)
+val getmetatable = fieldWithEffect (debug, "getmetatable", _Prim.PrimEffect.discardable)
+val getregistry = fieldWithEffect (debug, "getregistry", _Prim.PrimEffect.discardable)
+val getupvalue = fieldWithEffect (debug, "getupvalue", _Prim.PrimEffect.discardable)
+val getuservalue = fieldWithEffect (debug, "getuservalue", _Prim.PrimEffect.discardable)
+val sethook = fieldWithEffect (debug, "sethook", _Prim.PrimEffect.discardable)
+val setlocal = fieldWithEffect (debug, "setlocal", _Prim.PrimEffect.discardable)
+val setmetatable = fieldWithEffect (debug, "setmetatable", _Prim.PrimEffect.discardable)
+val setupvalue = fieldWithEffect (debug, "setupvalue", _Prim.PrimEffect.discardable)
+val setuservalue = fieldWithEffect (debug, "setuservalue", _Prim.PrimEffect.discardable)
+val traceback = fieldWithEffect (debug, "traceback", _Prim.PrimEffect.discardable)
+val upvalueid = fieldWithEffect (debug, "upvalueid", _Prim.PrimEffect.discardable)
+val upvaluejoin = fieldWithEffect (debug, "upvaluejoin", _Prim.PrimEffect.discardable)
+val debug = fieldWithEffect (debug, "debug", _Prim.PrimEffect.discardable)
 end
 structure io = struct
-val close = LunarML.assumeDiscardable field (io, "close")
-val flush = LunarML.assumeDiscardable field (io, "flush")
-val input = LunarML.assumeDiscardable field (io, "input")
-val lines = LunarML.assumeDiscardable field (io, "lines")
-val open' = LunarML.assumeDiscardable field (io, "open")
-val output = LunarML.assumeDiscardable field (io, "output")
-val popen = LunarML.assumeDiscardable field (io, "popen")
-val read = LunarML.assumeDiscardable field (io, "read")
-val stderr = LunarML.assumeDiscardable field (io, "stderr")
-val stdin = LunarML.assumeDiscardable field (io, "stdin")
-val stdout = LunarML.assumeDiscardable field (io, "stdout")
-val tmpfile = LunarML.assumeDiscardable field (io, "tmpfile")
-val type' = LunarML.assumeDiscardable field (io, "type")
-val write = LunarML.assumeDiscardable field (io, "write")
+val close = fieldWithEffect (io, "close", _Prim.PrimEffect.discardable)
+val flush = fieldWithEffect (io, "flush", _Prim.PrimEffect.discardable)
+val input = fieldWithEffect (io, "input", _Prim.PrimEffect.discardable)
+val lines = fieldWithEffect (io, "lines", _Prim.PrimEffect.discardable)
+val open' = fieldWithEffect (io, "open", _Prim.PrimEffect.discardable)
+val output = fieldWithEffect (io, "output", _Prim.PrimEffect.discardable)
+val popen = fieldWithEffect (io, "popen", _Prim.PrimEffect.discardable)
+val read = fieldWithEffect (io, "read", _Prim.PrimEffect.discardable)
+val stderr = fieldWithEffect (io, "stderr", _Prim.PrimEffect.discardable)
+val stdin = fieldWithEffect (io, "stdin", _Prim.PrimEffect.discardable)
+val stdout = fieldWithEffect (io, "stdout", _Prim.PrimEffect.discardable)
+val tmpfile = fieldWithEffect (io, "tmpfile", _Prim.PrimEffect.discardable)
+val type' = fieldWithEffect (io, "type", _Prim.PrimEffect.discardable)
+val write = fieldWithEffect (io, "write", _Prim.PrimEffect.discardable)
 end
 structure math = struct
 val abs = _Prim.Lua.Lib.math.abs
-val acos = LunarML.assumeDiscardable field (math, "acos")
-val asin = LunarML.assumeDiscardable field (math, "asin")
-val atan = LunarML.assumeDiscardable field (math, "atan")
-val ceil = LunarML.assumeDiscardable field (math, "ceil")
-val cos = LunarML.assumeDiscardable field (math, "cos")
-val deg = LunarML.assumeDiscardable field (math, "deg")
-val exp = LunarML.assumeDiscardable field (math, "exp")
-val floor = LunarML.assumeDiscardable field (math, "floor")
-val fmod = LunarML.assumeDiscardable field (math, "fmod")
-val huge = LunarML.assumeDiscardable field (math, "huge")
-val log = LunarML.assumeDiscardable field (math, "log")
-val max = LunarML.assumeDiscardable field (math, "max")
+val acos = fieldWithEffect (math, "acos", _Prim.PrimEffect.discardable)
+val asin = fieldWithEffect (math, "asin", _Prim.PrimEffect.discardable)
+val atan = fieldWithEffect (math, "atan", _Prim.PrimEffect.discardable)
+val ceil = fieldWithEffect (math, "ceil", _Prim.PrimEffect.discardable)
+val cos = fieldWithEffect (math, "cos", _Prim.PrimEffect.discardable)
+val deg = fieldWithEffect (math, "deg", _Prim.PrimEffect.discardable)
+val exp = fieldWithEffect (math, "exp", _Prim.PrimEffect.discardable)
+val floor = fieldWithEffect (math, "floor", _Prim.PrimEffect.discardable)
+val fmod = fieldWithEffect (math, "fmod", _Prim.PrimEffect.discardable)
+val huge = fieldWithEffect (math, "huge", _Prim.PrimEffect.discardable)
+val log = fieldWithEffect (math, "log", _Prim.PrimEffect.discardable)
+val max = fieldWithEffect (math, "max", _Prim.PrimEffect.discardable)
 val maxinteger = _Prim.Lua.Lib.math.maxinteger
-val min = LunarML.assumeDiscardable field (math, "min")
+val min = fieldWithEffect (math, "min", _Prim.PrimEffect.discardable)
 val mininteger = _Prim.Lua.Lib.math.mininteger
-val modf = LunarML.assumeDiscardable field (math, "modf")
-val pi = LunarML.assumeDiscardable field (math, "pi")
-val rad = LunarML.assumeDiscardable field (math, "rad")
-val random = LunarML.assumeDiscardable field (math, "random")
-val randomseed = LunarML.assumeDiscardable field (math, "randomseed")
-val sin = LunarML.assumeDiscardable field (math, "sin")
-val sqrt = LunarML.assumeDiscardable field (math, "sqrt")
-val tan = LunarML.assumeDiscardable field (math, "tan")
-val tointeger = LunarML.assumeDiscardable field (math, "tointeger")
+val modf = fieldWithEffect (math, "modf", _Prim.PrimEffect.discardable)
+val pi = fieldWithEffect (math, "pi", _Prim.PrimEffect.discardable)
+val rad = fieldWithEffect (math, "rad", _Prim.PrimEffect.discardable)
+val random = fieldWithEffect (math, "random", _Prim.PrimEffect.discardable)
+val randomseed = fieldWithEffect (math, "randomseed", _Prim.PrimEffect.discardable)
+val sin = fieldWithEffect (math, "sin", _Prim.PrimEffect.discardable)
+val sqrt = fieldWithEffect (math, "sqrt", _Prim.PrimEffect.discardable)
+val tan = fieldWithEffect (math, "tan", _Prim.PrimEffect.discardable)
+val tointeger = fieldWithEffect (math, "tointeger", _Prim.PrimEffect.discardable)
 val type' = _Prim.Lua.Lib.math.type'
 val ult = _Prim.Lua.Lib.math.ult
 end
 structure os = struct
-val clock = LunarML.assumeDiscardable field (os, "clock")
-val date = LunarML.assumeDiscardable field (os, "date")
-val difftime = LunarML.assumeDiscardable field (os, "difftime")
-val execute = LunarML.assumeDiscardable field (os, "execute")
-val exit = LunarML.assumeDiscardable field (os, "exit")
-val getenv = LunarML.assumeDiscardable field (os, "getenv")
-val remove = LunarML.assumeDiscardable field (os, "remove")
-val rename = LunarML.assumeDiscardable field (os, "rename")
-val setlocale = LunarML.assumeDiscardable field (os, "setlocale")
-val time = LunarML.assumeDiscardable field (os, "time")
-val tmpname = LunarML.assumeDiscardable field (os, "tmpname")
+val clock = fieldWithEffect (os, "clock", _Prim.PrimEffect.discardable)
+val date = fieldWithEffect (os, "date", _Prim.PrimEffect.discardable)
+val difftime = fieldWithEffect (os, "difftime", _Prim.PrimEffect.discardable)
+val execute = fieldWithEffect (os, "execute", _Prim.PrimEffect.discardable)
+val exit = fieldWithEffect (os, "exit", _Prim.PrimEffect.discardable)
+val getenv = fieldWithEffect (os, "getenv", _Prim.PrimEffect.discardable)
+val remove = fieldWithEffect (os, "remove", _Prim.PrimEffect.discardable)
+val rename = fieldWithEffect (os, "rename", _Prim.PrimEffect.discardable)
+val setlocale = fieldWithEffect (os, "setlocale", _Prim.PrimEffect.discardable)
+val time = fieldWithEffect (os, "time", _Prim.PrimEffect.discardable)
+val tmpname = fieldWithEffect (os, "tmpname", _Prim.PrimEffect.discardable)
 end
 structure package = struct
-val config = LunarML.assumeDiscardable field (package, "config")
-val cpath = LunarML.assumeDiscardable field (package, "cpath")
-val loaded = LunarML.assumeDiscardable field (package, "loaded")
-val loadlib = LunarML.assumeDiscardable field (package, "loadlib")
-val path = LunarML.assumeDiscardable field (package, "path")
-val preload = LunarML.assumeDiscardable field (package, "preload")
-val searchers = LunarML.assumeDiscardable field (package, "searchers")
-val searchpath = LunarML.assumeDiscardable field (package, "searchpath")
+val config = fieldWithEffect (package, "config", _Prim.PrimEffect.discardable)
+val cpath = fieldWithEffect (package, "cpath", _Prim.PrimEffect.discardable)
+val loaded = fieldWithEffect (package, "loaded", _Prim.PrimEffect.discardable)
+val loadlib = fieldWithEffect (package, "loadlib", _Prim.PrimEffect.discardable)
+val path = fieldWithEffect (package, "path", _Prim.PrimEffect.discardable)
+val preload = fieldWithEffect (package, "preload", _Prim.PrimEffect.discardable)
+val searchers = fieldWithEffect (package, "searchers", _Prim.PrimEffect.discardable)
+val searchpath = fieldWithEffect (package, "searchpath", _Prim.PrimEffect.discardable)
 end
 structure string = struct
-val byte = LunarML.assumeDiscardable field (string, "byte")
+val byte = fieldWithEffect (string, "byte", _Prim.PrimEffect.discardable)
 val char = _Prim.Lua.Lib.string.char
-val dump = LunarML.assumeDiscardable field (string, "dump")
-val find = LunarML.assumeDiscardable field (string, "find")
+val dump = fieldWithEffect (string, "dump", _Prim.PrimEffect.discardable)
+val find = fieldWithEffect (string, "find", _Prim.PrimEffect.discardable)
 val format = _Prim.Lua.Lib.string.format
-val gmatch = LunarML.assumeDiscardable field (string, "gmatch")
-val gsub = LunarML.assumeDiscardable field (string, "gsub")
-val len = LunarML.assumeDiscardable field (string, "len")
-val lower = LunarML.assumeDiscardable field (string, "lower")
-val match = LunarML.assumeDiscardable field (string, "match")
-val pack = LunarML.assumeDiscardable field (string, "pack")
-val packsize = LunarML.assumeDiscardable field (string, "packsize")
-val rep = LunarML.assumeDiscardable field (string, "rep")
-val reverse = LunarML.assumeDiscardable field (string, "reverse")
-val sub = LunarML.assumeDiscardable field (string, "sub")
-val unpack = LunarML.assumeDiscardable field (string, "unpack")
-val upper = LunarML.assumeDiscardable field (string, "upper")
+val gmatch = fieldWithEffect (string, "gmatch", _Prim.PrimEffect.discardable)
+val gsub = fieldWithEffect (string, "gsub", _Prim.PrimEffect.discardable)
+val len = fieldWithEffect (string, "len", _Prim.PrimEffect.discardable)
+val lower = fieldWithEffect (string, "lower", _Prim.PrimEffect.discardable)
+val match = fieldWithEffect (string, "match", _Prim.PrimEffect.discardable)
+val pack = fieldWithEffect (string, "pack", _Prim.PrimEffect.discardable)
+val packsize = fieldWithEffect (string, "packsize", _Prim.PrimEffect.discardable)
+val rep = fieldWithEffect (string, "rep", _Prim.PrimEffect.discardable)
+val reverse = fieldWithEffect (string, "reverse", _Prim.PrimEffect.discardable)
+val sub = fieldWithEffect (string, "sub", _Prim.PrimEffect.discardable)
+val unpack = fieldWithEffect (string, "unpack", _Prim.PrimEffect.discardable)
+val upper = fieldWithEffect (string, "upper", _Prim.PrimEffect.discardable)
 end
 structure table = struct
 val concat = _Prim.Lua.Lib.table.concat
-val insert = LunarML.assumeDiscardable field (table, "insert")
-val move = LunarML.assumeDiscardable field (table, "move")
+val insert = fieldWithEffect (table, "insert", _Prim.PrimEffect.discardable)
+val move = fieldWithEffect (table, "move", _Prim.PrimEffect.discardable)
 val pack = _Prim.Lua.Lib.table.pack
-val remove = LunarML.assumeDiscardable field (table, "remove")
-val sort = LunarML.assumeDiscardable field (table, "sort")
+val remove = fieldWithEffect (table, "remove", _Prim.PrimEffect.discardable)
+val sort = fieldWithEffect (table, "sort", _Prim.PrimEffect.discardable)
 val unpack = _Prim.Lua.Lib.table.unpack
 end
 structure utf8 = struct
-val char = LunarML.assumeDiscardable field (utf8, "char")
-val charpattern = LunarML.assumeDiscardable field (utf8, "charpattern")
-val codepoint = LunarML.assumeDiscardable field (utf8, "codepoint")
-val codes = LunarML.assumeDiscardable field (utf8, "codes")
-val len = LunarML.assumeDiscardable field (utf8, "len")
-val offset = LunarML.assumeDiscardable field (utf8, "offset")
+val char = fieldWithEffect (utf8, "char", _Prim.PrimEffect.discardable)
+val charpattern = fieldWithEffect (utf8, "charpattern", _Prim.PrimEffect.discardable)
+val codepoint = fieldWithEffect (utf8, "codepoint", _Prim.PrimEffect.discardable)
+val codes = fieldWithEffect (utf8, "codes", _Prim.PrimEffect.discardable)
+val len = fieldWithEffect (utf8, "len", _Prim.PrimEffect.discardable)
+val offset = fieldWithEffect (utf8, "offset", _Prim.PrimEffect.discardable)
 end
 val lfs = LunarML.assumeDiscardable
               (fn () => let val (ok, module) = call2 pcall #[require, fromString "lfs"]

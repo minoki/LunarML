@@ -9,8 +9,8 @@ structure IODesc :> sig
 type iodesc = int
 val hash = Word.fromInt
 val compare = Int.compare
-val objToDescMap = LunarML.assumeDiscardable (fn () => JavaScript.new JavaScript.Lib.WeakMap #[]) () (* key: object, value: int *)
-val descToObjMap = LunarML.assumeDiscardable (fn () => JavaScript.new JavaScript.Lib.Map #[]) () (* key: int, value: object *)
+val objToDescMap = JavaScript.newWithEffect JavaScript.PrimEffect.discardable JavaScript.Lib.WeakMap #[] (* key: object, value: int *)
+val descToObjMap = JavaScript.newWithEffect JavaScript.PrimEffect.discardable JavaScript.Lib.Map #[] (* key: int, value: object *)
 val freeList : (int * int list) ref = ref (0, [])
 fun newDesc () : int = case !freeList of
                            (n, []) => ( freeList := (n + 1, [])

@@ -29,6 +29,7 @@ do
   local intInf = {"intInf"}
   local exn = {"exn"}
   local exntag = {"exntag"}
+  local prim_effect = {"prim_effect"}
   local LuaValue = {"LuaValue"}
   local JSValue = {"JavaScriptValue"}
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
@@ -56,11 +57,20 @@ do
   local function HomoUnary(a)
     return { vars = {}, args = {a}, results = {a} }
   end
+  local function HomoUnaryE(a)
+    return { vars = {}, args = {a, prim_effect}, results = {a} }
+  end
   local function HomoBinary(a)
     return { vars = {}, args = {a, a}, results = {a} }
   end
+  local function HomoBinaryE(a)
+    return { vars = {}, args = {a, a, prim_effect}, results = {a} }
+  end
   local function Compare(a)
     return { vars = {}, args = {a, a}, results = {bool} }
+  end
+  local function CompareE(a)
+    return { vars = {}, args = {a, a, prim_effect}, results = {bool} }
   end
 
   PRIMITIVES = {
@@ -941,7 +951,7 @@ do
     {
       name = "Lua.sub",
       srcname = "Lua_sub",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
@@ -962,154 +972,154 @@ do
     {
       name = "Lua.==",
       srcname = "Lua_EQUAL",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.~=",
       srcname = "Lua_NOTEQUAL",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.<",
       srcname = "Lua_LT",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.<=",
       srcname = "Lua_LE",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.>",
       srcname = "Lua_GT",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.>=",
       srcname = "Lua_GE",
-      type = Compare(LuaValue),
+      type = CompareE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.+",
       srcname = "Lua_PLUS",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.-",
       srcname = "Lua_MINUS",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.*",
       srcname = "Lua_TIMES",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua./",
       srcname = "Lua_DIVIDE",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.//",
       srcname = "Lua_INTDIV",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.%",
       srcname = "Lua_MOD",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.pow",
       srcname = "Lua_pow",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.negate",
       srcname = "Lua_negate",
-      type = HomoUnary(LuaValue),
+      type = HomoUnaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.andb",
       srcname = "Lua_andb",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.orb",
       srcname = "Lua_orb",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.xorb",
       srcname = "Lua_xorb",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.notb",
       srcname = "Lua_notb",
-      type = HomoUnary(LuaValue),
+      type = HomoUnaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.<<",
       srcname = "Lua_LSHIFT",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.>>",
       srcname = "Lua_RSHIFT",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.concat",
       srcname = "Lua_concat",
-      type = HomoBinary(LuaValue),
+      type = HomoBinaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.length",
       srcname = "Lua_length",
-      type = HomoUnary(LuaValue),
+      type = HomoUnaryE(LuaValue),
       mayraise = true,
       discardable = false,
     },
@@ -1123,140 +1133,140 @@ do
     {
       name = "Lua.call",
       srcname = "Lua_call",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {vector(LuaValue)} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {vector(LuaValue)} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call1",
       srcname = "Lua_call1",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call2",
       srcname = "Lua_call2",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call3",
       srcname = "Lua_call3",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call4",
       srcname = "Lua_call4",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call5",
       srcname = "Lua_call5",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call6",
       srcname = "Lua_call6",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call7",
       srcname = "Lua_call7",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call8",
       srcname = "Lua_call8",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call9",
       srcname = "Lua_call9",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method",
       srcname = "Lua_method",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {vector(LuaValue)} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {vector(LuaValue)} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method1",
       srcname = "Lua_method1",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method2",
       srcname = "Lua_method2",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method3",
       srcname = "Lua_method3",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method4",
       srcname = "Lua_method4",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method5",
       srcname = "Lua_method5",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method6",
       srcname = "Lua_method6",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue,} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue,} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method7",
       srcname = "Lua_method7",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method8",
       srcname = "Lua_method8",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method9",
       srcname = "Lua_method9",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue), prim_effect}, results = {LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
@@ -1288,7 +1298,7 @@ do
     {
       name = "JavaScript.sub",
       srcname = "JavaScript_sub",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
@@ -1316,126 +1326,126 @@ do
     {
       name = "JavaScript.<",
       srcname = "JavaScript_LT",
-      type = Compare(JSValue),
+      type = CompareE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.<=",
       srcname = "JavaScript_LE",
-      type = Compare(JSValue),
+      type = CompareE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.>",
       srcname = "JavaScript_GT",
-      type = Compare(JSValue),
+      type = CompareE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.>=",
       srcname = "JavaScript_GE",
-      type = Compare(JSValue),
+      type = CompareE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.+",
       srcname = "JavaScript_PLUS",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.-",
       srcname = "JavaScript_MINUS",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.*",
       srcname = "JavaScript_TIMES",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript./",
       srcname = "JavaScript_DIVIDE",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.%",
       srcname = "JavaScript_MOD",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.negate",
       srcname = "JavaScript_negate",
-      type = HomoUnary(JSValue),
+      type = HomoUnaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.andb",
       srcname = "JavaScript_andb",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.orb",
       srcname = "JavaScript_orb",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.xorb",
       srcname = "JavaScript_xorb",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.notb",
       srcname = "JavaScript_notb",
-      type = HomoUnary(JSValue),
+      type = HomoUnaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.<<",
       srcname = "JavaScript_LSHIFT",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.>>",
       srcname = "JavaScript_RSHIFT",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.>>>",
       srcname = "JavaScript_URSHIFT",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.**",
       srcname = "JavaScript_EXP",
-      type = HomoBinary(JSValue),
+      type = HomoBinaryE(JSValue),
       mayraise = true,
       discardable = false,
     },
@@ -1465,7 +1475,7 @@ do
       srcname = "JavaScript_global",
       type = { vars = {}, args = {string16}, results = {JSValue} },
       mayraise = true,
-      discardable = false,
+      discardable = true,
     },
     {
       name = "JavaScript.setGlobal",
@@ -1477,21 +1487,21 @@ do
     {
       name = "JavaScript.call",
       srcname = "JavaScript_call",
-      type = { vars = {}, args = {JSValue, vector(JSValue)}, results = {JSValue} },
+      type = { vars = {}, args = {JSValue, vector(JSValue), prim_effect}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.method",
       srcname = "JavaScript_method",
-      type = { vars = {}, args = {JSValue, string16, vector(JSValue)}, results = {JSValue} },
+      type = { vars = {}, args = {JSValue, string16, vector(JSValue), prim_effect}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.new",
       srcname = "JavaScript_new",
-      type = { vars = {}, args = {JSValue, vector(JSValue)}, results = {JSValue} },
+      type = { vars = {}, args = {JSValue, vector(JSValue), prim_effect}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
@@ -1517,6 +1527,26 @@ do
       discardable = true,
     },
   }
+  --[[
+  local PRIMITIVES_cooked = {}
+  for i, v in ipairs(PRIMITIVES) do
+    table.insert(PRIMITIVES_cooked, v)
+    if v.type.args[#v.type.args] == prim_effect then
+      local args = {}
+      for i = 1, #v.type.args - 1 do
+        args[i] = v.type.args[i]
+      end
+      table.insert(PRIMITIVES_cooked, {
+        name = v.name .. "{.e}",
+        srcname = v.srcname .. "_E",
+        type = { vars = v.type.vars, args = args, results = v.type.results },
+        mayraise = v.mayraise,
+        discardable = v.discardable,
+      })
+    end
+  end
+  PRIMITIVES = PRIMITIVES_cooked
+  ]]
 end
 
 local f = io.open(arg[1] or "primitives.sml", "w")
@@ -1527,6 +1557,7 @@ f:write[[
 structure Primitives = struct
 datatype int_width = INT | I32 | I54 | I64 | INT_INF
 datatype word_width = WORD | W32 | W64
+datatype prim_effect = PURE | DISCARDABLE | IMPURE
 ]]
 
 for i, p in ipairs(PRIMITIVES) do
@@ -1701,6 +1732,37 @@ for i, p in ipairs(PRIMITIVES) do
 end
 
 f:write [[
+fun isDiscardablePE PURE = true
+  | isDiscardablePE DISCARDABLE = true
+  | isDiscardablePE IMPURE = false
+fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
+  | isDiscardableWithArgs (Int_MINUS INT_INF, _) = true
+  | isDiscardableWithArgs (Int_TIMES INT_INF, _) = true
+  | isDiscardableWithArgs (Int_TILDE INT_INF, _) = true
+  | isDiscardableWithArgs (Int_abs INT_INF, _) = true
+]]
+for i, p in ipairs(PRIMITIVES) do
+  local head = "  | isDiscardableWithArgs "
+  local patterns = {}
+  local rhs = tostring(p.discardable)
+  for _, t in ipairs(p.type.args) do
+    if t[1] == "prim_effect" then
+      table.insert(patterns, "e")
+      rhs = "isDiscardablePE e"
+    else
+      table.insert(patterns, "_")
+    end
+  end
+  local pattern_text = table.concat(patterns, ", ")
+  if p.name:find("{%.?%a}") then
+    f:write(string.format("%s(%s _, [%s]) = %s\n", head, p.srcname, pattern_text, rhs))
+  else
+    f:write(string.format("%s(%s, [%s]) = %s\n", head, p.srcname, pattern_text, rhs))
+  end
+end
+f:write("  | isDiscardableWithArgs _ = false (* should not occur *)\n")
+
+f:write [[
 fun fixIntWord { int, word }
   = let fun fixInt INT = int
           | fixInt i = i
@@ -1794,6 +1856,7 @@ functor TypeOfPrimitives (type ty
                           val exntag : ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
+                          val prim_effect : ty
                           val refOf : ty -> ty
                           val listOf : ty -> ty
                           val vectorOf : ty -> ty
@@ -1863,6 +1926,7 @@ for i, p in ipairs(PRIMITIVES) do
           else
             actualWordB = u[3]
           end
+        elseif u[1] == "prim_effect" then
         else
           error("invalid")
         end
@@ -1897,7 +1961,11 @@ for i, p in ipairs(PRIMITIVES) do
       end
       local a = {}
       for k, t in ipairs(pr) do
-        a[k] = "Primitives." .. t[2]
+        if t[2] == "_" then
+          a[k] = "_"
+        else
+          a[k] = "Primitives." .. t[2]
+        end
       end
       local aa = table.concat(a, ", ")
       if #a > 1 then

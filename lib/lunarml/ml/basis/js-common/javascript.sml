@@ -1,17 +1,27 @@
 structure JavaScript :> sig
               type value = _Prim.JavaScript.value
               exception Error of value
+              structure PrimEffect : sig
+                type prim_effect
+                val pure : prim_effect
+                val discardable : prim_effect
+                val impure : prim_effect
+              end
               val undefined : value
               val null : value
               val sub : value * value -> value
               val field : value * String16.string -> value
+              val fieldWithEffect : value * String16.string * PrimEffect.prim_effect -> value
               val set : value * value * value -> unit
               val setField : value * String16.string * value -> unit
               val global : String16.string -> value
               val setGlobal : String16.string * value -> unit
               val call : value -> value vector -> value
+              val callWithEffect : PrimEffect.prim_effect -> value -> value vector -> value
               val new : value -> value vector -> value
+              val newWithEffect : PrimEffect.prim_effect -> value -> value vector -> value
               val method : value * String16.string -> value vector -> value
+              val methodWithEffect : PrimEffect.prim_effect -> value * String16.string -> value vector -> value
               val function : (value vector -> value) -> value
               val fromBool : bool -> value
               val fromInt : int -> value
@@ -141,11 +151,20 @@ structure JavaScript :> sig
 open JavaScript (* function, encodeUtf8, decodeUtf8 *)
 type value = _Prim.JavaScript.value
 exception Error = _Prim.JavaScript.Error
+structure PrimEffect = struct
+type prim_effect = _Prim.PrimEffect.prim_effect
+val pure = _Prim.PrimEffect.pure
+val discardable = _Prim.PrimEffect.discardable
+val impure = _Prim.PrimEffect.impure
+end
 val undefined = _Prim.JavaScript.undefined
 val null = _Prim.JavaScript.null
-fun call f args = _primCall "JavaScript.call" (f, args)
-fun new ctor args = _primCall "JavaScript.new" (ctor, args)
-fun method (obj, name) args = _primCall "JavaScript.method" (obj, name, args)
+fun call f args = _primCall "JavaScript.call" (f, args, _Prim.PrimEffect.impure)
+fun callWithEffect e f args = _primCall "JavaScript.call" (f, args, e)
+fun new ctor args = _primCall "JavaScript.new" (ctor, args, _Prim.PrimEffect.impure)
+fun newWithEffect e ctor args = _primCall "JavaScript.new" (ctor, args, e)
+fun method (obj, name) args = _primCall "JavaScript.method" (obj, name, args, _Prim.PrimEffect.impure)
+fun methodWithEffect e (obj, name) args = _primCall "JavaScript.method" (obj, name, args, e)
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
@@ -154,8 +173,9 @@ val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString16 : String16.string -> value = unsafeToValue
 val fromWideString = fromString16
-fun sub (obj, key) = _primCall "JavaScript.sub" (obj, key)
-fun field (obj, key : String16.string) = _primCall "JavaScript.sub" (obj, fromString16 key)
+fun sub (obj, key) = _primCall "JavaScript.sub" (obj, key, _Prim.PrimEffect.impure)
+fun field (obj, key : String16.string) = _primCall "JavaScript.sub" (obj, fromString16 key, _Prim.PrimEffect.impure)
+fun fieldWithEffect (obj, key : String16.string, e) = _primCall "JavaScript.sub" (obj, fromString16 key, e)
 fun set (obj, key, value) = _primCall "JavaScript.set" (obj, key, value)
 fun setField (obj, key, value) = _primCall "JavaScript.set" (obj, fromString16 key, value)
 fun global name = _primCall "JavaScript.global" (name)
@@ -163,115 +183,115 @@ fun setGlobal (name, value) = _primCall "JavaScript.setGlobal" (name, value)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)
 fun isTruthy x = not (isFalsy x)
 fun isNullOrUndefined x = _primCall "JavaScript.isNullOrUndefined" (x)
-fun x + y = _primCall "JavaScript.+" (x, y)
-fun x - y = _primCall "JavaScript.-" (x, y)
-fun x * y = _primCall "JavaScript.*" (x, y)
-fun x / y = _primCall "JavaScript./" (x, y)
-fun % (x, y) = _primCall "JavaScript.%" (x, y)
-fun negate x = _primCall "JavaScript.negate" (x)
-fun andb (x, y) = _primCall "JavaScript.andb" (x, y)
-fun orb (x, y) = _primCall "JavaScript.orb" (x, y)
-fun xorb (x, y) = _primCall "JavaScript.xorb" (x, y)
-fun notb x = _primCall "JavaScript.notb" (x)
-fun << (x, y) = _primCall "JavaScript.<<" (x, y)
-fun >> (x, y) = _primCall "JavaScript.>>" (x, y)
-fun >>> (x, y) = _primCall "JavaScript.>>>" (x, y)
+fun x + y = _primCall "JavaScript.+" (x, y, _Prim.PrimEffect.impure)
+fun x - y = _primCall "JavaScript.-" (x, y, _Prim.PrimEffect.impure)
+fun x * y = _primCall "JavaScript.*" (x, y, _Prim.PrimEffect.impure)
+fun x / y = _primCall "JavaScript./" (x, y, _Prim.PrimEffect.impure)
+fun % (x, y) = _primCall "JavaScript.%" (x, y, _Prim.PrimEffect.impure)
+fun negate x = _primCall "JavaScript.negate" (x, _Prim.PrimEffect.impure)
+fun andb (x, y) = _primCall "JavaScript.andb" (x, y, _Prim.PrimEffect.impure)
+fun orb (x, y) = _primCall "JavaScript.orb" (x, y, _Prim.PrimEffect.impure)
+fun xorb (x, y) = _primCall "JavaScript.xorb" (x, y, _Prim.PrimEffect.impure)
+fun notb x = _primCall "JavaScript.notb" (x, _Prim.PrimEffect.impure)
+fun << (x, y) = _primCall "JavaScript.<<" (x, y, _Prim.PrimEffect.impure)
+fun >> (x, y) = _primCall "JavaScript.>>" (x, y, _Prim.PrimEffect.impure)
+fun >>> (x, y) = _primCall "JavaScript.>>>" (x, y, _Prim.PrimEffect.impure)
 fun === (x, y) = _primCall "JavaScript.===" (x, y)
 fun !== (x, y) = _primCall "JavaScript.!==" (x, y)
-fun x < y = _primCall "JavaScript.<" (x, y)
-fun x > y = _primCall "JavaScript.>" (x, y)
-fun x <= y = _primCall "JavaScript.<=" (x, y)
-fun x >= y = _primCall "JavaScript.>=" (x, y)
-fun ** (x, y) = _primCall "JavaScript.**" (x, y)
+fun x < y = _primCall "JavaScript.<" (x, y, _Prim.PrimEffect.impure)
+fun x > y = _primCall "JavaScript.>" (x, y, _Prim.PrimEffect.impure)
+fun x <= y = _primCall "JavaScript.<=" (x, y, _Prim.PrimEffect.impure)
+fun x >= y = _primCall "JavaScript.>=" (x, y, _Prim.PrimEffect.impure)
+fun ** (x, y) = _primCall "JavaScript.**" (x, y, _Prim.PrimEffect.impure)
 fun typeof x = _primCall "JavaScript.typeof" (x)
 fun toInt32 x = unsafeFromValue (orb (x, fromInt 0)) : _Prim.Int32.int
 fun toUint32 x = unsafeFromValue (>>> (x, fromInt 0)) : _Prim.Word32.word
 structure Lib = struct
-val parseFloat = LunarML.assumeDiscardable global "parseFloat"
-val Object = LunarML.assumeDiscardable global "Object"
-val Number = LunarML.assumeDiscardable global "Number"
+val parseFloat = global "parseFloat"
+val Object = global "Object"
+val Number = global "Number"
 structure Number = struct
-val isFinite = LunarML.assumeDiscardable field (Number, "isFinite")
-val isNaN = LunarML.assumeDiscardable field (Number, "isNaN")
-val POSITIVE_INFINITY = LunarML.assumeDiscardable field (Number, "POSITIVE_INFINITY")
-val NEGATIVE_INFINITY = LunarML.assumeDiscardable field (Number, "NEGATIVE_INFINITY")
-val MIN_VALUE = LunarML.assumeDiscardable field (Number, "MIN_VALUE")
-val MAX_VALUE = LunarML.assumeDiscardable field (Number, "MAX_VALUE")
-val NaN = LunarML.assumeDiscardable field (Number, "NaN")
+val isFinite = fieldWithEffect (Number, "isFinite", _Prim.PrimEffect.discardable)
+val isNaN = fieldWithEffect (Number, "isNaN", _Prim.PrimEffect.discardable)
+val POSITIVE_INFINITY = fieldWithEffect (Number, "POSITIVE_INFINITY", _Prim.PrimEffect.discardable)
+val NEGATIVE_INFINITY = fieldWithEffect (Number, "NEGATIVE_INFINITY", _Prim.PrimEffect.discardable)
+val MIN_VALUE = fieldWithEffect (Number, "MIN_VALUE", _Prim.PrimEffect.discardable)
+val MAX_VALUE = fieldWithEffect (Number, "MAX_VALUE", _Prim.PrimEffect.discardable)
+val NaN = fieldWithEffect (Number, "NaN", _Prim.PrimEffect.discardable)
 end
-val Math = LunarML.assumeDiscardable global "Math"
+val Math = global "Math"
 structure Math = struct
-val E = LunarML.assumeDiscardable field (Math, "E")
-val PI = LunarML.assumeDiscardable field (Math, "PI")
-val abs = LunarML.assumeDiscardable field (Math, "abs")
-val acos = LunarML.assumeDiscardable field (Math, "acos")
-val acosh = LunarML.assumeDiscardable field (Math, "acosh")
-val asin = LunarML.assumeDiscardable field (Math, "asin")
-val asinh = LunarML.assumeDiscardable field (Math, "asinh")
-val atan = LunarML.assumeDiscardable field (Math, "atan")
-val atanh = LunarML.assumeDiscardable field (Math, "atanh")
-val atan2 = LunarML.assumeDiscardable field (Math, "atan2")
-val cbrt = LunarML.assumeDiscardable field (Math, "cbrt")
-val ceil = LunarML.assumeDiscardable field (Math, "ceil")
-val clz32 = LunarML.assumeDiscardable field (Math, "clz32")
-val cos = LunarML.assumeDiscardable field (Math, "cos")
-val cosh = LunarML.assumeDiscardable field (Math, "cosh")
-val exp = LunarML.assumeDiscardable field (Math, "exp")
-val expm1 = LunarML.assumeDiscardable field (Math, "expm1")
-val floor = LunarML.assumeDiscardable field (Math, "floor")
-val fround = LunarML.assumeDiscardable field (Math, "fround")
-val hypot = LunarML.assumeDiscardable field (Math, "hypot")
-val imul = LunarML.assumeDiscardable field (Math, "imul")
-val log = LunarML.assumeDiscardable field (Math, "log")
-val log1p = LunarML.assumeDiscardable field (Math, "log1p")
-val log10 = LunarML.assumeDiscardable field (Math, "log10")
-val log2 = LunarML.assumeDiscardable field (Math, "log2")
-val max = LunarML.assumeDiscardable field (Math, "max")
-val min = LunarML.assumeDiscardable field (Math, "min")
-val pow = LunarML.assumeDiscardable field (Math, "pow")
-val random = LunarML.assumeDiscardable field (Math, "random")
-val round = LunarML.assumeDiscardable field (Math, "round")
-val sign = LunarML.assumeDiscardable field (Math, "sign")
-val sin = LunarML.assumeDiscardable field (Math, "sin")
-val sinh = LunarML.assumeDiscardable field (Math, "sinh")
-val sqrt = LunarML.assumeDiscardable field (Math, "sqrt")
-val tan = LunarML.assumeDiscardable field (Math, "tan")
-val tanh = LunarML.assumeDiscardable field (Math, "tanh")
-val trunc = LunarML.assumeDiscardable field (Math, "trunc")
+val E = fieldWithEffect (Math, "E", _Prim.PrimEffect.discardable)
+val PI = fieldWithEffect (Math, "PI", _Prim.PrimEffect.discardable)
+val abs = fieldWithEffect (Math, "abs", _Prim.PrimEffect.discardable)
+val acos = fieldWithEffect (Math, "acos", _Prim.PrimEffect.discardable)
+val acosh = fieldWithEffect (Math, "acosh", _Prim.PrimEffect.discardable)
+val asin = fieldWithEffect (Math, "asin", _Prim.PrimEffect.discardable)
+val asinh = fieldWithEffect (Math, "asinh", _Prim.PrimEffect.discardable)
+val atan = fieldWithEffect (Math, "atan", _Prim.PrimEffect.discardable)
+val atanh = fieldWithEffect (Math, "atanh", _Prim.PrimEffect.discardable)
+val atan2 = fieldWithEffect (Math, "atan2", _Prim.PrimEffect.discardable)
+val cbrt = fieldWithEffect (Math, "cbrt", _Prim.PrimEffect.discardable)
+val ceil = fieldWithEffect (Math, "ceil", _Prim.PrimEffect.discardable)
+val clz32 = fieldWithEffect (Math, "clz32", _Prim.PrimEffect.discardable)
+val cos = fieldWithEffect (Math, "cos", _Prim.PrimEffect.discardable)
+val cosh = fieldWithEffect (Math, "cosh", _Prim.PrimEffect.discardable)
+val exp = fieldWithEffect (Math, "exp", _Prim.PrimEffect.discardable)
+val expm1 = fieldWithEffect (Math, "expm1", _Prim.PrimEffect.discardable)
+val floor = fieldWithEffect (Math, "floor", _Prim.PrimEffect.discardable)
+val fround = fieldWithEffect (Math, "fround", _Prim.PrimEffect.discardable)
+val hypot = fieldWithEffect (Math, "hypot", _Prim.PrimEffect.discardable)
+val imul = fieldWithEffect (Math, "imul", _Prim.PrimEffect.discardable)
+val log = fieldWithEffect (Math, "log", _Prim.PrimEffect.discardable)
+val log1p = fieldWithEffect (Math, "log1p", _Prim.PrimEffect.discardable)
+val log10 = fieldWithEffect (Math, "log10", _Prim.PrimEffect.discardable)
+val log2 = fieldWithEffect (Math, "log2", _Prim.PrimEffect.discardable)
+val max = fieldWithEffect (Math, "max", _Prim.PrimEffect.discardable)
+val min = fieldWithEffect (Math, "min", _Prim.PrimEffect.discardable)
+val pow = fieldWithEffect (Math, "pow", _Prim.PrimEffect.discardable)
+val random = fieldWithEffect (Math, "random", _Prim.PrimEffect.discardable)
+val round = fieldWithEffect (Math, "round", _Prim.PrimEffect.discardable)
+val sign = fieldWithEffect (Math, "sign", _Prim.PrimEffect.discardable)
+val sin = fieldWithEffect (Math, "sin", _Prim.PrimEffect.discardable)
+val sinh = fieldWithEffect (Math, "sinh", _Prim.PrimEffect.discardable)
+val sqrt = fieldWithEffect (Math, "sqrt", _Prim.PrimEffect.discardable)
+val tan = fieldWithEffect (Math, "tan", _Prim.PrimEffect.discardable)
+val tanh = fieldWithEffect (Math, "tanh", _Prim.PrimEffect.discardable)
+val trunc = fieldWithEffect (Math, "trunc", _Prim.PrimEffect.discardable)
 end
-val BigInt = LunarML.assumeDiscardable global "BigInt"
+val BigInt = global "BigInt"
 structure BigInt = struct
-val asIntN = LunarML.assumeDiscardable field (BigInt, "asIntN")
-val asUintN = LunarML.assumeDiscardable field (BigInt, "asUintN")
+val asIntN = fieldWithEffect (BigInt, "asIntN", _Prim.PrimEffect.discardable)
+val asUintN = fieldWithEffect (BigInt, "asUintN", _Prim.PrimEffect.discardable)
 end
-val Int8Array = LunarML.assumeDiscardable global "Int8Array"
-val Int16Array = LunarML.assumeDiscardable global "Int16Array"
-val Int32Array = LunarML.assumeDiscardable global "Int32Array"
-val BigInt64Array = LunarML.assumeDiscardable global "BigInt64Array"
-val Uint8Array = LunarML.assumeDiscardable global "Uint8Array"
-val Uint16Array = LunarML.assumeDiscardable global "Uint16Array"
-val Uint32Array = LunarML.assumeDiscardable global "Uint32Array"
-val BigUint64Array = LunarML.assumeDiscardable global "BigUint64Array"
-val Float32Array = LunarML.assumeDiscardable global "Float32Array"
-val Float64Array = LunarML.assumeDiscardable global "Float64Array"
-val Date = LunarML.assumeDiscardable global "Date"
+val Int8Array = global "Int8Array"
+val Int16Array = global "Int16Array"
+val Int32Array = global "Int32Array"
+val BigInt64Array = global "BigInt64Array"
+val Uint8Array = global "Uint8Array"
+val Uint16Array = global "Uint16Array"
+val Uint32Array = global "Uint32Array"
+val BigUint64Array = global "BigUint64Array"
+val Float32Array = global "Float32Array"
+val Float64Array = global "Float64Array"
+val Date = global "Date"
 structure Date = struct
-val now = LunarML.assumeDiscardable field (Date, "now")
+val now = fieldWithEffect (Date, "now", _Prim.PrimEffect.discardable)
 end
-val Map = LunarML.assumeDiscardable global "Map"
-val Set = LunarML.assumeDiscardable global "Set"
-val WeakMap = LunarML.assumeDiscardable global "WeakMap"
-val WeakSet = LunarML.assumeDiscardable global "WeakSet"
-val Promise = LunarML.assumeDiscardable global "Promise"
+val Map = global "Map"
+val Set = global "Set"
+val WeakMap = global "WeakMap"
+val WeakSet = global "WeakSet"
+val Promise = global "Promise"
 structure Promise = struct
-val all = LunarML.assumeDiscardable field (Promise, "all")
-val allSettled = LunarML.assumeDiscardable field (Promise, "allSettled")
-val any = LunarML.assumeDiscardable field (Promise, "any")
-val race = LunarML.assumeDiscardable field (Promise, "race")
-val reject = LunarML.assumeDiscardable field (Promise, "reject")
-val resolve = LunarML.assumeDiscardable field (Promise, "resolve")
-val try = LunarML.assumeDiscardable field (Promise, "try")
-val withResolvers = LunarML.assumeDiscardable field (Promise, "withResolvers")
+val all = fieldWithEffect (Promise, "all", _Prim.PrimEffect.discardable)
+val allSettled = fieldWithEffect (Promise, "allSettled", _Prim.PrimEffect.discardable)
+val any = fieldWithEffect (Promise, "any", _Prim.PrimEffect.discardable)
+val race = fieldWithEffect (Promise, "race", _Prim.PrimEffect.discardable)
+val reject = fieldWithEffect (Promise, "reject", _Prim.PrimEffect.discardable)
+val resolve = fieldWithEffect (Promise, "resolve", _Prim.PrimEffect.discardable)
+val try = fieldWithEffect (Promise, "try", _Prim.PrimEffect.discardable)
+val withResolvers = fieldWithEffect (Promise, "withResolvers", _Prim.PrimEffect.discardable)
 end
 end
 fun newObject () = new Lib.Object #[]

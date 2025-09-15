@@ -3,6 +3,7 @@
 structure Primitives = struct
 datatype int_width = INT | I32 | I54 | I64 | INT_INF
 datatype word_width = WORD | W32 | W64
+datatype prim_effect = PURE | DISCARDABLE | IMPURE
 datatype PrimOp = EQUAL (* = *)
                 | mkFn2 (* mkFn2 *)
                 | mkFn3 (* mkFn3 *)
@@ -1457,7 +1458,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_isFalsy = true
   | isDiscardable JavaScript_isNullOrUndefined = true
   | isDiscardable JavaScript_typeof = true
-  | isDiscardable JavaScript_global = false
+  | isDiscardable JavaScript_global = true
   | isDiscardable JavaScript_setGlobal = false
   | isDiscardable JavaScript_call = false
   | isDiscardable JavaScript_method = false
@@ -1465,6 +1466,218 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_function = true
   | isDiscardable JavaScript_encodeUtf8 = true
   | isDiscardable JavaScript_decodeUtf8 = true
+fun isDiscardablePE PURE = true
+  | isDiscardablePE DISCARDABLE = true
+  | isDiscardablePE IMPURE = false
+fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
+  | isDiscardableWithArgs (Int_MINUS INT_INF, _) = true
+  | isDiscardableWithArgs (Int_TIMES INT_INF, _) = true
+  | isDiscardableWithArgs (Int_TILDE INT_INF, _) = true
+  | isDiscardableWithArgs (Int_abs INT_INF, _) = true
+  | isDiscardableWithArgs (EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (mkFn2, [_]) = false
+  | isDiscardableWithArgs (mkFn3, [_]) = false
+  | isDiscardableWithArgs (call2, [_, _, _]) = false
+  | isDiscardableWithArgs (call3, [_, _, _, _]) = false
+  | isDiscardableWithArgs (List_cons, [_, _]) = true
+  | isDiscardableWithArgs (List_null, [_]) = true
+  | isDiscardableWithArgs (List_unsafeHead, [_]) = true
+  | isDiscardableWithArgs (List_unsafeTail, [_]) = true
+  | isDiscardableWithArgs (General_exnName, [_]) = true
+  | isDiscardableWithArgs (Ref_ref, [_]) = true
+  | isDiscardableWithArgs (Ref_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Ref_set, [_, _]) = false
+  | isDiscardableWithArgs (Ref_read, [_]) = true
+  | isDiscardableWithArgs (Bool_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Bool_not, [_]) = true
+  | isDiscardableWithArgs (Int_EQUAL _, [_, _]) = true
+  | isDiscardableWithArgs (Int_PLUS _, [_, _]) = false
+  | isDiscardableWithArgs (Int_PLUS_wrapping _, [_, _]) = true
+  | isDiscardableWithArgs (Int_MINUS _, [_, _]) = false
+  | isDiscardableWithArgs (Int_MINUS_wrapping _, [_, _]) = true
+  | isDiscardableWithArgs (Int_TIMES _, [_, _]) = false
+  | isDiscardableWithArgs (Int_TIMES_wrapping _, [_, _]) = true
+  | isDiscardableWithArgs (Int_div _, [_, _]) = false
+  | isDiscardableWithArgs (Int_div_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Int_mod _, [_, _]) = false
+  | isDiscardableWithArgs (Int_mod_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Int_quot _, [_, _]) = false
+  | isDiscardableWithArgs (Int_quot_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Int_rem _, [_, _]) = false
+  | isDiscardableWithArgs (Int_rem_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Int_TILDE _, [_]) = false
+  | isDiscardableWithArgs (Int_TILDE_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Int_TILDE_wrapping _, [_]) = true
+  | isDiscardableWithArgs (Int_abs _, [_]) = false
+  | isDiscardableWithArgs (Int_LT _, [_, _]) = true
+  | isDiscardableWithArgs (Int_LE _, [_, _]) = true
+  | isDiscardableWithArgs (Int_GT _, [_, _]) = true
+  | isDiscardableWithArgs (Int_GE _, [_, _]) = true
+  | isDiscardableWithArgs (Int_toInt_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Word_EQUAL _, [_, _]) = true
+  | isDiscardableWithArgs (Word_PLUS _, [_, _]) = true
+  | isDiscardableWithArgs (Word_MINUS _, [_, _]) = true
+  | isDiscardableWithArgs (Word_TIMES _, [_, _]) = true
+  | isDiscardableWithArgs (Word_TILDE _, [_]) = true
+  | isDiscardableWithArgs (Word_div _, [_, _]) = false
+  | isDiscardableWithArgs (Word_mod _, [_, _]) = false
+  | isDiscardableWithArgs (Word_div_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Word_mod_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Word_LT _, [_, _]) = true
+  | isDiscardableWithArgs (Word_LE _, [_, _]) = true
+  | isDiscardableWithArgs (Word_GT _, [_, _]) = true
+  | isDiscardableWithArgs (Word_GE _, [_, _]) = true
+  | isDiscardableWithArgs (Word_notb _, [_]) = true
+  | isDiscardableWithArgs (Word_andb _, [_, _]) = true
+  | isDiscardableWithArgs (Word_orb _, [_, _]) = true
+  | isDiscardableWithArgs (Word_xorb _, [_, _]) = true
+  | isDiscardableWithArgs (Word_LSHIFT_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Word_RSHIFT_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Real_PLUS, [_, _]) = true
+  | isDiscardableWithArgs (Real_MINUS, [_, _]) = true
+  | isDiscardableWithArgs (Real_TIMES, [_, _]) = true
+  | isDiscardableWithArgs (Real_DIVIDE, [_, _]) = true
+  | isDiscardableWithArgs (Real_TILDE, [_]) = true
+  | isDiscardableWithArgs (Real_abs, [_]) = true
+  | isDiscardableWithArgs (Real_LT, [_, _]) = true
+  | isDiscardableWithArgs (Real_LE, [_, _]) = true
+  | isDiscardableWithArgs (Real_GT, [_, _]) = true
+  | isDiscardableWithArgs (Real_GE, [_, _]) = true
+  | isDiscardableWithArgs (Char_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Char_LT, [_, _]) = true
+  | isDiscardableWithArgs (Char_LE, [_, _]) = true
+  | isDiscardableWithArgs (Char_GT, [_, _]) = true
+  | isDiscardableWithArgs (Char_GE, [_, _]) = true
+  | isDiscardableWithArgs (Char_ord _, [_]) = true
+  | isDiscardableWithArgs (Char_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Char16_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Char16_LT, [_, _]) = true
+  | isDiscardableWithArgs (Char16_LE, [_, _]) = true
+  | isDiscardableWithArgs (Char16_GT, [_, _]) = true
+  | isDiscardableWithArgs (Char16_GE, [_, _]) = true
+  | isDiscardableWithArgs (Char16_ord _, [_]) = true
+  | isDiscardableWithArgs (Char16_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (String_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (String_LT, [_, _]) = true
+  | isDiscardableWithArgs (String_LE, [_, _]) = true
+  | isDiscardableWithArgs (String_GT, [_, _]) = true
+  | isDiscardableWithArgs (String_GE, [_, _]) = true
+  | isDiscardableWithArgs (String_HAT, [_, _]) = false
+  | isDiscardableWithArgs (String_size _, [_]) = true
+  | isDiscardableWithArgs (String_str, [_]) = true
+  | isDiscardableWithArgs (String_concat, [_]) = true
+  | isDiscardableWithArgs (String_implode, [_]) = true
+  | isDiscardableWithArgs (String16_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (String16_LT, [_, _]) = true
+  | isDiscardableWithArgs (String16_LE, [_, _]) = true
+  | isDiscardableWithArgs (String16_GT, [_, _]) = true
+  | isDiscardableWithArgs (String16_GE, [_, _]) = true
+  | isDiscardableWithArgs (String16_HAT, [_, _]) = false
+  | isDiscardableWithArgs (String16_size _, [_]) = true
+  | isDiscardableWithArgs (String16_str, [_]) = true
+  | isDiscardableWithArgs (IntInf_andb, [_, _]) = true
+  | isDiscardableWithArgs (IntInf_orb, [_, _]) = true
+  | isDiscardableWithArgs (IntInf_xorb, [_, _]) = true
+  | isDiscardableWithArgs (IntInf_notb, [_]) = true
+  | isDiscardableWithArgs (Vector_length _, [_]) = true
+  | isDiscardableWithArgs (Vector_fromList, [_]) = true
+  | isDiscardableWithArgs (Vector_concat, [_]) = true
+  | isDiscardableWithArgs (Vector_unsafeFromListRevN _, [_, _]) = true
+  | isDiscardableWithArgs (Array_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Array_length _, [_]) = true
+  | isDiscardableWithArgs (Array_fromList, [_]) = true
+  | isDiscardableWithArgs (Array_array _, [_, _]) = false
+  | isDiscardableWithArgs (Unsafe_cast, [_]) = true
+  | isDiscardableWithArgs (Unsafe_Vector_sub _, [_, _]) = true
+  | isDiscardableWithArgs (Unsafe_Array_sub _, [_, _]) = true
+  | isDiscardableWithArgs (Unsafe_Array_update _, [_, _, _]) = false
+  | isDiscardableWithArgs (Exception_instanceof, [_, _]) = true
+  | isDiscardableWithArgs (DelimCont_newPromptTag, []) = true
+  | isDiscardableWithArgs (assumeDiscardable, [_, _]) = true
+  | isDiscardableWithArgs (unreachable, []) = false
+  | isDiscardableWithArgs (Lua_sub, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_set, [_, _, _]) = false
+  | isDiscardableWithArgs (Lua_isNil, [_]) = true
+  | isDiscardableWithArgs (Lua_EQUAL, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_NOTEQUAL, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_LT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_LE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_GT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_GE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_PLUS, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_MINUS, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_TIMES, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_DIVIDE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_INTDIV, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_MOD, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_pow, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_negate, [_, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_andb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_orb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_xorb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_notb, [_, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_LSHIFT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_RSHIFT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_concat, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_length, [_, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_isFalsy, [_]) = true
+  | isDiscardableWithArgs (Lua_call, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call1, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call2, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call3, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call4, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call5, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call6, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call7, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call8, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_call9, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method1, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method2, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method3, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method4, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method5, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method6, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method7, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method8, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_method9, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (Lua_global, [_]) = true
+  | isDiscardableWithArgs (Lua_setGlobal, [_, _]) = false
+  | isDiscardableWithArgs (Lua_newTable, []) = true
+  | isDiscardableWithArgs (JavaScript_sub, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_set, [_, _, _]) = false
+  | isDiscardableWithArgs (JavaScript_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (JavaScript_NOTEQUAL, [_, _]) = true
+  | isDiscardableWithArgs (JavaScript_LT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_LE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_GT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_GE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_PLUS, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_MINUS, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_TIMES, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_DIVIDE, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_MOD, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_negate, [_, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_andb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_orb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_xorb, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_notb, [_, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_LSHIFT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_RSHIFT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_URSHIFT, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_EXP, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_isFalsy, [_]) = true
+  | isDiscardableWithArgs (JavaScript_isNullOrUndefined, [_]) = true
+  | isDiscardableWithArgs (JavaScript_typeof, [_]) = true
+  | isDiscardableWithArgs (JavaScript_global, [_]) = true
+  | isDiscardableWithArgs (JavaScript_setGlobal, [_, _]) = false
+  | isDiscardableWithArgs (JavaScript_call, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_method, [_, _, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_new, [_, _, e]) = isDiscardablePE e
+  | isDiscardableWithArgs (JavaScript_function, [_]) = true
+  | isDiscardableWithArgs (JavaScript_encodeUtf8, [_]) = true
+  | isDiscardableWithArgs (JavaScript_decodeUtf8, [_]) = true
+  | isDiscardableWithArgs _ = false (* should not occur *)
 fun fixIntWord { int, word }
   = let fun fixInt INT = int
           | fixInt i = i
@@ -1765,6 +1978,7 @@ functor TypeOfPrimitives (type ty
                           val exntag : ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
+                          val prim_effect : ty
                           val refOf : ty -> ty
                           val listOf : ty -> ty
                           val vectorOf : ty -> ty
@@ -2120,85 +2334,85 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
   | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyA, tyB), tyA], results = [tyB] }
   | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [tyA] }
-  | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], results = [] }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_EQUAL = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_NOTEQUAL = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_LT = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_LE = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_GT = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_GE = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_PLUS = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_MINUS = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_TIMES = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_DIVIDE = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_INTDIV = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_MOD = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_pow = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_negate = { vars = [], args = vector [LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_andb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_orb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_xorb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_notb = { vars = [], args = vector [LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_LSHIFT = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_RSHIFT = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_concat = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
-  | typeOf Primitives.Lua_length = { vars = [], args = vector [LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_EQUAL = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_NOTEQUAL = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_LT = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_LE = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_GT = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_GE = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [bool] }
+  | typeOf Primitives.Lua_PLUS = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_MINUS = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_TIMES = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_DIVIDE = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_INTDIV = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_MOD = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_pow = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_negate = { vars = [], args = vector [LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_andb = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_orb = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_xorb = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_notb = { vars = [], args = vector [LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_LSHIFT = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_RSHIFT = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_concat = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_length = { vars = [], args = vector [LuaValue, prim_effect], results = [LuaValue] }
   | typeOf Primitives.Lua_isFalsy = { vars = [], args = vector [LuaValue], results = [bool] }
-  | typeOf Primitives.Lua_call = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [vectorOf (LuaValue)] }
-  | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue] }
-  | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call4 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call5 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call6 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call7 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call8 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_call9 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [vectorOf (LuaValue)] }
-  | typeOf Primitives.Lua_method1 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue] }
-  | typeOf Primitives.Lua_method2 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method3 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method4 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method5 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method6 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method7 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method8 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method9 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [vectorOf (LuaValue)] }
+  | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call4 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call5 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call6 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call7 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call8 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call9 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [vectorOf (LuaValue)] }
+  | typeOf Primitives.Lua_method1 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue] }
+  | typeOf Primitives.Lua_method2 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method3 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method4 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method5 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method6 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method7 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method8 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method9 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue), prim_effect], results = [LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue, LuaValue] }
   | typeOf Primitives.Lua_global = { vars = [], args = vector [string], results = [LuaValue] }
   | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], results = [] }
   | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], results = [LuaValue] }
-  | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], results = [] }
   | typeOf Primitives.JavaScript_EQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
   | typeOf Primitives.JavaScript_NOTEQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
-  | typeOf Primitives.JavaScript_LT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
-  | typeOf Primitives.JavaScript_LE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
-  | typeOf Primitives.JavaScript_GT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
-  | typeOf Primitives.JavaScript_GE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
-  | typeOf Primitives.JavaScript_PLUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_MINUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_TIMES = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_DIVIDE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_MOD = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_negate = { vars = [], args = vector [JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_andb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_orb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_xorb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_notb = { vars = [], args = vector [JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_LSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_RSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_LT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [bool] }
+  | typeOf Primitives.JavaScript_LE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [bool] }
+  | typeOf Primitives.JavaScript_GT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [bool] }
+  | typeOf Primitives.JavaScript_GE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [bool] }
+  | typeOf Primitives.JavaScript_PLUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_MINUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_TIMES = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_DIVIDE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_MOD = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_negate = { vars = [], args = vector [JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_andb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_orb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_xorb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_notb = { vars = [], args = vector [JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_LSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_RSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], results = [bool] }
   | typeOf Primitives.JavaScript_isNullOrUndefined = { vars = [], args = vector [JavaScriptValue], results = [bool] }
   | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], results = [string16] }
   | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_setGlobal = { vars = [], args = vector [string16, JavaScriptValue], results = [] }
-  | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
-  | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue), prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue), prim_effect], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue), prim_effect], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_function = { vars = [], args = vector [function1Of (vectorOf (JavaScriptValue), JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_encodeUtf8 = { vars = [], args = vector [string16], results = [string] }
   | typeOf Primitives.JavaScript_decodeUtf8 = { vars = [], args = vector [string], results = [string16] }

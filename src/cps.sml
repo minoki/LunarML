@@ -32,6 +32,7 @@ sig
   | Char16Const of int
   | StringConst of string
   | String16Const of int vector
+  | PrimEffect of Primitives.prim_effect
   | Cast of {value: Value, from: Ty, to: Ty}
   | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
   type AbsAttr = {alwaysInline: bool, typeOnly: bool}
@@ -154,6 +155,7 @@ struct
   (*
   | RealConst of Numeric.float_notation
   *)
+  | PrimEffect of Primitives.prim_effect
   | Cast of {value: Value, from: Ty, to: Ty}
   | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
   type AbsAttr = {alwaysInline: bool, typeOnly: bool}
@@ -231,10 +233,19 @@ struct
     | extractVarFromValue (Char16Const _) = NONE
     | extractVarFromValue (StringConst _) = NONE
     | extractVarFromValue (String16Const _) = NONE
+    | extractVarFromValue (PrimEffect _) = NONE
     | extractVarFromValue (Cast {value, ...}) = extractVarFromValue value
     | extractVarFromValue (Pack {value, ...}) = extractVarFromValue value
   local structure F = FSyntax
   in
+    fun isDiscardablePrimEffect (PrimEffect e) =
+          (case e of
+             Primitives.PURE => true
+           | Primitives.DISCARDABLE => true
+           | Primitives.IMPURE => false)
+      | isDiscardablePrimEffect _ = false
+    fun getPrimEffect (PrimEffect e) = e
+      | getPrimEffect _ = Primitives.IMPURE
     fun isDiscardable (PrimOp {primOp = F.IntConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.WordConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.RealConstOp _, ...}) = true
@@ -255,17 +266,44 @@ struct
       | isDiscardable (PrimOp {primOp = F.ConstructExnOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.ConstructExnWithPayloadOp, ...}) =
           true
-      | isDiscardable (PrimOp {primOp = F.PrimCall p, ...}) =
-          Primitives.isDiscardable p
-      | isDiscardable (PrimOp {primOp = F.JsCallOp, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.JsMethodOp, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.JsNewOp, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaCallOp, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaCall1Op, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaCallNOp _, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaMethodOp _, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaMethod1Op _, ...}) = false
-      | isDiscardable (PrimOp {primOp = F.LuaMethodNOp _, ...}) = false
+      | isDiscardable (PrimOp {primOp = F.PrimCall p, args, ...}) =
+          Primitives.isDiscardableWithArgs (p, List.map getPrimEffect args)
+      | isDiscardable (PrimOp {primOp = F.JsCallOp, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.JsCallOp, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.JsMethodOp, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.JsMethodOp, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.JsNewOp, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.JsNewOp, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaCallOp, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaCallOp, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaCall1Op, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaCall1Op, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaCallNOp _, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaCallNOp _, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaMethodOp _, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaMethodOp _, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaMethod1Op _, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaMethod1Op _, args = [], ...}) =
+          false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.LuaMethodNOp _, args = e :: _, ...}) =
+          isDiscardablePrimEffect e
+      | isDiscardable (PrimOp {primOp = F.LuaMethodNOp _, args = [], ...}) =
+          false (* should not occur *)
       | isDiscardable (Record _) = true
       | isDiscardable (ExnTag _) = true
       | isDiscardable (Projection _) = true
@@ -551,6 +589,10 @@ struct
           ^
           String.concatWith ","
             (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
+      | valueToString (PrimEffect Primitives.PURE) = "PrimEffect(pure)"
+      | valueToString (PrimEffect Primitives.DISCARDABLE) =
+          "PrimEffect(discardable)"
+      | valueToString (PrimEffect Primitives.IMPURE) = "PrimEffect(impure)"
       | valueToString (Cast {value, ...}) =
           "Cast(" ^ valueToString value ^ ")"
       | valueToString (Pack {value, ...}) =
@@ -808,6 +850,17 @@ struct
             , ( SOME C.Nil
               , F.ForallType (tv, F.TypeKind, FSyntax.Types.list (F.TyVar tv))
               )
+            )
+          , ( InitialEnv.VId_PrimEffect_pure
+            , (SOME (C.PrimEffect Primitives.PURE), FSyntax.Types.prim_effect)
+            )
+          , ( InitialEnv.VId_PrimEffect_discardable
+            , ( SOME (C.PrimEffect Primitives.DISCARDABLE)
+              , FSyntax.Types.prim_effect
+              )
+            )
+          , ( InitialEnv.VId_PrimEffect_impure
+            , (SOME (C.PrimEffect Primitives.IMPURE), FSyntax.Types.prim_effect)
             )
           ]
       end
@@ -1714,6 +1767,7 @@ struct
           | goVal (v as C.Char16Const _) = v
           | goVal (v as C.StringConst _) = v
           | goVal (v as C.String16Const _) = v
+          | goVal (v as C.PrimEffect _) = v
       in
         goVal
       end

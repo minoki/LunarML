@@ -283,7 +283,7 @@ struct
   | RETURN
   type Env = {continuations: cont_type C.CVarMap.map}
 
-  datatype purity = PURE | DISCARDABLE | IMPURE
+  datatype prim_effect = datatype Primitives.prim_effect
 
   fun applyCont
     ( _: Context
@@ -395,6 +395,7 @@ struct
           (Vector.foldr
              (fn (i, acc) => Char.chr (i div 256) :: Char.chr (i mod 256) :: acc)
              [] s))) (* big endian *)
+    | doValue _ (C.PrimEffect _) = L.ConstExp L.Nil
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
@@ -541,10 +542,6 @@ struct
                fun doBinary f =
                  doBinaryRaw (fn (a, b) =>
                    f (doExp (ctx, env, a), doExp (ctx, env, b)))
-               fun doBinaryExpRaw (f, _ (* purity *)) = doBinaryRaw f
-               fun doBinaryExp (f, _ (* purity *)) = doBinary f
-               fun doBinaryOp (binop, purity) =
-                 doBinaryExp (fn (a, b) => L.BinExp (binop, a, b), purity)
                fun doTernary f =
                  case args of
                    [a, b, c] =>
@@ -556,6 +553,26 @@ struct
                      raise CodeGenError
                        ("primop " ^ Primitives.toString prim
                         ^ ": invalid number of arguments")
+               fun doBinaryExpRaw (f, _ (* purity *)) = doBinaryRaw f
+               fun doBinaryExp (f, _ (* purity *)) = doBinary f
+               fun doBinaryOp (binop, purity) =
+                 doBinaryExp (fn (a, b) => L.BinExp (binop, a, b), purity)
+               fun doUnaryExpE f =
+                 case args of
+                   [a, _] => f (doExp (ctx, env, a))
+                 | _ =>
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doBinaryExpE f =
+                 case args of
+                   [a, b, _] => f (doExp (ctx, env, a), doExp (ctx, env, b))
+                 | _ =>
+                     raise CodeGenError
+                       ("primop " ^ Primitives.toString prim
+                        ^ ": invalid number of arguments")
+               fun doBinaryOpE binop =
+                 doBinaryExpE (fn (a, b) => L.BinExp (binop, a, b))
              in
                case prim of
                  Primitives.mkFn2 =>
@@ -1633,52 +1650,50 @@ struct
                      , PURE
                      )
                | Primitives.Lua_sub =>
-                   doBinaryExp (fn (a, b) => L.IndexExp (a, b), IMPURE)
+                   doBinaryExpE (fn (a, b) => L.IndexExp (a, b))
                | Primitives.Lua_set => raise CodeGenError "unexpected Lua.set"
                | Primitives.Lua_isNil =>
                    doUnaryExp
                      (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
-               | Primitives.Lua_EQUAL => doBinaryOp (L.EQUAL, IMPURE)
-               | Primitives.Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, IMPURE)
-               | Primitives.Lua_LT => doBinaryOp (L.LT, IMPURE)
-               | Primitives.Lua_GT => doBinaryOp (L.GT, IMPURE)
-               | Primitives.Lua_LE => doBinaryOp (L.LE, IMPURE)
-               | Primitives.Lua_GE => doBinaryOp (L.GE, IMPURE)
-               | Primitives.Lua_PLUS => doBinaryOp (L.PLUS, IMPURE)
-               | Primitives.Lua_MINUS => doBinaryOp (L.MINUS, IMPURE)
-               | Primitives.Lua_TIMES => doBinaryOp (L.TIMES, IMPURE)
-               | Primitives.Lua_DIVIDE => doBinaryOp (L.DIV, IMPURE)
-               | Primitives.Lua_INTDIV => doBinaryOp (L.INTDIV, IMPURE)
-               | Primitives.Lua_MOD => doBinaryOp (L.MOD, IMPURE)
-               | Primitives.Lua_pow => doBinaryOp (L.POW, IMPURE)
+               | Primitives.Lua_EQUAL => doBinaryOpE L.EQUAL
+               | Primitives.Lua_NOTEQUAL => doBinaryOpE L.NOTEQUAL
+               | Primitives.Lua_LT => doBinaryOpE L.LT
+               | Primitives.Lua_GT => doBinaryOpE L.GT
+               | Primitives.Lua_LE => doBinaryOpE L.LE
+               | Primitives.Lua_GE => doBinaryOpE L.GE
+               | Primitives.Lua_PLUS => doBinaryOpE L.PLUS
+               | Primitives.Lua_MINUS => doBinaryOpE L.MINUS
+               | Primitives.Lua_TIMES => doBinaryOpE L.TIMES
+               | Primitives.Lua_DIVIDE => doBinaryOpE L.DIV
+               | Primitives.Lua_INTDIV => doBinaryOpE L.INTDIV
+               | Primitives.Lua_MOD => doBinaryOpE L.MOD
+               | Primitives.Lua_pow => doBinaryOpE L.POW
                | Primitives.Lua_negate =>
-                   doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), IMPURE)
+                   doUnaryExpE (fn a => L.UnaryExp (L.NEGATE, a))
                | Primitives.Lua_andb =>
-                   doBinaryOp (L.BITAND, IMPURE) (* not used on LuaJIT *)
+                   doBinaryOpE L.BITAND (* not used on LuaJIT *)
                | Primitives.Lua_orb =>
-                   doBinaryOp (L.BITOR, IMPURE) (* not used on LuaJIT *)
+                   doBinaryOpE L.BITOR (* not used on LuaJIT *)
                | Primitives.Lua_xorb =>
-                   doBinaryOp (L.BITXOR, IMPURE) (* not used on LuaJIT *)
+                   doBinaryOpE L.BITXOR (* not used on LuaJIT *)
                | Primitives.Lua_notb =>
-                   doUnaryExp
-                     ( fn a => L.UnaryExp (L.BITNOT, a)
-                     , IMPURE
-                     ) (* not used on LuaJIT *)
+                   doUnaryExpE (fn a =>
+                     L.UnaryExp (L.BITNOT, a)) (* not used on LuaJIT *)
                | Primitives.Lua_LSHIFT =>
-                   doBinaryOp (L.LSHIFT, IMPURE) (* not used on LuaJIT *)
+                   doBinaryOpE L.LSHIFT (* not used on LuaJIT *)
                | Primitives.Lua_RSHIFT =>
-                   doBinaryOp (L.RSHIFT, IMPURE) (* not used on LuaJIT *)
-               | Primitives.Lua_concat => doBinaryOp (L.CONCAT, IMPURE)
+                   doBinaryOpE L.RSHIFT (* not used on LuaJIT *)
+               | Primitives.Lua_concat => doBinaryOpE L.CONCAT
                | Primitives.Lua_length =>
-                   doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), IMPURE)
+                   doUnaryExpE (fn a => L.UnaryExp (L.LENGTH, a))
                | Primitives.Lua_isFalsy =>
                    doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
                | Primitives.Lua_call =>
-                   doBinary (fn (f, args) =>
+                   doTernary (fn (f, args, _) =>
                      L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
                        [L.CallExp (f, vector [TableUnpackN args])]))
                | Primitives.Lua_call1 =>
-                   doBinary (fn (f, args) =>
+                   doTernary (fn (f, args, _) =>
                      L.CallExp (f, vector [TableUnpackN args]))
                | Primitives.Lua_call2 =>
                    raise CodeGenError "unexpected Lua.call2"
@@ -1741,27 +1756,27 @@ struct
                      ("primop " ^ Primitives.toString prim
                       ^ " is not supported on Lua backend")
              end
-         | (F.LuaCallOp, f :: args) =>
+         | (F.LuaCallOp, _ :: f :: args) =>
              L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
                [L.CallExp
                   ( doExp (ctx, env, f)
                   , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                   )])
-         | (F.LuaCall1Op, f :: args) =>
+         | (F.LuaCall1Op, _ :: f :: args) =>
              L.CallExp
                ( doExp (ctx, env, f)
                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                )
          | (F.LuaCallNOp n, _) =>
              raise CodeGenError ("unexpected Lua.call" ^ Int.toString n)
-         | (F.LuaMethodOp name, obj :: args) =>
+         | (F.LuaMethodOp name, _ :: obj :: args) =>
              L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector
                [L.MethodExp
                   ( doExp (ctx, env, obj)
                   , name
                   , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
                   )])
-         | (F.LuaMethod1Op name, obj :: args) =>
+         | (F.LuaMethod1Op name, _ :: obj :: args) =>
              L.MethodExp
                ( doExp (ctx, env, obj)
                , name
@@ -1934,8 +1949,50 @@ struct
                        raise CodeGenError
                          ("primop " ^ Primitives.toString prim
                           ^ ": invalid number of arguments")
+                 fun getPrimEffect (N.Value (C.PrimEffect e)) = e
+                   | getPrimEffect _ = IMPURE
+                 fun doUnaryExpE f =
+                   case args of
+                     [a, e] =>
+                       (case results of
+                          [result] =>
+                            (case getPrimEffect e of
+                               PURE => pure (result, f (doExp (ctx, env, a)))
+                             | DISCARDABLE =>
+                                 discardable (result, f (doExp (ctx, env, a)))
+                             | IMPURE =>
+                                 impure (result, f (doExp (ctx, env, a))))
+                        | _ => raise CodeGenError "unexpected number of results")
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
+                 fun doUnaryOpE unop =
+                   doUnaryExpE (fn a => L.UnaryExp (unop, a))
+                 fun doBinaryExpE f =
+                   case args of
+                     [a, b, e] =>
+                       (case results of
+                          [result] =>
+                            (case getPrimEffect e of
+                               PURE =>
+                                 pure (result, f
+                                   (doExp (ctx, env, a), doExp (ctx, env, b)))
+                             | DISCARDABLE =>
+                                 discardable (result, f
+                                   (doExp (ctx, env, a), doExp (ctx, env, b)))
+                             | IMPURE =>
+                                 impure (result, f
+                                   (doExp (ctx, env, a), doExp (ctx, env, b))))
+                        | _ => raise CodeGenError "unexpected number of results")
+                   | _ =>
+                       raise CodeGenError
+                         ("primop " ^ Primitives.toString prim
+                          ^ ": invalid number of arguments")
+                 fun doBinaryOpE binop =
+                   doBinaryExpE (fn (a, b) => L.BinExp (binop, a, b))
                  fun doCall n =
-                   doBinary (fn (f, args) =>
+                   doTernary (fn (f, args, _) =>
                      let
                        val arg = vector [TableUnpackN args]
                        val stat =
@@ -2012,7 +2069,7 @@ struct
                      doTernary (fn (a, b, c) =>
                        action (results, L.AssignStat ([L.IndexExp (a, b)], [c])))
                  | Primitives.Lua_call =>
-                     doBinary (fn (f, args) =>
+                     doTernary (fn (f, args, _) =>
                        let
                          val arg = vector [TableUnpackN args]
                        in
@@ -2116,7 +2173,8 @@ struct
                end
            | N.ValDec
                { exp =
-                   N.PrimOp {primOp = F.LuaCallOp, tyargs = _, args = f :: args}
+                   N.PrimOp
+                     {primOp = F.LuaCallOp, tyargs = _, args = _ :: f :: args}
                , results = [result]
                } =>
                let
@@ -2148,7 +2206,7 @@ struct
            | N.ValDec
                { exp =
                    N.PrimOp
-                     {primOp = F.LuaCall1Op, tyargs = _, args = f :: args}
+                     {primOp = F.LuaCall1Op, tyargs = _, args = _ :: f :: args}
                , results = [result]
                } =>
                let
@@ -2173,7 +2231,10 @@ struct
            | N.ValDec
                { exp =
                    N.PrimOp
-                     {primOp = F.LuaCallNOp n, tyargs = _, args = f :: args}
+                     { primOp = F.LuaCallNOp n
+                     , tyargs = _
+                     , args = _ :: f :: args
+                     }
                , results
                } =>
                let
@@ -2206,7 +2267,7 @@ struct
                    N.PrimOp
                      { primOp = F.LuaMethodOp name
                      , tyargs = _
-                     , args = obj :: args
+                     , args = _ :: obj :: args
                      }
                , results = [result]
                } =>
@@ -2243,7 +2304,7 @@ struct
                    N.PrimOp
                      { primOp = F.LuaMethod1Op name
                      , tyargs = _
-                     , args = obj :: args
+                     , args = _ :: obj :: args
                      }
                , results = [result]
                } =>
@@ -2273,7 +2334,7 @@ struct
                    N.PrimOp
                      { primOp = F.LuaMethodNOp (name, n)
                      , tyargs = _
-                     , args = obj :: args
+                     , args = _ :: obj :: args
                      }
                , results
                } =>
