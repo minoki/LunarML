@@ -11,17 +11,15 @@ val hash = Word.fromInt
 val compare = Int.compare
 val objToDescMap = LunarML.assumeDiscardable (fn () =>
                                                  let val t = Lua.newTable ()
-                                                     val meta = Lua.newTable ()
-                                                 in Lua.setField (meta, "__mode", Lua.fromString "k")
-                                                  ; Lua.call0 Lua.Lib.setmetatable #[t, meta]
+                                                     val meta = Lua.newTableWith #[("__mode", Lua.fromString "k")]
+                                                 in Lua.call0 Lua.Lib.setmetatable #[t, meta]
                                                   ; t
                                                  end
                                              ) () (* key: object, value: int *)
 val descToObjMap = LunarML.assumeDiscardable (fn () =>
                                                  let val t = Lua.newTable ()
-                                                     val meta = Lua.newTable ()
-                                                 in Lua.setField (meta, "__mode", Lua.fromString "v")
-                                                  ; Lua.call0 Lua.Lib.setmetatable #[t, meta]
+                                                     val meta = Lua.newTableWith #[("__mode", Lua.fromString "v")]
+                                                 in Lua.call0 Lua.Lib.setmetatable #[t, meta]
                                                   ; t
                                                  end
                                              ) () (* key: int, value: object *)

@@ -1291,6 +1291,13 @@ do
       mayraise = false,
       discardable = true,
     },
+    {
+      name = "Lua.newTableWith",
+      srcname = "Lua_newTableWith",
+      type = { vars = {}, args = {vector(pair(string, LuaValue))}, results = {LuaValue} },
+      mayraise = false,
+      discardable = true,
+    },
 
     --
     -- JavaScript backend

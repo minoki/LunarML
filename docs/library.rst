@@ -1763,6 +1763,7 @@ Lua features are accessible via the ``Lua`` structure in ``$(SML_LIB)/basis/lua.
      val unsafeToValue : 'a -> value
      val unsafeFromValue : value -> 'a
      val newTable : unit -> value  (* {} *)
+     val newTableWith : (string * value) vector -> value
      val function : (value vector -> value vector) -> value
      val + : value * value -> value
      val - : value * value -> value

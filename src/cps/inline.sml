@@ -1676,6 +1676,37 @@ struct
           , attr = {alwaysInline = true, typeOnly = false}
           }
       end
+    val Lua_newTableWith =
+      let
+        val k = newCont ()
+        val entries = newVId "entries"
+        val result = newVId "t"
+      in
+        C.Abs
+          { contParam = k
+          , tyParams = []
+          , params =
+              [( entries
+               , FSyntax.Types.vector
+                   (FSyntax.PairType
+                      (FSyntax.Types.string, FSyntax.Types.lua_value))
+               )]
+          , body = C.Let
+              { decs =
+                  [C.ValDec
+                     { exp = C.PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Lua_newTableWith
+                         , tyargs = []
+                         , args = [C.Var entries]
+                         }
+                     , results = [(SOME result, FSyntax.Types.lua_value)]
+                     }]
+              , cont = C.AppCont {applied = k, args = [C.Var result]}
+              }
+          , resultTy = FSyntax.Types.lua_value
+          , attr = {alwaysInline = true, typeOnly = false}
+          }
+      end
     val JavaScript_function =
       let
         val k = newCont ()
@@ -1795,6 +1826,7 @@ struct
           )
         , (InitialEnv.VId_Fail_payload, {exp = SOME Fail_payload})
         , (InitialEnv.VId_Fail, {exp = SOME Fail_construct})
+        , (InitialEnv.VId_Lua_newTableWith, {exp = SOME Lua_newTableWith})
         , (InitialEnv.VId_JavaScript_function, {exp = SOME JavaScript_function})
         , ( InitialEnv.VId_JavaScript_encodeUtf8
           , {exp = SOME JavaScript_encodeUtf8}

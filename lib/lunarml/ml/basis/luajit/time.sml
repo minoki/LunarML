@@ -91,14 +91,15 @@ fun toLuaTime (x : Int54.int) : Lua.value
           val hour' = min' div 60
           val hour = hour' mod 24
           val day' = hour' div 24
-          val t = Lua.newTable ()
-      in Lua.setField (t, "year", Lua.fromInt 2001)
-       ; Lua.setField (t, "month", Lua.fromInt 1)
-       ; Lua.setField (t, "day", Lua.fromInt54 (day' + 1))
-       ; Lua.setField (t, "hour", Lua.fromInt54 hour)
-       ; Lua.setField (t, "min", Lua.fromInt54 min)
-       ; Lua.setField (t, "sec", Lua.fromInt54 sec)
-       ; Lua.call1 Lua.Lib.os.time #[t]
+          val t = Lua.newTableWith
+            #[("year", Lua.fromInt 2001)
+             ,("month", Lua.fromInt 1)
+             ,("day", Lua.fromInt54 (day' + 1))
+             ,("hour", Lua.fromInt54 hour)
+             ,("min", Lua.fromInt54 min)
+             ,("sec", Lua.fromInt54 sec)
+             ]
+      in Lua.call1 Lua.Lib.os.time #[t]
       end
 structure Time = struct
 open Time

@@ -79,6 +79,7 @@ struct
         , (VId_Lua_Error_payload, "_id")
         , (VId_Lua_NIL, "nil") (* literal *)
         , (VId_Lua_function, "_Lua_function")
+        , (VId_Lua_newTableWith, "_newTableWith")
         , (VId_Lua_Lib_assert, "assert")
         , (VId_Lua_Lib_error, "error")
         , (VId_Lua_Lib_getmetatable, "getmetatable")
@@ -148,6 +149,7 @@ struct
         , (VId_Lua_Error_payload, "_id")
         , (VId_Lua_NIL, "nil") (* literal *)
         , (VId_Lua_function, "_Lua_function")
+        , (VId_Lua_newTableWith, "_newTableWith")
         , (VId_Lua_Lib_assert, "assert")
         , (VId_Lua_Lib_error, "error")
         , (VId_Lua_Lib_getmetatable, "getmetatable")
@@ -1747,6 +1749,56 @@ struct
                | Primitives.Lua_setGlobal =>
                    raise CodeGenError "unexpected Lua.setGlobal"
                | Primitives.Lua_newTable => L.TableExp (vector [])
+               | Primitives.Lua_newTableWith =>
+                   (case args of
+                      [entries] =>
+                        let
+                          fun fallback () =
+                            L.CallExp
+                              ( L.VarExp (L.PredefinedId "_newTableWith")
+                              , vector [doExp (ctx, env, entries)]
+                              )
+                          fun extract (N.Record fields) =
+                                (case
+                                   ( Syntax.LabelMap.find
+                                       (fields, Syntax.NumericLabel 1)
+                                   , Syntax.LabelMap.find
+                                       (fields, Syntax.NumericLabel 2)
+                                   )
+                                 of
+                                   ( SOME (N.Value (C.StringConst key))
+                                   , SOME value
+                                   ) => SOME (key, value)
+                                 | _ => NONE)
+                            | extract _ = NONE
+                          fun uniqueKeys (_, []) = true
+                            | uniqueKeys (set, (key, _) :: entries) =
+                                if StringSet.member (set, key) then
+                                  false
+                                else
+                                  uniqueKeys (StringSet.add (set, key), entries)
+                        in
+                          case entries of
+                            N.PrimOp
+                              {primOp = FSyntax.VectorOp, tyargs = _, args} =>
+                              (case ListUtil.mapOption extract args of
+                                 SOME entries =>
+                                   if uniqueKeys (StringSet.empty, entries) then
+                                     L.TableExp
+                                       (Vector.map
+                                          (fn (key, value) =>
+                                             ( L.StringKey key
+                                             , doExp (ctx, env, value)
+                                             )) (Vector.fromList entries))
+                                   else
+                                     fallback ()
+                               | NONE => fallback ())
+                          | _ => fallback ()
+                        end
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ ": invalid number of arguments"))
                | Primitives.DelimCont_newPromptTag => L.TableExp (vector [])
                | Primitives.assumeDiscardable =>
                    doBinaryExp

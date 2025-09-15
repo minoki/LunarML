@@ -9,6 +9,7 @@ sig
     -> 'a list
        * 'a list (* splitAt (xs, n) = (List.take (xs, n), List.drop (xs, n)) *)
   val mapCont: ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r
+  val mapOption: ('a -> 'b option) -> 'a list -> ('b list) option
   val foldlCont: ('a * 'b * ('b -> 'r) -> 'r)
                  -> 'b
                  -> 'a list
@@ -32,6 +33,18 @@ struct
   fun mapCont _ [] cont = cont []
     | mapCont f (x :: xs) cont =
         f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
+
+  fun mapOption f =
+    let
+      fun go (acc, []) =
+            SOME (List.rev acc)
+        | go (acc, x :: xs) =
+            case f x of
+              SOME y => go (y :: acc, xs)
+            | NONE => NONE
+    in
+      fn xs => go ([], xs)
+    end
 
   fun foldlCont _ init [] cont = cont init
     | foldlCont f init (x :: xs) cont =

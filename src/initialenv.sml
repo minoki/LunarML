@@ -53,6 +53,7 @@ sig
   val VId_Array_tabulate: TypedSyntax.VId
   val VId_Lua_NIL: TypedSyntax.VId
   val VId_Lua_function: TypedSyntax.VId
+  val VId_Lua_newTableWith: TypedSyntax.VId
   val VId_Lua_Lib_assert: TypedSyntax.VId
   val VId_Lua_Lib_error: TypedSyntax.VId
   val VId_Lua_Lib_getmetatable: TypedSyntax.VId
@@ -235,6 +236,7 @@ struct
   (* Lua interface *)
   val VId_Lua_NIL = newVId "_Prim.Lua.NIL"
   val VId_Lua_function = newVId "_Prim.Lua.function"
+  val VId_Lua_newTableWith = newVId "_Prim.Lua.newTableWith"
   val VId_Lua_Lib_assert = newVId "_Prim.Lua.Lib.assert"
   val VId_Lua_Lib_error = newVId "_Prim.Lua.Lib.error"
   val VId_Lua_Lib_getmetatable = newVId "_Prim.Lua.Lib.getmetatable"
@@ -547,6 +549,14 @@ struct
               , TypeScheme
                   ( []
                   , (PT.vector PT.lua_value --> PT.vector PT.lua_value)
+                    --> PT.lua_value
+                  )
+              )
+            , ( "_Prim.Lua.newTableWith"
+              , VId_Lua_newTableWith
+              , TypeScheme
+                  ( []
+                  , PT.vector (PT.pair (PT.string, PT.lua_value))
                     --> PT.lua_value
                   )
               )

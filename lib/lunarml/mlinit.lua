@@ -7,6 +7,9 @@ local error = error
 --BEGIN getmetatable
 local getmetatable = getmetatable
 --END
+--BEGIN ipairs
+local ipairs = ipairs
+--END
 --BEGIN pairs
 local pairs = pairs
 --END
@@ -447,5 +450,14 @@ local function _Lua_function(f)
     local r = f(table_pack(...))
     return table_unpack(r, 1, r.n)
   end
+end
+--END
+--BEGIN _newTableWith: ipairs
+local function _newTableWith(entries)
+  local t = {}
+  for _, p in ipairs(entries) do
+    t[p[1]] = p[2]
+  end
+  return t
 end
 --END
