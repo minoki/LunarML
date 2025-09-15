@@ -175,6 +175,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Lua_setGlobal (* Lua.setGlobal *)
                 | Lua_newTable (* Lua.newTable *)
                 | Lua_newTableWith (* Lua.newTableWith *)
+                | Lua_newTableWithMetatable (* Lua.newTableWithMetatable *)
                 | JavaScript_sub (* JavaScript.sub *)
                 | JavaScript_set (* JavaScript.set *)
                 | JavaScript_EQUAL (* JavaScript.=== *)
@@ -597,6 +598,7 @@ fun toString EQUAL = "="
   | toString Lua_setGlobal = "Lua.setGlobal"
   | toString Lua_newTable = "Lua.newTable"
   | toString Lua_newTableWith = "Lua.newTableWith"
+  | toString Lua_newTableWithMetatable = "Lua.newTableWithMetatable"
   | toString JavaScript_sub = "JavaScript.sub"
   | toString JavaScript_set = "JavaScript.set"
   | toString JavaScript_EQUAL = "JavaScript.==="
@@ -1019,6 +1021,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Lua.setGlobal" = SOME Lua_setGlobal
   | fromString "Lua.newTable" = SOME Lua_newTable
   | fromString "Lua.newTableWith" = SOME Lua_newTableWith
+  | fromString "Lua.newTableWithMetatable" = SOME Lua_newTableWithMetatable
   | fromString "JavaScript.sub" = SOME JavaScript_sub
   | fromString "JavaScript.set" = SOME JavaScript_set
   | fromString "JavaScript.===" = SOME JavaScript_EQUAL
@@ -1229,6 +1232,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Lua_setGlobal = false
   | mayRaise Lua_newTable = false
   | mayRaise Lua_newTableWith = false
+  | mayRaise Lua_newTableWithMetatable = false
   | mayRaise JavaScript_sub = true
   | mayRaise JavaScript_set = true
   | mayRaise JavaScript_EQUAL = false
@@ -1438,6 +1442,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Lua_setGlobal = false
   | isDiscardable Lua_newTable = true
   | isDiscardable Lua_newTableWith = true
+  | isDiscardable Lua_newTableWithMetatable = true
   | isDiscardable JavaScript_sub = false
   | isDiscardable JavaScript_set = false
   | isDiscardable JavaScript_EQUAL = true
@@ -1650,6 +1655,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Lua_setGlobal, [_, _]) = false
   | isDiscardableWithArgs (Lua_newTable, []) = true
   | isDiscardableWithArgs (Lua_newTableWith, [_]) = true
+  | isDiscardableWithArgs (Lua_newTableWithMetatable, [_, _]) = true
   | isDiscardableWithArgs (JavaScript_sub, [_, _, e]) = isDiscardablePE e
   | isDiscardableWithArgs (JavaScript_set, [_, _, _]) = false
   | isDiscardableWithArgs (JavaScript_EQUAL, [_, _]) = true
@@ -1918,6 +1924,7 @@ fun returnArity EQUAL = 1
   | returnArity Lua_setGlobal = 0
   | returnArity Lua_newTable = 1
   | returnArity Lua_newTableWith = 1
+  | returnArity Lua_newTableWithMetatable = 1
   | returnArity JavaScript_sub = 1
   | returnArity JavaScript_set = 0
   | returnArity JavaScript_EQUAL = 1
@@ -2391,6 +2398,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], results = [] }
   | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], results = [LuaValue] }
   | typeOf Primitives.Lua_newTableWith = { vars = [], args = vector [vectorOf (pairOf (string, LuaValue))], results = [LuaValue] }
+  | typeOf Primitives.Lua_newTableWithMetatable = { vars = [], args = vector [vectorOf (pairOf (string, LuaValue)), LuaValue], results = [LuaValue] }
   | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, prim_effect], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], results = [] }
   | typeOf Primitives.JavaScript_EQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }

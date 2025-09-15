@@ -575,6 +575,45 @@ struct
                         ^ ": invalid number of arguments")
                fun doBinaryOpE binop =
                  doBinaryExpE (fn (a, b) => L.BinExp (binop, a, b))
+               fun newTableWithImpl entries =
+                 let
+                   fun fallback () =
+                     L.CallExp
+                       ( L.VarExp (L.PredefinedId "_newTableWith")
+                       , vector [doExp (ctx, env, entries)]
+                       )
+                   fun extract (N.Record fields) =
+                         (case
+                            ( Syntax.LabelMap.find
+                                (fields, Syntax.NumericLabel 1)
+                            , Syntax.LabelMap.find
+                                (fields, Syntax.NumericLabel 2)
+                            )
+                          of
+                            (SOME (N.Value (C.StringConst key)), SOME value) =>
+                              SOME (key, value)
+                          | _ => NONE)
+                     | extract _ = NONE
+                   fun uniqueKeys (_, []) = true
+                     | uniqueKeys (set, (key, _) :: entries) =
+                         if StringSet.member (set, key) then false
+                         else uniqueKeys (StringSet.add (set, key), entries)
+                 in
+                   case entries of
+                     N.PrimOp {primOp = FSyntax.VectorOp, tyargs = _, args} =>
+                       (case ListUtil.mapOption extract args of
+                          SOME entries =>
+                            if uniqueKeys (StringSet.empty, entries) then
+                              L.TableExp
+                                (Vector.map
+                                   (fn (key, value) =>
+                                      (L.StringKey key, doExp (ctx, env, value)))
+                                   (Vector.fromList entries))
+                            else
+                              fallback ()
+                        | NONE => fallback ())
+                   | _ => fallback ()
+                 end
              in
                case prim of
                  Primitives.mkFn2 =>
@@ -1751,50 +1790,19 @@ struct
                | Primitives.Lua_newTable => L.TableExp (vector [])
                | Primitives.Lua_newTableWith =>
                    (case args of
-                      [entries] =>
-                        let
-                          fun fallback () =
-                            L.CallExp
-                              ( L.VarExp (L.PredefinedId "_newTableWith")
-                              , vector [doExp (ctx, env, entries)]
-                              )
-                          fun extract (N.Record fields) =
-                                (case
-                                   ( Syntax.LabelMap.find
-                                       (fields, Syntax.NumericLabel 1)
-                                   , Syntax.LabelMap.find
-                                       (fields, Syntax.NumericLabel 2)
-                                   )
-                                 of
-                                   ( SOME (N.Value (C.StringConst key))
-                                   , SOME value
-                                   ) => SOME (key, value)
-                                 | _ => NONE)
-                            | extract _ = NONE
-                          fun uniqueKeys (_, []) = true
-                            | uniqueKeys (set, (key, _) :: entries) =
-                                if StringSet.member (set, key) then
-                                  false
-                                else
-                                  uniqueKeys (StringSet.add (set, key), entries)
-                        in
-                          case entries of
-                            N.PrimOp
-                              {primOp = FSyntax.VectorOp, tyargs = _, args} =>
-                              (case ListUtil.mapOption extract args of
-                                 SOME entries =>
-                                   if uniqueKeys (StringSet.empty, entries) then
-                                     L.TableExp
-                                       (Vector.map
-                                          (fn (key, value) =>
-                                             ( L.StringKey key
-                                             , doExp (ctx, env, value)
-                                             )) (Vector.fromList entries))
-                                   else
-                                     fallback ()
-                               | NONE => fallback ())
-                          | _ => fallback ()
-                        end
+                      [entries] => newTableWithImpl entries
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ ": invalid number of arguments"))
+               | Primitives.Lua_newTableWithMetatable =>
+                   (case args of
+                      [entries, meta] =>
+                        L.CallExp
+                          ( L.VarExp (L.PredefinedId "setmetatable")
+                          , vector
+                              [newTableWithImpl entries, doExp (ctx, env, meta)]
+                          )
                     | _ =>
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim

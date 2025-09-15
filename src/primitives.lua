@@ -1298,6 +1298,13 @@ do
       mayraise = false,
       discardable = true,
     },
+    {
+      name = "Lua.newTableWithMetatable",
+      srcname = "Lua_newTableWithMetatable",
+      type = { vars = {}, args = {vector(pair(string, LuaValue)), LuaValue}, results = {LuaValue} },
+      mayraise = false,
+      discardable = true,
+    },
 
     --
     -- JavaScript backend

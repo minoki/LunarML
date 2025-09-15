@@ -70,6 +70,7 @@ structure Lua : sig
               val unsafeFromValue : value -> 'a
               val newTable : unit -> value  (* {} *)
               val newTableWith : (string * value) vector -> value
+              val newTableWithMetatable : (string * value) vector * value -> value
               val function : (value vector -> value vector) -> value
               val + : value * value -> value
               val - : value * value -> value
@@ -326,6 +327,7 @@ fun method9WithEffect e (obj, name) args = _primCall "Lua.method9" (obj, name, a
 val NIL = _Prim.Lua.NIL
 fun newTable () = _primCall "Lua.newTable" ()
 val newTableWith = _Prim.Lua.newTableWith
+fun newTableWithMetatable (entries, meta) = _primCall "Lua.newTableWithMetatable" (entries, meta)
 val function = _Prim.Lua.function
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)

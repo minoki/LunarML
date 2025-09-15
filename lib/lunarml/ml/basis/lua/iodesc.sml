@@ -9,20 +9,12 @@ structure IODesc :> sig
 type iodesc = int
 val hash = Word.fromInt
 val compare = Int.compare
-val objToDescMap = LunarML.assumeDiscardable (fn () =>
-                                                 let val t = Lua.newTable ()
-                                                     val meta = Lua.newTableWith #[("__mode", Lua.fromString "k")]
-                                                 in Lua.call0 Lua.Lib.setmetatable #[t, meta]
-                                                  ; t
-                                                 end
-                                             ) () (* key: object, value: int *)
-val descToObjMap = LunarML.assumeDiscardable (fn () =>
-                                                 let val t = Lua.newTable ()
-                                                     val meta = Lua.newTableWith #[("__mode", Lua.fromString "v")]
-                                                 in Lua.call0 Lua.Lib.setmetatable #[t, meta]
-                                                  ; t
-                                                 end
-                                             ) () (* key: int, value: object *)
+val objToDescMap = let val meta = Lua.newTableWith #[("__mode", Lua.fromString "k")]
+                    in Lua.newTableWithMetatable (#[], meta)
+                    end (* key: object, value: int *)
+val descToObjMap = let val meta = Lua.newTableWith #[("__mode", Lua.fromString "v")]
+                   in Lua.newTableWithMetatable (#[], meta)
+                   end (* key: int, value: object *)
 val freeList : (int * int list) ref = ref (0, [])
 fun newDesc () : int = case !freeList of
                            (n, []) => ( freeList := (n + 1, [])
