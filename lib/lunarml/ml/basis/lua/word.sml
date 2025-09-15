@@ -329,10 +329,12 @@ local
     val fromLargeWord = fromLarge
     end
     structure LargeWord = Word64
+    (*
     val () = if Word.wordSize <> 64 then
                  raise Fail "Word64 is not available"
              else
                  ()
+    *)
     fun wordToWord8 x = Word.andb (x, Word8.FULL)
     fun wordToWord16 x = Word.andb (x, Word16.FULL)
     fun wordToWord32 x = Word.andb (x, Word32.FULL)
