@@ -694,8 +694,8 @@ do
       name = "String.^",
       srcname = "String_HAT",
       type = HomoBinary(string),
-      mayraise = true, -- Size
-      discardable = false, -- Size
+      mayraise = false, -- ignore Size
+      discardable = true, -- ignore Size
     },
     {
       name = "String.size{.i}",
@@ -764,8 +764,8 @@ do
       name = "String16.^",
       srcname = "String16_HAT",
       type = HomoBinary(string16),
-      mayraise = true, -- Size
-      discardable = false, -- Size
+      mayraise = false, -- ignore Size
+      discardable = true, -- ignore Size
     },
     {
       name = "String16.size{.i}",
