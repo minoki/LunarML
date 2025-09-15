@@ -706,7 +706,7 @@ struct
             | LanguageOptions.ERROR => checkRedundancy (ctx, matches, ERROR)
           end
         )
-    | goExp (ctx, F.MultiFnExp (_, body)) = goExp (ctx, body)
+    | goExp (ctx, F.MultiFnExp (_, _, body)) = goExp (ctx, body)
     | goExp (ctx, F.ProjectionExp {label = _, record, fieldTypes = _}) =
         goExp (ctx, record)
     | goExp (ctx, F.TyAbsExp (_, _, exp)) = goExp (ctx, exp)

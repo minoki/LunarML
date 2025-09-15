@@ -296,6 +296,7 @@ sig
   val print_AnonymousTyVar: AnonymousTyVar -> string
   val print_TyName: TyName -> string
   val print_Ty: Ty -> string
+  val getVIdName: VId -> string
   val freeTyVarsInTy: TyVarSet.set * Ty -> TyVarSet.set
   val freeAnonymousTyVarsInTy: Ty -> AnonymousTyVar list
   val applySubstPureTyAsTy: Ty TyVarMap.map -> PureTy -> Ty
@@ -1032,6 +1033,8 @@ struct
           ^ print_WrittenSignature s ^ "," ^ print_StrExp strexp ^ "))"
   end (* structure PrettyPrint *)
   open PrettyPrint
+
+  fun getVIdName (MkVId (name, _)) = name
 
   (*: val freeTyVarsInTy : TyVarSet.set * Ty -> TyVarSet.set *)
   fun freeTyVarsInTy (bound, ty) =

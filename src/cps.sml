@@ -722,6 +722,15 @@ struct
         TypedSyntax.MkVId ("tmp", n)
       end
 
+    fun genSymWithHint (ctx: Context, NONE) = genSym ctx
+      | genSymWithHint (ctx, SOME name) =
+          let
+            val n = !(#nextVId ctx)
+            val _ = #nextVId ctx := n + 1
+          in
+            TypedSyntax.MkVId (name, n)
+          end
+
     fun renewSym (ctx: Context, TypedSyntax.MkVId (name, _)) =
       let
         val n = !(#nextVId ctx)
@@ -1264,7 +1273,7 @@ struct
                               val contParam = genContSym ctx
                             in
                               case exp of
-                                F.MultiFnExp (params, body) =>
+                                F.MultiFnExp (_, params, body) =>
                                   let
                                     val env =
                                       List.foldl
@@ -1435,12 +1444,12 @@ struct
                    )
                  end))
       | F.CaseExp _ => raise Fail "CaseExp: not supported here"
-      | F.MultiFnExp (params, body) =>
+      | F.MultiFnExp (nameHint, params, body) =>
           let
             val f =
               case getResultHint k of
                 SOME f => f
-              | NONE => genSym ctx
+              | NONE => genSymWithHint (ctx, nameHint)
             val kk = genContSym ctx
             val innerEnv =
               List.foldl

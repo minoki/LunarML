@@ -75,7 +75,8 @@ struct
                }
          | F.IfThenElseExp (exp1, exp2, exp3) =>
              F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
-         | F.MultiFnExp (params, exp) => F.MultiFnExp (params, doExp exp)
+         | F.MultiFnExp (nameHint, params, exp) =>
+             F.MultiFnExp (nameHint, params, doExp exp)
          | F.ProjectionExp {label, record, fieldTypes} =>
              F.ProjectionExp
                {label = label, record = doExp record, fieldTypes = fieldTypes}
@@ -583,8 +584,8 @@ struct
           , matchType = matchType
           , resultTy = resultTy
           }
-    | doExp (F.MultiFnExp (params, exp)) =
-        F.MultiFnExp (params, doExp exp)
+    | doExp (F.MultiFnExp (nameHint, params, exp)) =
+        F.MultiFnExp (nameHint, params, doExp exp)
     | doExp (F.ProjectionExp {label, record, fieldTypes}) =
         F.ProjectionExp
           {label = label, record = doExp record, fieldTypes = fieldTypes}
@@ -717,7 +718,7 @@ struct
            , matchType = _
            , resultTy = _
            }) = false (* TODO *)
-    | isDiscardable (F.MultiFnExp (_, _)) = true
+    | isDiscardable (F.MultiFnExp (_, _, _)) = true
     | isDiscardable (F.ProjectionExp {label = _, record, fieldTypes = _}) =
         isDiscardable record
     | isDiscardable (F.TyAbsExp (_, _, exp)) = isDiscardable exp
@@ -856,9 +857,9 @@ struct
               }
           )
         end
-    | doExp (F.MultiFnExp (params, exp)) acc =
+    | doExp (F.MultiFnExp (nameHint, params, exp)) acc =
         let val (used, exp) = doExp exp acc
-        in (used, F.MultiFnExp (params, exp))
+        in (used, F.MultiFnExp (nameHint, params, exp))
         end
     | doExp (F.ProjectionExp {label, record, fieldTypes}) acc =
         let

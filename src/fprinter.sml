@@ -279,7 +279,7 @@ struct
                 doPat 0 pat
                 @ P.Fragment " => " :: doExp 0 exp @ P.LineTerminator :: rest)
              [P.DecreaseIndent 2, P.Indent] matches)
-    | doExp prec (F.MultiFnExp (params, exp)) =
+    | doExp prec (F.MultiFnExp (_, params, exp)) =
         showParen (prec >= 1)
           (P.Fragment "fn ("
            ::

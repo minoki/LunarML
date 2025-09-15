@@ -674,7 +674,7 @@ struct
             List.app checkMatch matches;
             resultTy
           end
-      | inferExp (env, F.MultiFnExp (params, exp)) =
+      | inferExp (env, F.MultiFnExp (_, params, exp)) =
           let
             val env' = modifyValEnv
               (fn m => List.foldl TypedSyntax.VIdMap.insert' m params, env)
@@ -769,7 +769,8 @@ struct
           ; checkExp (env, expectedTy, then')
           ; checkExp (env, expectedTy, else')
           )
-      | checkExp (env, expectedTy, fnexp as F.MultiFnExp (params, exp)) =
+      | checkExp
+          (env, expectedTy, fnexp as F.MultiFnExp (nameHint, params, exp)) =
           (case normalizeType (#aliasEnv env) expectedTy of
              F.MultiFnType (paramTypes, b) =>
                let
@@ -781,7 +782,8 @@ struct
                       checkSame
                         ( #aliasEnv env
                         , fn () =>
-                            "FnExp: " ^ Printer.build (FPrinter.doExp 0 fnexp)
+                            "FnExp " ^ Option.getOpt (nameHint, "(no name)")
+                            ^ ": " ^ Printer.build (FPrinter.doExp 0 fnexp)
                         , e
                         ) a) (paramTypes, params)
                  handle ListPair.UnequalLengths =>
