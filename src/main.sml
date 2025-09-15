@@ -110,7 +110,7 @@ struct
             , nextVId = #nextVId ctx
             , simplificationOccurred = ref false
             }
-          val cexp = CpsDeadCodeElimination.goStat (ctx', cexp)
+          val cexp = CpsDeadCodeElimination.goStat (ctx', false, cexp)
           val () = checkCps ("CpsDeadCodeElimination", cexp)
           val cexp = CpsUncurry.goStat (ctx', cexp)
           val () = checkCps ("CpsUncurry", cexp)
@@ -881,6 +881,13 @@ struct
           , printTimings = #printTimings opts
           } checkCpsAfterErasure cexp (3 * (#optimizationLevel opts + 3))
       val () = checkCpsAfterErasure ("optimization #3", cexp)
+      val ctx' =
+        { nextTyVar = nextTyVar
+        , nextVId = nextId
+        , simplificationOccurred = ref false
+        }
+      val cexp = CpsDeadCodeElimination.goStat (ctx', true, cexp)
+      val () = checkCpsAfterErasure ("after final DCE", cexp)
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then

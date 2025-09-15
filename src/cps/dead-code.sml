@@ -383,7 +383,7 @@ local
 in
   structure CpsDeadCodeElimination:
   sig
-    val goStat: CpsSimplify.Context * CSyntax.Stat -> CSyntax.Stat
+    val goStat: CpsSimplify.Context * bool * CSyntax.Stat -> CSyntax.Stat
   end =
   struct
     local
@@ -397,8 +397,8 @@ in
         , cont_usage: CpsUsageAnalysis.cont_usage_table
         , cont_rec_usage: CpsUsageAnalysis.cont_usage_table
         , dead_code_analysis: CpsDeadCodeAnalysis.usage
+        , is_final_stage: bool
         }
-      (* TODO: Eliminate subst and csubst *)
       fun simplifyDec (ctx: Context, appliedCont: C.CVar option)
         (dec, (env, cenv, acc: C.Dec list)) =
         case dec of
@@ -569,7 +569,7 @@ in
                    in
                      if
                        List.exists (fn (p, _) => Option.isSome p) params
-                       orelse List.null params
+                       orelse List.null params orelse #is_final_stage ctx
                      then
                        let
                          val cenv =
@@ -585,6 +585,12 @@ in
                        end
                      else
                        let
+                         (*
+                            letcont k a = ... (a unused)
+                            ~>
+                            letcont k_worker () = ...
+                            letcont[always_inline] k a = goto k_worker ()
+                          *)
                          val workerName =
                            CpsSimplify.renewCVar (#base ctx, name)
                          val wrapperBody =
@@ -845,7 +851,7 @@ in
               }
         | C.Raise (_, _) => e
         | C.Unreachable => e
-      fun goStat (ctx: CpsSimplify.Context, exp) =
+      fun goStat (ctx: CpsSimplify.Context, is_final_stage: bool, exp) =
         let
           val usage = CpsUsageAnalysis.analyze exp
           val ctx' =
@@ -855,6 +861,7 @@ in
             , cont_usage = #cont_usage usage
             , cont_rec_usage = #cont_rec_usage usage
             , dead_code_analysis = #dead_code_analysis usage
+            , is_final_stage = is_final_stage
             }
         in
           simplifyStat (ctx', TypedSyntax.VIdMap.empty, C.CVarMap.empty, exp)
