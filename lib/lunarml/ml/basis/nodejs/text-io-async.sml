@@ -531,7 +531,10 @@ fun inputLine stream = case StreamIO.inputLine (getInstream stream) of
                                                    )
 fun openIn path = mkInstream (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)], path))
 fun openString content = mkInstream (StreamIO.openVector content)
-val stdIn = LunarML.assumeDiscardable (fn () => mkInstream (StreamIO.openReadable (stdin, "<stdin>"))) ()
+val stdIn = LunarML.assumeDiscardable (fn () =>
+  let val stdIn = StreamIO.openReadable (stdin, "<stdin>")
+  in mkInstream stdIn
+  end) ()
 fun scanStream scan ins = case scan StreamIO.input1 (getInstream ins) of
                               NONE => NONE
                             | SOME (x, ins') => ( setInstream (ins, ins')
@@ -546,8 +549,14 @@ fun openAppend path = let val options = JavaScript.newObject ()
                           val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
                       in mkOutstream (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
                       end
-val stdOut = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF, "<stdout>"))) ()
-val stdErr = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF, "<stderr>"))) ()
+val stdOut = LunarML.assumeDiscardable (fn () =>
+  let val stdOut = Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF, "<stdout>")
+  in mkOutstream stdOut
+  end) ()
+val stdErr = LunarML.assumeDiscardable (fn () =>
+  let val stdErr = Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF, "<stderr>")
+  in mkOutstream stdErr
+  end) ()
 fun print s = Outstream.outputAndFlush (getOutstream stdOut, s)
 end (* local *)
 end (* structure TextIO *)
