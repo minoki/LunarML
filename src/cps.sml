@@ -719,7 +719,7 @@ struct
         val n = !(#nextVId ctx)
         val _ = #nextVId ctx := n + 1
       in
-        TypedSyntax.MkVId ("tmp", n)
+        TypedSyntax.MkVId ("", n)
       end
 
     fun genSymWithHint (ctx: Context, NONE) = genSym ctx
@@ -843,6 +843,9 @@ struct
           end
     fun getResultHint (META (hint, _)) = hint
       | getResultHint (REIFIED _) = NONE
+    fun getResultHintString (META (hint, _)) =
+          Option.map TypedSyntax.getVIdName hint
+      | getResultHintString (REIFIED _) = NONE
     val initialEnv: (C.Value option * Ty) TypedSyntax.VIdMap.map =
       let
         val tv = TypedSyntax.MkTyVar ("a", 0)
@@ -1503,7 +1506,7 @@ struct
                end)
       | F.TyAbsExp (tv, kind, body) =>
           let
-            val f = genSym ctx
+            val f = genSymWithHint (ctx, getResultHintString k)
             val kk = genContSym ctx
             val (resultTy, body) = transformBlock (ctx, env) body kk
             val fnTy = F.ForallType (tv, kind, resultTy)
@@ -1656,6 +1659,14 @@ sig
     -> CSyntax.Stat
   val alphaConvert:
     Context
+    * FSyntax.Ty TypedSyntax.TyVarMap.map
+    * CSyntax.Value TypedSyntax.VIdMap.map
+    * CSyntax.CVar CSyntax.CVarMap.map
+    * CSyntax.Stat
+    -> CSyntax.Stat
+  val alphaConvertWithNameOverride:
+    Context
+    * string TypedSyntax.VIdMap.map
     * FSyntax.Ty TypedSyntax.TyVarMap.map
     * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
@@ -2249,6 +2260,308 @@ struct
       | alphaConvert (_, tysubst, subst, _, C.Raise (span, x)) =
           C.Raise (span, substValue (tysubst, subst) x)
       | alphaConvert (_, _, _, _, e as C.Unreachable) = e
+    fun renewVIdWithOverride ({nextVId, ...}: Context, _, SOME name) =
+          let val n = !nextVId
+          in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
+          end
+      | renewVIdWithOverride
+          ({nextVId, ...}: Context, TypedSyntax.MkVId (name, _), NONE) =
+          let val n = !nextVId
+          in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
+          end
+    fun alphaConvertWithNameOverrideDec (ctx: Context, nameOverride)
+      (dec, (tysubst, subst, csubst, acc)) =
+      case dec of
+        C.ValDec {exp, results} =>
+          let
+            val sTy = substTy tysubst
+            val (results', subst') =
+              List.foldr
+                (fn ((SOME result, ty), (acc, subst)) =>
+                   let
+                     val result' = renewVIdWithOverride
+                       ( ctx
+                       , result
+                       , TypedSyntax.VIdMap.find (nameOverride, result)
+                       )
+                   in
+                     ( (SOME result', sTy ty) :: acc
+                     , TypedSyntax.VIdMap.insert (subst, result, C.Var result')
+                     )
+                   end
+                  | ((NONE, ty), (acc, subst)) => ((NONE, sTy ty) :: acc, subst))
+                ([], subst) results
+            val dec' = C.ValDec
+              { exp = alphaConvertSimpleExp (ctx, tysubst, subst, csubst, exp)
+              , results = results'
+              }
+          in
+            (tysubst, subst', csubst, dec' :: acc)
+          end
+      | C.RecDec defs =>
+          let
+            val (subst, nameMap) =
+              List.foldl
+                (fn ({name, ...}, (subst, nameMap)) =>
+                   let
+                     val name' = renewVIdWithOverride
+                       (ctx, name, TypedSyntax.VIdMap.find (nameOverride, name))
+                   in
+                     ( TypedSyntax.VIdMap.insert (subst, name, C.Var name')
+                     , TypedSyntax.VIdMap.insert (nameMap, name, name')
+                     )
+                   end) (subst, TypedSyntax.VIdMap.empty) defs
+            val dec' = C.RecDec
+              (List.map
+                 (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
+                    let
+                      val name' = TypedSyntax.VIdMap.lookup (nameMap, name)
+                      val contParam' = renewCVar (ctx, contParam)
+                      val (tyParams', tysubst') =
+                        List.foldr
+                          (fn ((tv, kind), (tyParams', tysubst)) =>
+                             let
+                               val tv' = renewTyVar (ctx, tv)
+                             in
+                               ( (tv', kind) :: tyParams'
+                               , TypedSyntax.TyVarMap.insert
+                                   (tysubst, tv, FSyntax.TyVar tv')
+                               )
+                             end) ([], tysubst) tyParams
+                      val sTy = substTy tysubst'
+                      val (params', subst) =
+                        List.foldr
+                          (fn ((p, ty), (params', subst)) =>
+                             let
+                               val p' = renewVId (ctx, p)
+                             in
+                               ( (p', sTy ty) :: params'
+                               , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
+                               )
+                             end) ([], subst) params
+                      val csubst =
+                        C.CVarMap.insert (csubst, contParam, contParam')
+                    in
+                      { name = name'
+                      , contParam = contParam'
+                      , tyParams = tyParams'
+                      , params = params'
+                      , body = alphaConvert (ctx, tysubst', subst, csubst, body)
+                      , resultTy = sTy resultTy
+                      , attr = attr
+                      }
+                    end) defs)
+          in
+            (tysubst, subst, csubst, dec' :: acc)
+          end
+      | C.UnpackDec {tyVar, kind, vid, unpackedTy, package} =>
+          let
+            val package' = substValue (tysubst, subst) package
+            val vid' = renewVIdWithOverride
+              (ctx, vid, TypedSyntax.VIdMap.find (nameOverride, vid))
+            val tyVar' = renewTyVar (ctx, tyVar)
+            val subst' = TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')
+            val tysubst' =
+              TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')
+            val unpackedTy' = substTy tysubst' unpackedTy
+            val dec = C.UnpackDec
+              { tyVar = tyVar'
+              , kind = kind
+              , vid = vid'
+              , unpackedTy = unpackedTy'
+              , package = package'
+              }
+          in
+            (tysubst', subst', csubst, dec :: acc)
+          end
+      | C.ContDec {name, params, body, attr} =>
+          let
+            val sTy = substTy tysubst
+            val (params', subst') =
+              List.foldr
+                (fn ((SOME p, ty), (params', subst)) =>
+                   let
+                     val p' = renewVIdWithOverride
+                       (ctx, p, TypedSyntax.VIdMap.find (nameOverride, p))
+                   in
+                     ( (SOME p', sTy ty) :: params'
+                     , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
+                     )
+                   end
+                  | ((NONE, ty), (params', subst)) =>
+                   ((NONE, sTy ty) :: params', subst)) ([], subst) params
+            val body = alphaConvertWithNameOverride
+              (ctx, nameOverride, tysubst, subst', csubst, body)
+            val name' = renewCVar (ctx, name)
+            val csubst = C.CVarMap.insert (csubst, name, name')
+            val dec' = C.ContDec
+              {name = name', params = params', body = body, attr = attr}
+          in
+            (tysubst, subst, csubst, dec' :: acc)
+          end
+      | C.RecContDec defs =>
+          let
+            val (csubst, nameMap) =
+              List.foldl
+                (fn ((f, _, _), (csubst, nameMap)) =>
+                   let
+                     val f' = renewCVar (ctx, f)
+                   in
+                     ( C.CVarMap.insert (csubst, f, f')
+                     , C.CVarMap.insert (nameMap, f, f')
+                     )
+                   end) (csubst, C.CVarMap.empty) defs
+            val sTy = substTy tysubst
+            val dec' = C.RecContDec
+              (List.map
+                 (fn (f, params, body) =>
+                    let
+                      val f' = C.CVarMap.lookup (nameMap, f)
+                      val (params', subst) =
+                        List.foldr
+                          (fn ((SOME p, ty), (params', subst)) =>
+                             let
+                               val p' = renewVIdWithOverride
+                                 ( ctx
+                                 , p
+                                 , TypedSyntax.VIdMap.find (nameOverride, p)
+                                 )
+                             in
+                               ( (SOME p', sTy ty) :: params'
+                               , TypedSyntax.VIdMap.insert (subst, p, C.Var p')
+                               )
+                             end
+                            | ((NONE, ty), (params', subst)) =>
+                             ((NONE, sTy ty) :: params', subst)) ([], subst)
+                          params
+                    in
+                      ( f'
+                      , params'
+                      , alphaConvertWithNameOverride
+                          (ctx, nameOverride, tysubst, subst, csubst, body)
+                      )
+                    end) defs)
+          in
+            (tysubst, subst, csubst, dec' :: acc)
+          end
+      | C.DatatypeDec (tyVar, kind) =>
+          let
+            val tyVar' = renewTyVar (ctx, tyVar)
+            val tysubst' =
+              TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')
+          in
+            (tysubst', subst, csubst, C.DatatypeDec (tyVar', kind) :: acc)
+          end
+      | C.ESImportDec {pure, specs, moduleName} =>
+          let
+            val sTy = substTy tysubst
+            val specs' =
+              List.map
+                (fn (name, vid, ty) =>
+                   ( name
+                   , vid
+                   , renewVIdWithOverride
+                       (ctx, vid, TypedSyntax.VIdMap.find (nameOverride, vid))
+                   , sTy ty
+                   )) specs
+            val subst' =
+              List.foldl
+                (fn ((_, vid, vid', _), subst) =>
+                   TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')) subst
+                specs'
+            val dec' = C.ESImportDec
+              { pure = pure
+              , specs =
+                  List.map (fn (name, _, vid, ty) => (name, vid, ty)) specs'
+              , moduleName = moduleName
+              }
+          in
+            (tysubst, subst', csubst, dec' :: acc)
+          end
+    and alphaConvertWithNameOverride
+          ( ctx: Context
+          , nameOverride: string TypedSyntax.VIdMap.map
+          , tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map
+          , subst: C.Value TypedSyntax.VIdMap.map
+          , csubst: C.CVar C.CVarMap.map
+          , C.Let {decs, cont}
+          ) =
+          let
+            val (tysubst', subst', csubst', revDecs) =
+              List.foldl (alphaConvertWithNameOverrideDec (ctx, nameOverride))
+                (tysubst, subst, csubst, []) decs
+          in
+            C.Let
+              { decs = List.rev revDecs
+              , cont = alphaConvertWithNameOverride
+                  (ctx, nameOverride, tysubst', subst', csubst', cont)
+              }
+          end
+      | alphaConvertWithNameOverride
+          ( _
+          , _
+          , tysubst
+          , subst
+          , csubst
+          , C.App {applied, cont, tyArgs, args, attr}
+          ) =
+          C.App
+            { applied = substValue (tysubst, subst) applied
+            , cont = substCVar csubst cont
+            , tyArgs = List.map (substTy tysubst) tyArgs
+            , args = List.map (substValue (tysubst, subst)) args
+            , attr = attr
+            }
+      | alphaConvertWithNameOverride
+          (_, _, tysubst, subst, csubst, C.AppCont {applied, args}) =
+          C.AppCont
+            { applied = substCVar csubst applied
+            , args = List.map (substValue (tysubst, subst)) args
+            }
+      | alphaConvertWithNameOverride
+          (ctx, no, tysubst, subst, csubst, C.If {cond, thenCont, elseCont}) =
+          C.If
+            { cond = substValue (tysubst, subst) cond
+            , thenCont = alphaConvertWithNameOverride
+                (ctx, no, tysubst, subst, csubst, thenCont)
+            , elseCont = alphaConvertWithNameOverride
+                (ctx, no, tysubst, subst, csubst, elseCont)
+            }
+      | alphaConvertWithNameOverride
+          ( ctx
+          , no
+          , tysubst
+          , subst
+          , csubst
+          , C.Handle
+              { body
+              , handler = (e, h)
+              , successfulExitIn
+              , successfulExitOut
+              , resultTy
+              }
+          ) =
+          let
+            val successfulExitIn' = renewCVar (ctx, successfulExitIn)
+            val csubst' =
+              C.CVarMap.insert (csubst, successfulExitIn, successfulExitIn')
+            val e' = renewVIdWithOverride
+              (ctx, e, TypedSyntax.VIdMap.find (no, e))
+            val subst' = TypedSyntax.VIdMap.insert (subst, e, C.Var e')
+          in
+            C.Handle
+              { body = alphaConvert (ctx, tysubst, subst, csubst', body)
+              , handler = (e', alphaConvertWithNameOverride
+                  (ctx, no, tysubst, subst', csubst, h))
+              , successfulExitIn = successfulExitIn'
+              , successfulExitOut = substCVar csubst successfulExitOut
+              , resultTy = substTy tysubst resultTy
+              }
+          end
+      | alphaConvertWithNameOverride
+          (_, _, tysubst, subst, _, C.Raise (span, x)) =
+          C.Raise (span, substValue (tysubst, subst) x)
+      | alphaConvertWithNameOverride (_, _, _, _, _, e as C.Unreachable) = e
     type value_info = {exp: C.SimpleExp option, isDiscardableFunction: bool}
     fun isDiscardableDec (dec, env: value_info TypedSyntax.VIdMap.map) =
       case dec of

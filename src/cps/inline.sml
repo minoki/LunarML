@@ -44,6 +44,38 @@ struct
       IntInf.min (x, IntInf.min (y, z))
     fun max3 (x, y, z) =
       IntInf.max (x, IntInf.max (y, z))
+    fun extractResults (retCont: C.CVar, body: C.Stat) =
+      let
+        fun goDec (C.ValDec _, acc) = acc
+          | goDec (C.RecDec _, acc) = acc
+          | goDec (C.UnpackDec _, acc) = acc
+          | goDec (C.ContDec {name = _, params = _, body, attr = _}, acc) =
+              goStat (body, acc)
+          | goDec (C.RecContDec defs, acc) =
+              List.foldl (fn ((_, _, body), acc) => goStat (body, acc)) acc defs
+          | goDec (C.DatatypeDec _, acc) = acc
+          | goDec (C.ESImportDec _, acc) = acc
+        and goStat (C.Let {decs, cont}, acc) =
+              goStat (cont, List.foldl goDec acc decs)
+          | goStat (C.App _, acc) = acc
+          | goStat (C.AppCont {applied = _, args}, acc) = args :: acc
+          | goStat (C.If {cond = _, thenCont, elseCont}, acc) =
+              goStat (elseCont, goStat (thenCont, acc))
+          | goStat
+              ( C.Handle
+                  { body = _
+                  , handler = (_, h)
+                  , successfulExitIn = _
+                  , successfulExitOut = _
+                  , resultTy = _
+                  }
+              , acc
+              ) = goStat (h, acc)
+          | goStat (C.Raise _, acc) = acc
+          | goStat (C.Unreachable, acc) = acc
+      in
+        goStat (body, [])
+      end
     fun simplifySimpleExp (_: Context, _: env, C.Record _) = NOT_SIMPLIFIED
       | simplifySimpleExp (ctx, env, C.PrimOp {primOp, tyargs, args}) =
           (case (primOp, args) of
@@ -1247,9 +1279,40 @@ struct
                              ("inliner: arity mismatch in function application ("
                               ^ TypedSyntax.print_VId applied ^ ")")
                        val csubst = C.CVarMap.insert (csubst, contParam, cont)
+                       val results = extractResults (cont, body)
+                       val nameOverride =
+                         case C.CVarMap.find (cenv, cont) of
+                           SOME (resultNames, _) =>
+                             let
+                               fun go (r, acc) =
+                                 ListPair.foldlEq
+                                   (fn ((n, _), v, acc) =>
+                                      case (n, C.extractVarFromValue v) of
+                                        (SOME n, SOME v) =>
+                                          let
+                                            val n = TypedSyntax.getVIdName n
+                                          in
+                                            if
+                                              TypedSyntax.VIdMap.inDomain
+                                                (acc, v) orelse n = ""
+                                            then
+                                              acc
+                                            else
+                                              TypedSyntax.VIdMap.insert
+                                                (acc, v, n)
+                                          end
+                                      | _ => acc) acc (resultNames, r)
+                             in
+                               List.foldl go TypedSyntax.VIdMap.empty results
+                             end
+                         | NONE => TypedSyntax.VIdMap.empty
                      in
-                       CpsSimplify.alphaConvert
-                         (ctx, tysubst, subst, csubst, body)
+                       if TypedSyntax.VIdMap.isEmpty nameOverride then
+                         CpsSimplify.alphaConvert
+                           (ctx, tysubst, subst, csubst, body)
+                       else
+                         CpsSimplify.alphaConvertWithNameOverride
+                           (ctx, nameOverride, tysubst, subst, csubst, body)
                      end
                  (*
                  | SOME { exp = _, isDiscardableFunction = true } =>

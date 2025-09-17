@@ -378,14 +378,14 @@ struct
      | NONE =>
          let
            val baseName =
-             if isIdentifierName smlName then smlName else smlNameToJs smlName
+             if isIdentifierName smlName then smlName
+             else if smlName = "" then "tmp"
+             else smlNameToJs smlName
            val baseName_ =
-             if
-               String.size baseName = 0
-               orelse
-               Char.isDigit (String.sub (baseName, String.size baseName - 1))
-             then baseName ^ "$"
-             else baseName
+             if Char.isDigit (String.sub (baseName, String.size baseName - 1)) then
+               baseName ^ "$"
+             else
+               baseName
            fun isAvailable x =
              not (StringSet.member (unavailableNames, x))
            fun go i =
