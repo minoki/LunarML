@@ -1288,7 +1288,20 @@ struct
                 , "invalid function declaration: name mismatch"
                 )
       val (vid, arity) = getVIdAndArity rules'
-      fun buildExp (0, [paramId]) =
+      val paramNames =
+        let
+          fun goPat (name as SOME _, _) = name
+            | goPat (NONE, Syntax.VarPat (_, vid)) =
+                SOME (Syntax.getVIdName vid)
+            | goPat (NONE, Syntax.LayeredPat (_, vid, _, _)) =
+                SOME (Syntax.getVIdName vid)
+            | goPat (NONE, _) = NONE
+          fun goRule (((_, _, pats), _, _), acc) =
+            ListPair.mapEq goPat (acc, pats)
+        in
+          List.foldl goRule (List.tabulate (arity, fn _ => NONE)) rules'
+        end
+      fun buildExp (0, [paramId], _) =
             let
               fun doRule ((_, _, [pat]), optTy, exp) =
                     let
@@ -1310,7 +1323,7 @@ struct
                 , List.map doRule rules'
                 )
             end
-        | buildExp (0, revParams) =
+        | buildExp (0, revParams, _) =
             let
               val params = List.rev revParams
               val paramTuple = Syntax.TupleExp
@@ -1335,19 +1348,24 @@ struct
             in
               Syntax.CaseExp (span, paramTuple, List.map doRule rules')
             end
-        | buildExp (n, revParams) =
+        | buildExp (n, revParams, paramNames) =
             let
-              val paramId = freshVId (ctx, "a")
+              val (paramId, paramNames) =
+                case paramNames of
+                  SOME name :: rest => (freshVId (ctx, name), rest)
+                | NONE :: rest => (freshVId (ctx, "a"), rest)
+                | [] => (freshVId (ctx, "a"), [])
             in
               Syntax.FnExp
                 ( span
                 , [( Syntax.VarPat (span, paramId)
-                   , buildExp (n - 1, paramId :: revParams)
+                   , buildExp (n - 1, paramId :: revParams, paramNames)
                    )]
                 )
             end
     in
-      Syntax.PatBind (span, Syntax.VarPat (span, vid), buildExp (arity, []))
+      Syntax.PatBind
+        (span, Syntax.VarPat (span, vid), buildExp (arity, [], paramNames))
     end
   (* (<pat1> <vid> <pat3>) -> <vid> is infix function name *)
   and doFPat
