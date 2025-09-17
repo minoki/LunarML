@@ -481,7 +481,10 @@ fun openIn path = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromS
                          mkInstream (Instream.openReadable (Readable.fromValue r0, path))
                   end
 fun openString content = mkInstream (Instream.openVector content)
-val stdIn = LunarML.assumeDiscardable (fn () => mkInstream (Instream.openReadable (Readable.fromValue Lua.Lib.io.stdin, "<stdin>"))) ()
+val stdIn = LunarML.assumeDiscardable (fn () =>
+  let val stdIn = Instream.openReadable (Readable.fromValue Lua.Lib.io.stdin, "<stdin>")
+  in mkInstream stdIn
+  end) ()
 fun scanStream scan ins = case scan StreamIO.input1 (getInstream ins) of
                               NONE => NONE
                             | SOME (x, ins') => ( setInstream (ins, ins')
@@ -500,8 +503,14 @@ fun openAppend path = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.f
                          else
                              mkOutstream (Outstream.fromWritable (Writable.fromValue r0, IO.BLOCK_BUF, path))
                       end
-val stdOut = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue Lua.Lib.io.stdout, IO.LINE_BUF, "<stdout>"))) ()
-val stdErr = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue Lua.Lib.io.stderr, IO.NO_BUF, "<stderr>"))) ()
+val stdOut = LunarML.assumeDiscardable (fn () =>
+  let val stdOut = Outstream.fromWritable (Writable.fromValue Lua.Lib.io.stdout, IO.LINE_BUF, "<stdout>")
+  in mkOutstream stdOut
+  end) ()
+val stdErr = LunarML.assumeDiscardable (fn () =>
+  let val stdErr = Outstream.fromWritable (Writable.fromValue Lua.Lib.io.stderr, IO.NO_BUF, "<stderr>")
+  in mkOutstream stdErr
+  end) ()
 fun print s = Outstream.outputAndFlush (getOutstream stdOut, s)
 end (* local *)
 end (* structure TextIO *)
