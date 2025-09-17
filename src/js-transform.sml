@@ -2,6 +2,7 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
+(* Hoist functions that are too deep *)
 structure JsTransform :>
 sig
   type Context = {nextVId: int ref}

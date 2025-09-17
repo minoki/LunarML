@@ -74,6 +74,7 @@ sources = \
   src/codegen-lua.sml \
   src/js-syntax.sml \
   src/js-transform.sml \
+  src/js/simplify-jumps.sml \
   src/codegen-js.sml \
   src/mlb-syntax.sml \
   src/mlb-parser.sml \

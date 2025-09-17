@@ -61,6 +61,7 @@ lua-transform.sml
 codegen-lua.sml
 js-syntax.sml
 js-transform.sml
+js/simplify-jumps.sml
 codegen-js.sml
 mlb-syntax.sml
 mlb-parser.sml

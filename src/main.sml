@@ -308,6 +308,7 @@ struct
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram {nextVId = nextId} js
+          val js = JsSimplifyJumps.doProgram js
           val codetransTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val importsList = !(#imports jsctx)
