@@ -17,6 +17,7 @@ string-prim.sml
 text16-prim.sml
 bool.sml
 luajit/lua.sml
+lua/bool-tostring.sml
 luajit/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml

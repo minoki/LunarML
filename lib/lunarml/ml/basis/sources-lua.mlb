@@ -29,6 +29,7 @@ string-prim.sml
 text16-prim.sml
 lunarml.sml
 lua/lua.sml
+lua/bool-tostring.sml
 string-cvt-0.sml
 lua/int-1.sml
 lua/word-1.sml
