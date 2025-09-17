@@ -5,8 +5,7 @@ structure Bool : sig
           end = struct
 datatype bool = datatype bool
 fun not x = _primCall "Bool.not" (x)
-fun toString true = "true"
-  | toString false = "false"
+fun toString b = if b then "true" else "false"
 (* scan, fromString *)
 end;
 _equality bool = fn (x, y) => _primCall "Bool.=" (x, y);
