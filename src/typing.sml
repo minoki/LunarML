@@ -379,7 +379,8 @@ struct
             , Syntax.ValueConstructor _
             , _
             )
-        ) = name <> "ref"
+        ) =
+        Syntax.SourceName.getStringWithDefault (name, "") <> "ref"
     | isConexp
         ( _
         , TypedSyntax.VarExp
@@ -460,12 +461,13 @@ struct
         ellipsis andalso Vector.length pats = 0
     | isExhaustive (_, _, TypedSyntax.BogusPat _) = false
 
-  val VId_Bind = TypedSyntax.MkVId ("Bind", ~1)
+  val VId_Bind = TypedSyntax.MkVId (Syntax.SourceName.fromString "Bind", ~1)
 
   (* Index of user-defined identifiers start with 100 *)
-  val VId_ref = TypedSyntax.MkVId ("ref", 0)
-  val VId_DCOLON = TypedSyntax.MkVId ("::", 1)
-  val VId_unit_equal = TypedSyntax.MkVId ("unit_equal", 2)
+  val VId_ref = TypedSyntax.MkVId (Syntax.SourceName.fromString "ref", 0)
+  val VId_DCOLON = TypedSyntax.MkVId (Syntax.SourceName.fromString "::", 1)
+  val VId_unit_equal =
+    TypedSyntax.MkVId (Syntax.SourceName.fromString "unit_equal", 2)
 
   fun isRefOrArray (tyname: TypedSyntax.TyName) =
     TypedSyntax.eqTyName (tyname, PrimTypes.Names.ref_)
@@ -545,8 +547,11 @@ struct
   fun newVIdCounter () : int ref = ref 100
 
   fun freshVId (ctx: Context, name) : TypedSyntax.VId =
-    let val n = !(#nextVId ctx)
-    in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
+    let
+      val n = !(#nextVId ctx)
+    in
+      #nextVId ctx := n + 1;
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
 
   fun renewVId (ctx: Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId =
@@ -572,14 +577,14 @@ struct
       , #level ctx
       ))
 
+  fun newVIdWithName (ctx: Context, name) =
+    let val n = !(#nextVId ctx)
+    in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
+    end
+
   fun newVId (ctx: Context, Syntax.MkVId name) =
-        let val n = !(#nextVId ctx)
-        in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
-        end
-    | newVId (ctx, Syntax.GeneratedVId (name, _)) =
-        let val n = !(#nextVId ctx)
-        in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
-        end
+        newVIdWithName (ctx, Syntax.SourceName.fromString name)
+    | newVId (ctx, Syntax.GeneratedVId (name, _)) = newVIdWithName (ctx, name)
 
   fun newStrId (ctx: Context, Syntax.MkStrId name) =
     let val n = !(#nextVId ctx)
@@ -2667,6 +2672,19 @@ struct
           localTyCons
       end
 
+    fun nameFromPat (T.VarPat (_, T.MkVId (name, _), _)) = name
+      | nameFromPat
+          (T.RecordPat
+             {sourceSpan = _, fields, ellipsis = _, wholeRecordType = _}) =
+          Syntax.SourceName.record
+            (List.map (fn (label, pat) => (label, nameFromPat pat)) fields)
+      | nameFromPat (T.TypedPat (_, pat, _)) = nameFromPat pat
+      | nameFromPat (T.LayeredPat (_, vid, _, innerPat)) =
+          Syntax.SourceName.merge
+            (TypedSyntax.getVIdName vid, nameFromPat innerPat)
+      | nameFromPat _ = Syntax.SourceName.absent
+
+
     (*:
     val synthTypeOfExp : InferenceContext * Env * S.Exp -> T.Ty * T.Exp
     and checkTypeOfExp : InferenceContext * Env * S.Exp * T.Ty -> T.Exp
@@ -2927,7 +2945,12 @@ struct
                   T.FnExp (span, vid, argTy, body)
               | _ =>
                   let
-                    val vid = newVId (#context ctx, Syntax.MkVId "a")
+                    val paramName =
+                      List.foldr
+                        (fn ((p, _), acc) =>
+                           Syntax.SourceName.merge (nameFromPat p, acc))
+                        (Syntax.SourceName.fromString "a") matches
+                    val vid = newVIdWithName (#context ctx, paramName)
                   in
                     T.FnExp (span, vid, argTy, T.CaseExp
                       { sourceSpan = span
@@ -3305,7 +3328,12 @@ struct
                      T.FnExp (span, vid, argTy, body)
                  | _ =>
                      let
-                       val vid = newVId (#context ctx, Syntax.MkVId "a")
+                       val paramName =
+                         List.foldr
+                           (fn ((p, _), acc) =>
+                              Syntax.SourceName.merge (nameFromPat p, acc))
+                           (Syntax.SourceName.fromString "a") matches
+                       val vid = newVIdWithName (#context ctx, paramName)
                      in
                        T.FnExp (span, vid, argTy, T.CaseExp
                          { sourceSpan = span
@@ -3728,7 +3756,8 @@ struct
                               , subjectTy = expTy
                               , matches =
                                   [( TypedSyntax.filterVarsInPat
-                                       (fn x => x = vid') pat'
+                                       (fn x => TypedSyntax.eqVId (x, vid'))
+                                       pat'
                                    , TypedSyntax.VarExp
                                        ( espan
                                        , TypedSyntax.MkShortVId vid'
@@ -7363,11 +7392,13 @@ struct
         val ictx = {context = ctx, level = 0}
         val (tyA, tyargsA) = instantiate (ictx, span, actual)
         val () = checkSubsumption (ictx, env, span, tyA, T.thawPureTy tyE)
-        val vid = newVId
+        val vid = newVIdWithName
           ( ctx
           , case longvid of
-              T.MkShortVId (T.MkVId (name, _)) => Syntax.MkVId name
-            | T.MkLongVId (_, _, vid) => vid
+              T.MkShortVId (T.MkVId (name, _)) => name
+            | T.MkLongVId (_, _, Syntax.MkVId name) =>
+                Syntax.SourceName.fromString name
+            | T.MkLongVId (_, _, Syntax.GeneratedVId (name, _)) => name
           )
         val tyargsA = List.map (fn (ty, c) => (T.forceTy ty, c)) tyargsA
         val trivial =

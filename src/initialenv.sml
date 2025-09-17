@@ -163,8 +163,11 @@ struct
 
   val vidCounter = ref ~3
   fun newVId name =
-    let val n = !vidCounter
-    in vidCounter := n - 1; TypedSyntax.MkVId (name, n)
+    let
+      val n = !vidCounter
+    in
+      vidCounter := n - 1;
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
 
   (* Ref *)

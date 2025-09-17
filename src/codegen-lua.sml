@@ -181,15 +181,17 @@ struct
           (case TypedSyntax.VIdMap.find (builtins, vid) of
              NONE =>
                raise Fail
-                 ("the built-in symbol " ^ name ^ "@" ^ Int.toString n
-                  ^ " is not supported by Lua backend")
+                 ("the built-in symbol "
+                  ^ Syntax.SourceName.getStringWithDefault (name, "?") ^ "@"
+                  ^ Int.toString n ^ " is not supported by Lua backend")
            | SOME luaName => LuaSyntax.PredefinedId luaName)
       | LUAJIT =>
           (case TypedSyntax.VIdMap.find (builtinsLuaJIT, vid) of
              NONE =>
                raise Fail
-                 ("the built-in symbol " ^ name ^ "@" ^ Int.toString n
-                  ^ " is not supported by LuaJIT backend")
+                 ("the built-in symbol "
+                  ^ Syntax.SourceName.getStringWithDefault (name, "?") ^ "@"
+                  ^ Int.toString n ^ " is not supported by LuaJIT backend")
            | SOME luaName => LuaSyntax.PredefinedId luaName)
     else
       LuaSyntax.UserDefinedId vid
@@ -202,14 +204,14 @@ struct
       val n = !(#nextLuaId ctx)
       val _ = #nextLuaId ctx := n + 1
     in
-      TypedSyntax.MkVId ("tmp", n)
+      TypedSyntax.MkVId (Syntax.SourceName.fromString "tmp", n)
     end
   fun genSymWithName (ctx: Context, name: string) =
     let
       val n = !(#nextLuaId ctx)
       val _ = #nextLuaId ctx := n + 1
     in
-      TypedSyntax.MkVId (name, n)
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
 
   structure F = FSyntax
@@ -313,7 +315,7 @@ struct
     | NONE => raise CodeGenError "undefined continuation"
 
   fun doLabel cname =
-    TypedSyntax.MkVId ("cont", C.CVar.toInt cname)
+    TypedSyntax.MkVId (Syntax.SourceName.fromString "cont", C.CVar.toInt cname)
 
   fun doValue ctx (C.Var vid) =
         (case VIdToLua (ctx, vid) of

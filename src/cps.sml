@@ -719,7 +719,7 @@ struct
         val n = !(#nextVId ctx)
         val _ = #nextVId ctx := n + 1
       in
-        TypedSyntax.MkVId ("", n)
+        TypedSyntax.MkVId (Syntax.SourceName.absent, n)
       end
 
     fun genSymWithHint (ctx: Context, NONE) = genSym ctx
@@ -1632,6 +1632,7 @@ sig
     {nextTyVar: int ref, nextVId: int ref, simplificationOccurred: bool ref}
   type value_info = {exp: CSyntax.SimpleExp option, isDiscardableFunction: bool}
   val genContSym: Context -> CSyntax.CVar
+  val newVIdWithName: Context * Syntax.SourceName.name -> TypedSyntax.VId
   val newVId: Context * string -> TypedSyntax.VId
   val renewTyVar: Context * TypedSyntax.TyVar -> TypedSyntax.TyVar
   val renewVId: Context * TypedSyntax.VId -> TypedSyntax.VId
@@ -1666,7 +1667,7 @@ sig
     -> CSyntax.Stat
   val alphaConvertWithNameOverride:
     Context
-    * string TypedSyntax.VIdMap.map
+    * Syntax.SourceName.name TypedSyntax.VIdMap.map
     * FSyntax.Ty TypedSyntax.TyVarMap.map
     * CSyntax.Value TypedSyntax.VIdMap.map
     * CSyntax.CVar CSyntax.CVarMap.map
@@ -1687,10 +1688,12 @@ struct
       in
         CSyntax.CVar.fromInt n
       end
-    fun newVId ({nextVId, ...}: Context, name) =
+    fun newVIdWithName ({nextVId, ...}: Context, name) =
       let val n = !nextVId
-      in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
+      in nextVId := n + 1; TypedSyntax.MkVId (name, n)
       end
+    fun newVId (ctx, name) =
+      newVIdWithName (ctx, Syntax.SourceName.fromString name)
     fun renewTyVar ({nextTyVar, ...}: Context, TypedSyntax.MkTyVar (name, _)) =
       let val n = !nextTyVar
       in TypedSyntax.MkTyVar (name, n) before (nextTyVar := n + 1)
@@ -2480,7 +2483,7 @@ struct
           end
     and alphaConvertWithNameOverride
           ( ctx: Context
-          , nameOverride: string TypedSyntax.VIdMap.map
+          , nameOverride: Syntax.SourceName.name TypedSyntax.VIdMap.map
           , tysubst: FSyntax.Ty TypedSyntax.TyVarMap.map
           , subst: C.Value TypedSyntax.VIdMap.map
           , csubst: C.CVar C.CVarMap.map

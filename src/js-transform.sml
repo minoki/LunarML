@@ -120,7 +120,7 @@ struct
       val n = !(#nextVId ctx)
       val _ = #nextVId ctx := n + 1
     in
-      TypedSyntax.MkVId (name, n)
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
 
   fun renewVId (ctx: Context, TypedSyntax.MkVId (name, _)) =

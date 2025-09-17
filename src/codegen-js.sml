@@ -181,8 +181,9 @@ struct
         case TypedSyntax.VIdMap.find (builtins, vid) of
           NONE =>
             raise Fail
-              ("the built-in symbol " ^ name ^ "@" ^ Int.toString n
-               ^ " is not supported by JavaScript backend")
+              ("the built-in symbol "
+               ^ Syntax.SourceName.getStringWithDefault (name, "?") ^ "@"
+               ^ Int.toString n ^ " is not supported by JavaScript backend")
         | SOME jsName => JsSyntax.PredefinedId jsName
       end
     else
@@ -269,7 +270,7 @@ struct
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
   fun CVarToId v =
-    TypedSyntax.MkVId ("cont", C.CVar.toInt v)
+    TypedSyntax.MkVId (Syntax.SourceName.fromString "cont", C.CVar.toInt v)
   fun CVarToJs v =
     J.UserDefinedId (CVarToId v)
   fun doCVar v =
@@ -286,7 +287,7 @@ struct
       val n = !(#nextJsId ctx)
       val _ = #nextJsId ctx := n + 1
     in
-      TypedSyntax.MkVId (name, n)
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
   fun genSym ctx = genSymNamed (ctx, "tmp")
   (*

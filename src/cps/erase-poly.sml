@@ -180,7 +180,7 @@ struct
                                      C.AppCont {applied = k', args = [C.Var v']}
                                  }
                            ) =
-                           if k = k' andalso v = v' then
+                           if k = k' andalso TypedSyntax.eqVId (v, v') then
                              case (params, typeOnly) of
                                ([], true) =>
                                  let

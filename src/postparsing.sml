@@ -640,7 +640,8 @@ struct
                   Syntax.RecordExp (span, fields1, SOME baseExp)
                 else (* desugar *)
                   let
-                    val vid = freshVId (ctx, "record")
+                    val vid =
+                      freshVId (ctx, Syntax.SourceName.fromString "record")
                   in
                     Syntax.RecordExp
                       ( span
@@ -689,7 +690,7 @@ struct
                  emitError (ctx, [span], "invalid record update")) update
           val patrow =
             List.map (fn (label, _) => (label, Syntax.WildcardPat span)) update
-          val vid = freshVId (ctx, "record")
+          val vid = freshVId (ctx, Syntax.SourceName.fromString "record")
         in
           if not (#allowRecordUpdate (#languageOptions ctx)) then
             emitNonfatalError (ctx, [span], "record update is not allowed")
@@ -807,7 +808,7 @@ struct
           )
     | doExp (ctx, env, UnfixedSyntax.WhileDoExp (span, e1, e2)) =
         let
-          val fnName = freshVId (ctx, "loop")
+          val fnName = freshVId (ctx, Syntax.SourceName.fromString "loop")
           val fnCall = Syntax.AppExp
             ( span
             , Syntax.VarExp (span, Syntax.MkQualified ([], fnName))
@@ -1275,7 +1276,7 @@ struct
             emitError (ctx, [span], "internal error: empty 'fun' rule")
       and checkVIdAndArity (_, vid, arity, []) = (vid, arity)
         | checkVIdAndArity (span, vid, arity, ((span', vid', pats), _, _) :: xs) =
-            if vid = vid' then
+            if Syntax.eqVId (vid, vid') then
               if arity = length pats then
                 checkVIdAndArity (span, vid, arity, xs)
               else
@@ -1290,16 +1291,26 @@ struct
       val (vid, arity) = getVIdAndArity rules'
       val paramNames =
         let
-          fun goPat (name as SOME _, _) = name
-            | goPat (NONE, Syntax.VarPat (_, vid)) =
-                SOME (Syntax.getVIdName vid)
-            | goPat (NONE, Syntax.LayeredPat (_, vid, _, _)) =
-                SOME (Syntax.getVIdName vid)
-            | goPat (NONE, _) = NONE
+          fun nameFromPat (Syntax.VarPat (_, vid)) =
+                Syntax.SourceName.fromString (Syntax.getVIdName vid)
+            | nameFromPat
+                (Syntax.RecordPat {sourceSpan = _, fields, ellipsis = _}) =
+                Syntax.SourceName.record
+                  (List.map (fn (label, pat) => (label, nameFromPat pat)) fields)
+            | nameFromPat (Syntax.TypedPat (_, pat, _)) = nameFromPat pat
+            | nameFromPat (Syntax.LayeredPat (_, vid, _, innerPat)) =
+                Syntax.SourceName.merge
+                  ( Syntax.SourceName.fromString (Syntax.getVIdName vid)
+                  , nameFromPat innerPat
+                  )
+            | nameFromPat _ = Syntax.SourceName.absent
+          fun goPat (name, pat) =
+            Syntax.SourceName.merge (name, nameFromPat pat)
           fun goRule (((_, _, pats), _, _), acc) =
             ListPair.mapEq goPat (acc, pats)
         in
-          List.foldl goRule (List.tabulate (arity, fn _ => NONE)) rules'
+          List.foldl goRule
+            (List.tabulate (arity, fn _ => Syntax.SourceName.absent)) rules'
         end
       fun buildExp (0, [paramId], _) =
             let
@@ -1352,9 +1363,15 @@ struct
             let
               val (paramId, paramNames) =
                 case paramNames of
-                  SOME name :: rest => (freshVId (ctx, name), rest)
-                | NONE :: rest => (freshVId (ctx, "a"), rest)
-                | [] => (freshVId (ctx, "a"), [])
+                  name :: rest =>
+                    ( freshVId
+                        ( ctx
+                        , Syntax.SourceName.merge
+                            (name, Syntax.SourceName.fromString "a")
+                        )
+                    , rest
+                    )
+                | [] => (freshVId (ctx, Syntax.SourceName.fromString "a"), [])
             in
               Syntax.FnExp
                 ( span

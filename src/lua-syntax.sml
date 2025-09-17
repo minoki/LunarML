@@ -463,6 +463,8 @@ struct
            raise Fail ("name already declared: " ^ TypedSyntax.print_VId vid)
        | NONE =>
            let
+             val smlName =
+               Syntax.SourceName.getStringWithDefault (smlName, "tmp")
              val baseName =
                if isLuaIdentifier smlName then smlName
                else if smlName = "" then "tmp"
@@ -978,7 +980,7 @@ struct
                 ) :: (rest' as (LuaSyntax.LocalStat ([(name', _)], []) :: rest))
             , acc
             ) =
-            if name = name' then
+            if TypedSyntax.eqVId (name, name') then
               (* local f; f = function(...) ... end -> local function f(...) ... end *)
               doStat
                 ( rest

@@ -10,10 +10,27 @@ sig
   | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
   | StringConstant of StringElement.char vector
   | CharacterConstant of StringElement.char
-  datatype VId = MkVId of string | GeneratedVId of string * int
+  datatype Label = NumericLabel of int | IdentifierLabel of string
+  structure LabelSet: ORD_SET where type Key.ord_key = Label
+  structure LabelMap: ORD_MAP_X where type Key.ord_key = Label
+  val LabelMapFromList: (Label * 'a) list -> 'a LabelMap.map
+  structure SourceName:
+  sig
+    type name
+    val absent: name
+    val fromString: string -> name
+    val tuple: name list -> name
+    val record: (Label * name) list -> name
+    val merge: name * name -> name
+    val getString: name -> string option
+    val getStringWithDefault: name * string -> string
+    val field: name * Label -> name
+  end
+  datatype VId = MkVId of string | GeneratedVId of SourceName.name * int
+  val eqVId: VId * VId -> bool
+  val getVIdName: VId -> string
   datatype TyVar = MkTyVar of string
   datatype TyCon = MkTyCon of string
-  datatype Label = NumericLabel of int | IdentifierLabel of string
   datatype StrId = MkStrId of string
   datatype SigId = MkSigId of string
   datatype FunId = MkFunId of string
@@ -25,7 +42,6 @@ sig
   val MkLongTyCon: StrId list * TyCon -> LongTyCon
   val MkLongStrId: StrId list * StrId -> LongStrId
   datatype ShortOrInfixVId = ShortVId of VId | InfixVId of string
-  val getVIdName: VId -> string
   datatype InfixAssociativity = LeftAssoc of int | RightAssoc of int
   datatype FixityStatus = Nonfix | Infix of InfixAssociativity
   structure VIdKey: ORD_KEY where type ord_key = VId
@@ -40,9 +56,6 @@ sig
   structure FunIdMap: ORD_MAP_X where type Key.ord_key = FunId
   structure TyVarMap: ORD_MAP_X where type Key.ord_key = TyVar
   structure TyVarSet: ORD_SET where type Key.ord_key = TyVar
-  structure LabelSet: ORD_SET where type Key.ord_key = Label
-  structure LabelMap: ORD_MAP_X where type Key.ord_key = Label
-  val LabelMapFromList: (Label * 'a) list -> 'a LabelMap.map
   structure TyConSet: ORD_SET where type Key.ord_key = TyCon
   structure TyConMap: ORD_MAP_X where type Key.ord_key = TyCon
   structure LongTyCon:
@@ -259,10 +272,72 @@ struct
   | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
   | StringConstant of StringElement.char vector
   | CharacterConstant of StringElement.char
-  datatype VId = MkVId of string | GeneratedVId of string * int
+
+  datatype Label = NumericLabel of int | IdentifierLabel of string
+  structure LabelKey =
+  struct
+    type ord_key = Label
+    (* NumericLabel _ < IdentifierLabel _ *)
+    fun compare (NumericLabel x, NumericLabel y) = Int.compare (x, y)
+      | compare (NumericLabel _, IdentifierLabel _) = LESS
+      | compare (IdentifierLabel _, NumericLabel _) = GREATER
+      | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x, y)
+  end
+  structure LabelSet = RedBlackSetFn(LabelKey)
+  structure LabelMap = MapExtra(RedBlackMapFn(LabelKey))
+  fun LabelMapFromList (xs: (Label * 'a) list) : 'a LabelMap.map =
+    List.foldl LabelMap.insert' LabelMap.empty xs
+
+  structure SourceName =
+  struct
+    datatype name = ABSENT | NAMED of string option * name LabelMap.map
+    val absent: name = ABSENT
+    fun fromString s =
+      NAMED (SOME s, LabelMap.empty)
+    local
+      fun go (acc, i, []) = acc
+        | go (acc, i, x :: xs) =
+            go (LabelMap.insert (acc, NumericLabel i, x), i + 1, xs)
+    in
+      fun tuple elems =
+        NAMED (NONE, go (LabelMap.empty, 1, elems))
+    end
+    fun record fields =
+      NAMED (NONE, List.foldl LabelMap.insert' LabelMap.empty fields)
+    fun merge (ABSENT, y) = y
+      | merge (x, ABSENT) = x
+      | merge (NAMED (n, fields), NAMED (n', fields')) =
+          let
+            val n =
+              case (n, n') of
+                (n as SOME _, _) => n
+              | (NONE, n') => n'
+            val fields = LabelMap.unionWith merge (fields, fields')
+          in
+            NAMED (n, fields)
+          end
+    fun getString ABSENT = NONE
+      | getString (NAMED (n, _)) = n
+    fun getStringWithDefault (ABSENT, default) = default
+      | getStringWithDefault (NAMED (n, _), default) =
+          Option.getOpt (n, default)
+    fun field (a as ABSENT, _) = a
+      | field (NAMED (_, fields), label) =
+          case LabelMap.find (fields, label) of
+            SOME n => n
+          | NONE => ABSENT
+  end
+
+  datatype VId = MkVId of string | GeneratedVId of SourceName.name * int
+  fun eqVId (MkVId a, MkVId b) = a = b
+    | eqVId (GeneratedVId (_, i), GeneratedVId (_, j)) = i = j
+    | eqVId _ = false
+  fun getVIdName (MkVId name) = name
+    | getVIdName (GeneratedVId (name, i)) =
+        SourceName.getStringWithDefault (name, "?") ^ "@" ^ Int.toString i
+
   datatype TyVar = MkTyVar of string
   datatype TyCon = MkTyCon of string
-  datatype Label = NumericLabel of int | IdentifierLabel of string
   datatype StrId = MkStrId of string
   datatype SigId = MkSigId of string
   datatype FunId = MkFunId of string
@@ -276,9 +351,6 @@ struct
 
   datatype ShortOrInfixVId = ShortVId of VId | InfixVId of string
 
-  fun getVIdName (MkVId name) = name
-    | getVIdName (GeneratedVId (name, i)) = name ^ "@" ^ Int.toString i
-
   datatype InfixAssociativity = LeftAssoc of int | RightAssoc of int
   datatype FixityStatus = Nonfix | Infix of InfixAssociativity
 
@@ -289,10 +361,7 @@ struct
     fun compare (MkVId x, MkVId y) = String.compare (x, y)
       | compare (MkVId _, GeneratedVId _) = LESS
       | compare (GeneratedVId _, MkVId _) = GREATER
-      | compare (GeneratedVId (x, i), GeneratedVId (y, j)) =
-          (case Int.compare (i, j) of
-             EQUAL => String.compare (x, y)
-           | t => t)
+      | compare (GeneratedVId (_, i), GeneratedVId (_, j)) = Int.compare (i, j)
   end : ORD_KEY
   structure VIdSet = RedBlackSetFn(VIdKey)
   structure VIdMap = MapExtra(RedBlackMapFn(VIdKey))
@@ -324,19 +393,6 @@ struct
   end : ORD_KEY
   structure TyVarMap = MapExtra(RedBlackMapFn(TyVarKey))
   structure TyVarSet = RedBlackSetFn(TyVarKey)
-  structure LabelKey =
-  struct
-    type ord_key = Label
-    (* NumericLabel _ < IdentifierLabel _ *)
-    fun compare (NumericLabel x, NumericLabel y) = Int.compare (x, y)
-      | compare (NumericLabel _, IdentifierLabel _) = LESS
-      | compare (IdentifierLabel _, NumericLabel _) = GREATER
-      | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x, y)
-  end
-  structure LabelSet = RedBlackSetFn(LabelKey)
-  structure LabelMap = MapExtra(RedBlackMapFn(LabelKey))
-  fun LabelMapFromList (xs: (Label * 'a) list) : 'a LabelMap.map =
-    List.foldl LabelMap.insert' LabelMap.empty xs
 
   structure TyConKey =
   struct
@@ -716,7 +772,8 @@ struct
           "CharacterConstant \"" ^ StringElement.charToString x ^ "\""
     fun print_VId (MkVId x) = String.toString x
       | print_VId (GeneratedVId (x, i)) =
-          String.toString x ^ "@" ^ Int.toString i
+          String.toString (SourceName.getStringWithDefault (x, "?")) ^ "@"
+          ^ Int.toString i
     fun print_TyVar (MkTyVar x) =
       "MkTyVar \"" ^ String.toString x ^ "\""
     fun print_TyCon (MkTyCon x) =

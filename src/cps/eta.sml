@@ -55,7 +55,7 @@ struct
     | C.ContDec {name, params, body as C.AppCont {applied, args}, attr} =>
         (* Eta conversion *)
         let
-          fun sameValue ((SOME p, _), C.Var q) = p = q
+          fun sameValue ((SOME p, _), C.Var q) = TypedSyntax.eqVId (p, q)
             | sameValue ((_, FSyntax.RecordType fields), C.Unit) =
                 Syntax.LabelMap.isEmpty fields
             | sameValue _ = false

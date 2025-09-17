@@ -214,10 +214,11 @@ in
                                , args
                                , attr = _
                                } =>
-                           if applied = name andalso cont = contParam then
-                             C.AppCont {applied = loop, args = args}
-                           else
-                             call
+                           if
+                             TypedSyntax.eqVId (applied, name)
+                             andalso cont = contParam
+                           then C.AppCont {applied = loop, args = args}
+                           else call
                           | c => c) body
                     val body'' = C.Let
                       { decs =

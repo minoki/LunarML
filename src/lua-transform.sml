@@ -398,7 +398,7 @@ struct
       val n = !(#nextId ctx)
       val _ = #nextId ctx := n + 1
     in
-      TypedSyntax.MkVId (name, n)
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
     end
   structure InsertDo =
   struct
@@ -1321,7 +1321,7 @@ struct
             val redundant =
               case next of
                 NONE => false
-              | SOME label' => label = label'
+              | SOME label' => TypedSyntax.eqVId (label, label')
           in
             if redundant then acc' else (NONE, stat :: acc)
           end

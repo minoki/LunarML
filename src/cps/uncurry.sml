@@ -22,7 +22,7 @@ struct
              }) =
           (case decs of
              [C.ValDec {exp, results = [(SOME f, _)]}] =>
-               if contParam = k andalso v = f then
+               if contParam = k andalso TypedSyntax.eqVId (v, f) then
                  case tryUncurry exp of
                    SOME (rest, k, b, r, typeOnly') =>
                      SOME

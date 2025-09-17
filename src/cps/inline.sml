@@ -1289,18 +1289,9 @@ struct
                                    (fn ((n, _), v, acc) =>
                                       case (n, C.extractVarFromValue v) of
                                         (SOME n, SOME v) =>
-                                          let
-                                            val n = TypedSyntax.getVIdName n
-                                          in
-                                            if
-                                              TypedSyntax.VIdMap.inDomain
-                                                (acc, v) orelse n = ""
-                                            then
-                                              acc
-                                            else
-                                              TypedSyntax.VIdMap.insert
-                                                (acc, v, n)
-                                          end
+                                          TypedSyntax.VIdMap.insertWith
+                                            Syntax.SourceName.merge
+                                            (acc, v, TypedSyntax.getVIdName n)
                                       | _ => acc) acc (resultNames, r)
                              in
                                List.foldl go TypedSyntax.VIdMap.empty results
@@ -1430,8 +1421,11 @@ struct
         in nextCont := i - 1; C.CVar.fromInt i
         end
       fun newVId name =
-        let val i = !nextVId
-        in nextVId := i - 1; TypedSyntax.MkVId (name, i)
+        let
+          val i = !nextVId
+        in
+          nextVId := i - 1;
+          TypedSyntax.MkVId (Syntax.SourceName.fromString name, i)
         end
       fun newTyVar name =
         let val i = !nextTyVar

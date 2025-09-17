@@ -293,7 +293,7 @@ struct
     fun replaceOnce (var, replacement) =
       let
         fun goValue (C.Var v) =
-              if v = var then SOME replacement else NONE
+              if TypedSyntax.eqVId (v, var) then SOME replacement else NONE
           | goValue _ = NONE
         fun goExp (Value v) = goValue v
           | goExp (PrimOp {primOp, tyargs, args}) =

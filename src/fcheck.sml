@@ -782,8 +782,14 @@ struct
                       checkSame
                         ( #aliasEnv env
                         , fn () =>
-                            "FnExp " ^ Option.getOpt (nameHint, "(no name)")
-                            ^ ": " ^ Printer.build (FPrinter.doExp 0 fnexp)
+                            "FnExp "
+                            ^
+                            Option.getOpt
+                              ( case nameHint of
+                                  NONE => NONE
+                                | SOME h => Syntax.SourceName.getString h
+                              , "(no name)"
+                              ) ^ ": " ^ Printer.build (FPrinter.doExp 0 fnexp)
                         , e
                         ) a) (paramTypes, params)
                  handle ListPair.UnequalLengths =>
@@ -883,7 +889,10 @@ struct
                 fun doConBind
                   (F.ConBind (TypedSyntax.MkVId (name, _), optPayloadTy), m) =
                   StringMap.insert
-                    (m, name, {tyParams = tyvars, payload = optPayloadTy})
+                    ( m
+                    , Syntax.SourceName.getStringWithDefault (name, "")
+                    , {tyParams = tyvars, payload = optPayloadTy}
+                    )
               in
                 TypedSyntax.TyVarMap.insert
                   ( valConEnv

@@ -4,7 +4,7 @@
  *)
 structure TypedSyntax :>
 sig
-  datatype VId = MkVId of string * int
+  datatype VId = MkVId of Syntax.SourceName.name * int
   datatype TyVar = MkTyVar of string * int
   type TyName = TyVar
   val MkTyName: string * int -> TyName
@@ -296,7 +296,7 @@ sig
   val print_AnonymousTyVar: AnonymousTyVar -> string
   val print_TyName: TyName -> string
   val print_Ty: Ty -> string
-  val getVIdName: VId -> string
+  val getVIdName: VId -> Syntax.SourceName.name
   val freeTyVarsInTy: TyVarSet.set * Ty -> TyVarSet.set
   val freeAnonymousTyVarsInTy: Ty -> AnonymousTyVar list
   val applySubstPureTyAsTy: Ty TyVarMap.map -> PureTy -> Ty
@@ -332,7 +332,7 @@ sig
   val renameVarsInPat: VId VIdMap.map -> Pat -> Pat
 end =
 struct
-  datatype VId = MkVId of string * int
+  datatype VId = MkVId of Syntax.SourceName.name * int
   datatype TyVar = MkTyVar of string * int
   type TyName = TyVar
   val MkTyName = MkTyVar
@@ -345,7 +345,7 @@ struct
   fun eqTyVar (MkTyVar (name, a), MkTyVar (name', b)) =
     a = b andalso name = name'
   val eqTyName = eqTyVar
-  fun eqVId (a, b: VId) = a = b
+  fun eqVId (MkVId (_, i), MkVId (_, j)) = i = j
 
   fun tyVarAdmitsEquality (MkTyVar (name, _)) = String.isPrefix "''" name
 
@@ -363,10 +363,7 @@ struct
   structure VIdKey =
   struct
     type ord_key = VId
-    fun compare (MkVId (x, a), MkVId (y, b)) =
-      case Int.compare (a, b) of
-        EQUAL => String.compare (x, y)
-      | ord => ord
+    fun compare (MkVId (_, a), MkVId (_, b)) = Int.compare (a, b)
   end : ORD_KEY
   structure VIdSet = RedBlackSetFn(VIdKey)
   structure VIdMap = MapExtra(RedBlackMapFn(VIdKey))
@@ -716,7 +713,8 @@ struct
   (* pretty printing *)
   structure PrettyPrint =
   struct
-    fun print_VId (MkVId (name, n)) = name ^ "@" ^ Int.toString n
+    fun print_VId (MkVId (name, n)) =
+      Syntax.SourceName.getStringWithDefault (name, "?") ^ "@" ^ Int.toString n
     fun print_StrId (MkStrId (name, n)) = name ^ "@" ^ Int.toString n
     fun print_FunId (MkFunId (name, n)) = name ^ "@" ^ Int.toString n
     fun print_LongVId (MkShortVId (vid)) = print_VId vid

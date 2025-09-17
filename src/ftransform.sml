@@ -28,7 +28,7 @@ struct
     , targetInfo: TargetInfo.target_info
     , messageHandler: Message.handler
     }
-  fun freshVId (ctx: Context, name: string) =
+  fun freshVId (ctx: Context, name) =
     let val n = !(#nextVId ctx)
     in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
     end
@@ -50,6 +50,15 @@ struct
     | isWildcardPat (F.VectorPat (_, pats, ellipsis, _)) =
         ellipsis andalso Vector.length pats = 0
     | isWildcardPat (F.BogusPat _) = false
+  fun nameFromPat (F.VarPat (_, TypedSyntax.MkVId (name, _), _)) = name
+    | nameFromPat
+        (F.RecordPat {sourceSpan = _, fields, ellipsis = _, allFields = _}) =
+        Syntax.SourceName.record
+          (List.map (fn (label, pat) => (label, nameFromPat pat)) fields)
+    | nameFromPat (F.LayeredPat (_, vid, _, innerPat)) =
+        Syntax.SourceName.merge
+          (TypedSyntax.getVIdName vid, nameFromPat innerPat)
+    | nameFromPat _ = Syntax.SourceName.absent
   fun desugarPatternMatches (ctx: Context) :
     { doExp: F.Exp -> F.Exp
     , doDec: F.Dec -> F.Dec
@@ -109,7 +118,12 @@ struct
                    F.LetExp ([F.IgnoreDec (doExp subjectExp)], doExp innerExp)
                | NONE =>
                    let
-                     val examinedVId = freshVId (ctx, "exp")
+                     val examinedName =
+                       List.foldr
+                         (fn ((p, _), acc) =>
+                            Syntax.SourceName.merge (nameFromPat p, acc))
+                         (Syntax.SourceName.fromString "exp") matches
+                     val examinedVId = freshVId (ctx, examinedName)
                      val examinedExp = F.VarExp (examinedVId)
                      fun go [] =
                            (case matchType of

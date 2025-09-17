@@ -13,7 +13,7 @@ local
       { call: frequency
       , project: frequency
       , other: frequency
-      , labels: (string option) Syntax.LabelMap.map
+      , labels: Syntax.SourceName.name Syntax.LabelMap.map
       }
     type cont_usage = {indirect: frequency}
     val neverUsed: usage
@@ -41,7 +41,7 @@ local
         { call: frequency
         , project: frequency
         , other: frequency
-        , labels: (string option) Syntax.LabelMap.map
+        , labels: Syntax.SourceName.name Syntax.LabelMap.map
         }
       type cont_usage = {indirect: frequency}
       val neverUsed: usage =
@@ -112,10 +112,8 @@ local
                   val {call, project, other, labels} = !r
                   val result' =
                     case result of
-                      SOME (TypedSyntax.MkVId (name, _)) => SOME name
-                    | NONE => NONE
-                  fun mergeOption (x as SOME _, _) = x
-                    | mergeOption (NONE, y) = y
+                      SOME (TypedSyntax.MkVId (name, _)) => name
+                    | NONE => Syntax.SourceName.absent
                 in
                   r
                   :=
@@ -123,7 +121,7 @@ local
                   , project = oneMore project
                   , other = other
                   , labels =
-                      Syntax.LabelMap.insertWith mergeOption
+                      Syntax.LabelMap.insertWith Syntax.SourceName.merge
                         (labels, label, result')
                   }
                 end
@@ -338,15 +336,16 @@ in
         | {call = NEVER, project = _, other = NEVER, labels} =>
             UNPACK
               (Syntax.LabelMap.foldri
-                 (fn (label, optName, acc) =>
+                 (fn (label, name, acc) =>
                     let
                       val name =
-                        case optName of
-                          SOME name => name
-                        | NONE =>
-                            case label of
-                              Syntax.IdentifierLabel name => name
-                            | Syntax.NumericLabel n => "_" ^ Int.toString n
+                        Syntax.SourceName.merge
+                          ( name
+                          , Syntax.SourceName.fromString
+                              (case label of
+                                 Syntax.IdentifierLabel name => name
+                               | Syntax.NumericLabel n => "_" ^ Int.toString n)
+                          )
                       val fieldTy =
                         case FSyntax.weakNormalizeTy recordTy of
                           FSyntax.RecordType fieldTypes =>
@@ -360,8 +359,10 @@ in
                                ^ Printer.build (FPrinter.doTy 0 recordTy) ^ "; "
                                ^ TypedSyntax.print_VId param)
                     in
-                      (CpsSimplify.newVId (#base ctx, name), label, fieldTy)
-                      :: acc
+                      ( CpsSimplify.newVIdWithName (#base ctx, name)
+                      , label
+                      , fieldTy
+                      ) :: acc
                     end) [] labels)
         | _ => KEEP
       fun tryUnpackContParam (ctx: Context, usage) (SOME param, recordTy) =
@@ -371,15 +372,17 @@ in
              | {call = NEVER, project = _, other = NEVER, labels} =>
                  UNPACK
                    (Syntax.LabelMap.foldri
-                      (fn (label, optName, acc) =>
+                      (fn (label, name, acc) =>
                          let
                            val name =
-                             case optName of
-                               SOME name => name
-                             | NONE =>
-                                 case label of
-                                   Syntax.IdentifierLabel name => name
-                                 | Syntax.NumericLabel n => "_" ^ Int.toString n
+                             Syntax.SourceName.merge
+                               ( name
+                               , Syntax.SourceName.fromString
+                                   (case label of
+                                      Syntax.IdentifierLabel name => name
+                                    | Syntax.NumericLabel n =>
+                                        "_" ^ Int.toString n)
+                               )
                            val fieldTy =
                              case FSyntax.weakNormalizeTy recordTy of
                                FSyntax.RecordType fieldTypes =>
@@ -393,7 +396,7 @@ in
                                    ("invalid record type: "
                                     ^ Printer.build (FPrinter.doTy 0 recordTy))
                          in
-                           ( CpsSimplify.newVId (#base ctx, name)
+                           ( CpsSimplify.newVIdWithName (#base ctx, name)
                            , label
                            , fieldTy
                            ) :: acc

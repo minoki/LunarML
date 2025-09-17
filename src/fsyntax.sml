@@ -110,7 +110,8 @@ sig
       , matchType: TypedSyntax.match_type
       , resultTy: Ty
       }
-  | MultiFnExp of string option * (TypedSyntax.VId * Ty) list * Exp
+  | MultiFnExp of
+      Syntax.SourceName.name option * (TypedSyntax.VId * Ty) list * Exp
   | ProjectionExp of
       {label: Syntax.Label, record: Exp, fieldTypes: Ty Syntax.LabelMap.map}
   | TyAbsExp of TyVar * Kind * Exp
@@ -150,7 +151,7 @@ sig
   val StructLabel: Syntax.StrId -> Syntax.Label
   val ExnPredicateLabel: Syntax.VId -> Syntax.Label
   val ExnPayloadLabel: Syntax.VId -> Syntax.Label
-  val FnExp: string option * TypedSyntax.VId * Ty * Exp -> Exp
+  val FnExp: Syntax.SourceName.name option * TypedSyntax.VId * Ty * Exp -> Exp
   val AppExp: Exp * Exp -> Exp
   val IntConstExp: IntInf.int * Ty -> Exp
   val WordConstExp: IntInf.int * Ty -> Exp
@@ -227,7 +228,7 @@ sig
     val print_PrimOp: PrimOp -> string
     val print_Exp: Exp -> string
   end
-  val setNameHint: string * Exp -> Exp
+  val setNameHint: Syntax.SourceName.name * Exp -> Exp
 end =
 struct
   type TyVar = TypedSyntax.TyVar
@@ -336,7 +337,8 @@ struct
       , matchType: TypedSyntax.match_type
       , resultTy: Ty
       }
-  | MultiFnExp of string option * (TypedSyntax.VId * Ty) list * Exp
+  | MultiFnExp of
+      Syntax.SourceName.name option * (TypedSyntax.VId * Ty) list * Exp
   | ProjectionExp of
       {label: Syntax.Label, record: Exp, fieldTypes: Ty Syntax.LabelMap.map}
   | TyAbsExp of TyVar * Kind * Exp
@@ -471,7 +473,8 @@ struct
      | TargetInfo.STRING16 =>
          PrimExp
            (String16ConstOp (StringElement.encodeAscii s), [Types.string16], []))
-  fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
+  fun strIdToVId (TypedSyntax.MkStrId (name, n)) =
+    TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
   fun AndalsoExp (a, b) =
     IfThenElseExp (a, b, VarExp InitialEnv.VId_false)
   fun SimplifyingAndalsoExp (a as VarExp vid, b) =
@@ -2069,6 +2072,13 @@ struct
     in #nextTyVar ctx := n + 1; TypedSyntax.MkTyVar (name, n)
     end
   fun freshVId (ctx: Context, name: string) =
+    let
+      val n = !(#nextVId ctx)
+    in
+      #nextVId ctx := n + 1;
+      TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
+    end
+  fun renewVId (ctx: Context, TypedSyntax.MkVId (name, _)) =
     let val n = !(#nextVId ctx)
     in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
     end
@@ -3384,7 +3394,10 @@ struct
                        )) (F.VarExp InitialEnv.VId_true) fields
             in
               F.MultiFnExp
-                (SOME "recordEq", [(lhs, recordTy), (rhs, recordTy)], body)
+                ( SOME (Syntax.SourceName.fromString "recordEq")
+                , [(lhs, recordTy), (rhs, recordTy)]
+                , body
+                )
             end
       | getEquality (ctx, _, T.RecordExtType (span, _, _)) =
           emitFatalError (ctx, [span], "unexpected record extension")
@@ -3573,11 +3586,11 @@ struct
           let
             val (env, exnMap, revExbinds) =
               List.foldl
-                (fn ( T.ExBind
-                        (_, vid as TypedSyntax.MkVId (name, _), optPayloadTy)
-                    , (env, exnMap, revExbinds)
-                    ) =>
+                (fn (T.ExBind (_, vid, optPayloadTy), (env, exnMap, revExbinds)) =>
                    let
+                     val name' = TypedSyntax.getVIdName vid
+                     val name =
+                       Syntax.SourceName.getStringWithDefault (name', "E")
                      val tag = freshVId (ctx, name ^ "_tag")
                      val optPayloadTy =
                        Option.map (fn ty => toFTyPure (ctx, env, ty))
@@ -3600,7 +3613,7 @@ struct
                            in
                              ( ty
                              , F.FnExp
-                                 ( SOME name
+                                 ( SOME name'
                                  , payloadId
                                  , payloadTy
                                  , F.PrimExp
@@ -3614,7 +3627,9 @@ struct
                                   ( getPayloadId
                                   , SOME (F.FnType (F.Types.exn, payloadTy))
                                   , F.FnExp
-                                      ( SOME (name ^ "_payload")
+                                      ( SOME
+                                          (Syntax.SourceName.fromString
+                                             (name ^ "_payload"))
                                       , exnId
                                       , F.Types.exn
                                       , F.PrimExp
@@ -3638,7 +3653,9 @@ struct
                            ( predicateId
                            , SOME (F.FnType (F.Types.exn, F.Types.bool))
                            , F.FnExp
-                               ( SOME (name ^ "_pred")
+                               ( SOME
+                                   (Syntax.SourceName.fromString
+                                      (name ^ "_pred"))
                                , exnId
                                , F.Types.exn
                                , F.PrimExp
@@ -3753,7 +3770,7 @@ struct
                 val b = freshVId (ctx, "b")
               in
                 F.MultiFnExp
-                  ( SOME "eq"
+                  ( SOME (Syntax.SourceName.fromString "eq")
                   , [(a, subjectTy), (b, subjectTy)]
                   , F.AppExp
                       ( toFExp (ctx, innerEnv, exp)
@@ -3765,8 +3782,11 @@ struct
               List.foldr
                 (fn ((tv, eqParam), exp) =>
                    F.FnExp
-                     (SOME "eq", eqParam, F.EqualityType (F.TyVar tv), exp)) exp
-                tyvarEqualities
+                     ( SOME (Syntax.SourceName.fromString "eq")
+                     , eqParam
+                     , F.EqualityType (F.TyVar tv)
+                     , exp
+                     )) exp tyvarEqualities
             val exp =
               List.foldr (fn (tv, exp) => F.TyAbsExp (tv, F.TypeKind, exp)) exp
                 tyvars
@@ -3876,7 +3896,8 @@ struct
                         m tyvars'
                   , env''
                   )
-                val nameHint = SOME (name ^ "_eq")
+                val nameHint = SOME
+                  (Syntax.SourceName.fromString (name ^ "_eq"))
                 val body =
                   let
                     val param1 = freshVId (ctx, "a")
@@ -4042,8 +4063,12 @@ struct
         val equality =
           List.foldr
             (fn ((tv, eqParam), body) =>
-               F.FnExp (SOME "eq", eqParam, F.EqualityType (F.TyVar tv), body))
-            equality tyvars'
+               F.FnExp
+                 ( SOME (Syntax.SourceName.fromString "eq")
+                 , eqParam
+                 , F.EqualityType (F.TyVar tv)
+                 , body
+                 )) equality tyvars'
         val equality =
           List.foldr (fn (tv, body) => F.TyAbsExp (tv, F.TypeKind, body))
             equality tyvars
@@ -4218,7 +4243,9 @@ struct
             (* <funid> <argument type>... <argument type's equality>... <structure> *)
             val funId' =
               case funId of
-                T.MkFunId (name, n) => T.MkVId (name, n) (* the functor id *)
+                T.MkFunId (name, n) =>
+                  T.MkVId
+                    (Syntax.SourceName.fromString name, n) (* the functor id *)
             val exp = F.VarExp funId'
             val ty =
               case T.VIdMap.find (#valMap env, funId') of
@@ -4314,8 +4341,7 @@ struct
                            case payloadTy of
                              F.RecordType fieldTypes =>
                                let
-                                 val packageVId = freshVId
-                                   (ctx, case vid of T.MkVId (name, _) => name)
+                                 val packageVId = renewVId (ctx, vid)
                                  val equalityVId = freshVId (ctx, "eq")
                                  val equalityTy =
                                    case
@@ -4326,8 +4352,7 @@ struct
                                    | NONE =>
                                        emitFatalError
                                          (ctx, [span], "invalid record")
-                                 val strVId = freshVId
-                                   (ctx, case vid of T.MkVId (name, _) => name)
+                                 val strVId = renewVId (ctx, vid)
                                  val strTy =
                                    case
                                      Syntax.LabelMap.find
@@ -4395,8 +4420,7 @@ struct
                                  (ctx, [span], "expected RecordType")
                          else
                            let
-                             val vid = freshVId
-                               (ctx, case vid of T.MkVId (name, _) => name)
+                             val vid = renewVId (ctx, vid)
                              val env = updateValMap
                                ( fn m => T.VIdMap.insert (m, vid, payloadTy)
                                , env
@@ -4440,9 +4464,11 @@ struct
       , (funid as T.MkFunId (name, n), (types, paramStrId, paramSig, bodyStr))
       ) : Env * F.Dec =
       let
-        val funid = T.MkVId (name, n)
+        val funid = T.MkVId (Syntax.SourceName.fromString name, n)
         val paramId =
-          case paramStrId of T.MkStrId (name, n) => T.MkVId (name, n)
+          case paramStrId of
+            T.MkStrId (name, n) =>
+              T.MkVId (Syntax.SourceName.fromString name, n)
         val (equalityForTyNameMap, valMap, equalityVars) =
           List.foldr
             (fn ({tyname, arity, admitsEquality = true}, (m, valMap, xs)) =>
@@ -4475,8 +4501,9 @@ struct
         val env' = updateValMap
           (fn m => T.VIdMap.insert (m, paramId, paramSigTy), env')
         val (_, bodyDecs, bodyExp, bodyTy) = strExpToFExp (ctx, env', bodyStr)
+        val nameHint = SOME (Syntax.SourceName.fromString name)
         val funexp = F.FnExp
-          (SOME name, paramId, paramSigTy, F.LetExp (bodyDecs, bodyExp))
+          (nameHint, paramId, paramSigTy, F.LetExp (bodyDecs, bodyExp))
         val funTy = F.FnType (paramSigTy, bodyTy)
         val funexp =
           List.foldr
@@ -4493,7 +4520,7 @@ struct
                    List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty))
                      equalityType tyvars
                in
-                 F.FnExp (SOME name, vid, equalityType, funexp)
+                 F.FnExp (nameHint, vid, equalityType, funexp)
                end) funexp equalityVars (* equalities *)
         val funTy =
           List.foldr

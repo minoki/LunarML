@@ -6,6 +6,7 @@ structure JsSyntax :>
 sig
   datatype ObjectKey = IntKey of int | StringKey of string
   datatype Id = PredefinedId of string | UserDefinedId of TypedSyntax.VId
+  val eqId: Id * Id -> bool
   structure IdSet: ORD_SET where type Key.ord_key = Id
   datatype JsConst =
     Null
@@ -92,6 +93,9 @@ end =
 struct
   datatype ObjectKey = IntKey of int | StringKey of string
   datatype Id = PredefinedId of string | UserDefinedId of TypedSyntax.VId
+  fun eqId (PredefinedId a, PredefinedId b) = a = b
+    | eqId (UserDefinedId a, UserDefinedId b) = TypedSyntax.eqVId (a, b)
+    | eqId _ = false
   structure IdKey =
   struct
     type ord_key = Id
@@ -377,6 +381,7 @@ struct
          raise Fail ("name already declared: " ^ TypedSyntax.print_VId vid)
      | NONE =>
          let
+           val smlName = Syntax.SourceName.getStringWithDefault (smlName, "tmp")
            val baseName =
              if isIdentifierName smlName then smlName
              else if smlName = "" then "tmp"

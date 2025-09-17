@@ -218,14 +218,19 @@ struct
             ( F.ValConPat {sourceSpan = _, info = {tag, ...}, payload = NONE}
             , ps
             ) =
-            if Syntax.MkVId tag = con andalso not hasPayload then [ps] else []
+            if Syntax.eqVId (Syntax.MkVId tag, con) andalso not hasPayload then
+              [ps]
+            else
+              []
         | goPat
             ( F.ValConPat
                 {sourceSpan = _, info = {tag, ...}, payload = SOME (_, pat)}
             , ps
             ) =
-            if Syntax.MkVId tag = con andalso hasPayload then [pat :: ps]
-            else []
+            if Syntax.eqVId (Syntax.MkVId tag, con) andalso hasPayload then
+              [pat :: ps]
+            else
+              []
         | goPat (F.ExnConPat _, _) = [] (* should not occur *)
         | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
         | goPat (F.VectorPat _, _) = [] (* should not occur *)
@@ -237,7 +242,7 @@ struct
     in
       goMatrix
     end
-  fun sameExp (F.VarExp x, F.VarExp y) = x = y
+  fun sameExp (F.VarExp x, F.VarExp y) = TypedSyntax.eqVId (x, y)
     | sameExp
         ( F.ProjectionExp {label, record, fieldTypes = _}
         , F.ProjectionExp {label = label', record = record', fieldTypes = _}

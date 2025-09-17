@@ -22,7 +22,7 @@ struct
       else
         case Vector.sub (block, n - 1) of
           J.BreakStat (SOME label') =>
-            if label = label' then
+            if J.eqId (label, label') then
               VectorSlice.vector (VectorSlice.slice (block, 0, SOME (n - 1)))
             else
               block
@@ -61,7 +61,7 @@ struct
             let
               val match =
                 case (optLabel, optLabel') of
-                  (SOME label, SOME label') => label = label'
+                  (SOME label, SOME label') => J.eqId (label, label')
                 | (_, NONE) => true
                 | (NONE, SOME _) => false
             in
@@ -119,9 +119,9 @@ struct
     | J.LoopStat (_, body) => isLabelUsed (label, body)
     | J.SwitchStat (_, clauses) =>
         List.exists (fn (_, block) => isLabelUsed (label, block)) clauses
-    | J.BreakStat (SOME label') => label = label'
+    | J.BreakStat (SOME label') => J.eqId (label, label')
     | J.BreakStat NONE => false
-    | J.ContinueStat (SOME label') => label = label'
+    | J.ContinueStat (SOME label') => J.eqId (label, label')
     | J.ContinueStat NONE => false
     | J.DefaultExportStat _ => false
     | J.NamedExportStat _ => false
@@ -218,7 +218,7 @@ struct
          let
            val canEliminateLabel =
              case (optLabel, #currentContinueTarget env) of
-               (SOME label, SOME target) => label = target
+               (SOME label, SOME target) => J.eqId (label, target)
              | _ => false
          in
            if canEliminateLabel then J.ContinueStat NONE :: acc else stat :: acc
