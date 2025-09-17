@@ -1788,7 +1788,7 @@ struct
                              find (0, defs)
                            end
                        | _ => NO_INIT
-                     val loopLabel = J.UserDefinedId (genSym ctx)
+                     val loopLabel = J.UserDefinedId (genSymNamed (ctx, "loop"))
                      datatype needs_which =
                        NEED_WHICH of J.Id
                      | NO_WHICH of C.CVar * (C.Var option) list * N.Stat
