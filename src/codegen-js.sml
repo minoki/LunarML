@@ -2235,7 +2235,7 @@ struct
          ])
     end
   fun doProgramCPS' ctx cont retVar program =
-    if N.containsApp program then
+    if CpsAnalyze.escapesTransitively (#contEscapeMap ctx, cont) then
       let
         val env =
           { continuations = C.CVarMap.singleton (cont, TAILCALL cont)

@@ -2773,19 +2773,39 @@ end;
 structure CpsAnalyze :>
 sig
   type cont_map
+
+  (*
+   * The JS-DS backend must determine whether a function calls another
+   * function in tail position (i.e., whether the continuation is passed to
+   * another function).  If so, the function needs to be wrapped to use
+   * a trampoline.  This function determines whether the given continuation
+   * is passed to another function.
+   *)
   val escapes: cont_map * CSyntax.CVar -> bool
+
+  (*
+   * The JS-CPS backend must decide whether to compile a continuation as
+   * a label/goto or as a function.  Continuations used for function calls,
+   * as well as those invoked from such continuations, must be compiled as
+   * functions.  This function determines whether the given continuation needs
+   * to be compiled as a function.
+   *)
   val escapesTransitively: cont_map * CSyntax.CVar -> bool
+
   val contEscape: CSyntax.CVar * CSyntax.Stat -> cont_map
 end =
 struct
   local structure C = CSyntax
   in
+    (* Public interface to access the result *)
     type cont_map =
       {escapes: bool, escapesTransitively: bool} CSyntax.CVarTable.hash_table
     fun escapes (t: cont_map, v) =
       #escapes (C.CVarTable.lookup t v)
     fun escapesTransitively (t: cont_map, v) =
       #escapesTransitively (C.CVarTable.lookup t v)
+
+    (* The implementation *)
     type table =
       { escapes: bool ref
       , escapesTransitively: bool ref
@@ -2899,6 +2919,7 @@ struct
           )
       | C.DatatypeDec _ => acc
       | C.ESImportDec _ => acc
+    (* Returns free continuations for a statement *)
     and go (table, level, C.Let {decs, cont}, acc) =
           go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
       | go
