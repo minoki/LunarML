@@ -3,6 +3,7 @@
 
 LUNARML= ../bin/lunarml
 LUA= lua
+LUAC= luac
 LUAJIT= luajit
 NODE= node
 
@@ -15,22 +16,27 @@ ifeq ($(VARIANT), lua)
 LUNARML_OPTION= --lua $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUA) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
+CHECKER= $(LUAC) -p
 else ifeq ($(VARIANT), lua-continuations)
 LUNARML_OPTION= --lua-continuations $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUA) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
+CHECKER= $(LUAC) -p
 else ifeq ($(VARIANT), luajit)
 LUNARML_OPTION= --luajit $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUAJIT) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
+CHECKER= $(LUAJIT) -bl
 else ifeq ($(VARIANT), nodejs)
 LUNARML_OPTION= --nodejs $(DEFAULT_ANN)
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
+CHECKER= $(NODE) --check
 else ifeq ($(VARIANT), nodejs-cps)
 LUNARML_OPTION= --nodejs-cps $(DEFAULT_ANN)
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
+CHECKER= $(NODE) --check
 else
 $(error VARIANT must be one of lua, lua-continuations, luajit, nodejs or nodejs-cps)
 endif
@@ -303,6 +309,7 @@ test-$(VARIANT): $(basename $1).$(VARIANT).ok
 $(basename $1).$(VARIANT).ok: $1 $(LUNARML)
 	@echo "Compiling $1..."
 	@$(LUNARML) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)$(OUTEXT)" "$$<"
+	@$(CHECKER) "$(basename $1).$(VARIANT)$(OUTEXT)" > /dev/null
 
 .PHONY: $(basename $1).$(VARIANT).ok
 
