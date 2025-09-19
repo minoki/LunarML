@@ -145,32 +145,39 @@ fun sign (x : int) : Int.int = if x = 0 then
                                else
                                    ~1
 fun sameSign (x, y) = sign x = sign y
-fun fmt StringCvt.BIN (x : int) = let val s = if GE (x, 0) then
-                                                  JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 2])
-                                              else
-                                                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 2]))
-                                  in JavaScript.encodeUtf8 s
-                                  end
-  | fmt StringCvt.OCT x = let val s = if GE (x, 0) then
-                                          JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 8])
-                                      else
-                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 8]))
-                          in JavaScript.encodeUtf8 s
-                          end
-  | fmt StringCvt.DEC x = let val s = if GE (x, 0) then
-                                          JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[])
-                                      else
-                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[]))
-                          in JavaScript.encodeUtf8 s
-                          end
-  | fmt StringCvt.HEX x = let val s = if GE (x, 0) then
-                                          JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 16])
-                                      else
-                                          String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 16]))
-                              val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
-                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
-                          end
-fun toString (x : int) : string = fmt StringCvt.DEC x
+fun fmtBIN (x : int) : string =
+  let val s = if GE (x, 0) then
+                  JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 2])
+              else
+                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 2]))
+  in JavaScript.encodeUtf8 s
+  end
+fun fmtOCT (x : int) : string =
+  let val s = if GE (x, 0) then
+                  JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 8])
+              else
+                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 8]))
+  in JavaScript.encodeUtf8 s
+  end
+fun toString (x : int) : string =
+  let val s = if GE (x, 0) then
+                  JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[])
+              else
+                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[]))
+  in JavaScript.encodeUtf8 s
+  end
+fun fmtHEX (x : int) : string =
+  let val s = if GE (x, 0) then
+                  JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue x, "toString") #[JavaScript.fromInt 16])
+              else
+                  String16.^ ("~", JavaScript.unsafeFromValue (JavaScript.method (JavaScript.negate (JavaScript.unsafeToValue x), "toString") #[JavaScript.fromInt 16]))
+      val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
+  in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
+  end
+fun fmt StringCvt.BIN = fmtBIN
+  | fmt StringCvt.OCT = fmtOCT
+  | fmt StringCvt.DEC = toString
+  | fmt StringCvt.HEX = fmtHEX
 
 local
     open ScanNumUtils

@@ -82,19 +82,26 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
-fun fmt StringCvt.BIN x = let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 2])
-                          in JavaScript.encodeUtf8 s
-                          end
-  | fmt StringCvt.OCT x = let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 8])
-                          in JavaScript.encodeUtf8 s
-                          end
-  | fmt StringCvt.DEC x = let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[])
-                          in JavaScript.encodeUtf8 s
-                          end
-  | fmt StringCvt.HEX x = let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 16])
-                              val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
-                          in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
-                          end
-fun toString (x : word) : string = fmt StringCvt.HEX x
+fun fmtBIN (x : word) : string =
+  let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 2])
+  in JavaScript.encodeUtf8 s
+  end
+fun fmtOCT (x : word) : string =
+  let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 8])
+  in JavaScript.encodeUtf8 s
+  end
+fun fmtDEC (x : word) : string =
+  let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[])
+  in JavaScript.encodeUtf8 s
+  end
+fun toString (x : word) : string =
+  let val s = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWord x, "toString") #[JavaScript.fromInt 16])
+      val s = JavaScript.method (JavaScript.fromString16 s, "toUpperCase") #[]
+  in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : String16.string)
+  end
+fun fmt StringCvt.BIN = fmtBIN
+  | fmt StringCvt.OCT = fmtOCT
+  | fmt StringCvt.DEC = fmtDEC
+  | fmt StringCvt.HEX = toString
 (* scan, fromString *)
 end; (* structure Word *)

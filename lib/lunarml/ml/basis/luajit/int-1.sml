@@ -64,28 +64,32 @@ val sign : int -> int = fn x => if x > 0 then
                                 else
                                     0
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
-fun toOctString x : string = if x >= 0 then
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
-                                 in Lua.unsafeFromValue result
-                                 end
-                             else
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.negate (Lua.fromInt x)]
-                                 in Lua.unsafeFromValue result
-                                 end
-fun toString x : string = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
-                              val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
-                          in Lua.unsafeFromValue result
-                          end
-fun toHexString x : string = if x >= 0 then
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
-                                 in Lua.unsafeFromValue result
-                                 end
-                             else
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.negate (Lua.fromInt x)]
-                                 in Lua.unsafeFromValue result
-                                 end
-fun fmt StringCvt.BIN = (fn _ => raise Fail "StringCvt.BIN: not implemented yet")
-  | fmt StringCvt.OCT = toOctString
+fun fmtBIN (_ : int) : string = raise Fail "StringCvt.BIN: not implemented yet"
+fun fmtOCT (x : int) : string =
+  if x >= 0 then
+      let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
+      in Lua.unsafeFromValue result
+      end
+  else
+      let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.negate (Lua.fromInt x)]
+      in Lua.unsafeFromValue result
+      end
+fun toString (x : int) : string =
+  let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
+      val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+  in Lua.unsafeFromValue result
+  end
+fun fmtHEX (x : int) : string =
+  if x >= 0 then
+      let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
+      in Lua.unsafeFromValue result
+      end
+  else
+      let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.negate (Lua.fromInt x)]
+      in Lua.unsafeFromValue result
+      end
+fun fmt StringCvt.BIN = fmtBIN
+  | fmt StringCvt.OCT = fmtOCT
   | fmt StringCvt.DEC = toString
-  | fmt StringCvt.HEX = toHexString
+  | fmt StringCvt.HEX = fmtHEX
 end; (* structure Int *)

@@ -293,33 +293,37 @@ local
                               end
     val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x])
      *)
-    fun toOctString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
-                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord (Uint64ToWord x)]) : string
-                        else
-                            let val d = 0wx40000000 (* 2^30 = 0o10000000000 *)
-                                val q = UncheckedWord64.div (x, d)
-                                val r = UncheckedWord64.mod (x, d)
-                            in toOctString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromWord (Uint64ToWord r)])
-                            end
-    fun toDecString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
-                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord (Uint64ToWord x)]) : string
-                        else
-                            let val d = 0w1000000000
-                                val q = UncheckedWord64.div (x, d)
-                                val r = UncheckedWord64.mod (x, d)
-                            in toDecString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromWord (Uint64ToWord r)])
-                            end
-    fun toString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
-                         Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord (Uint64ToWord x)]) : string
-                     else
-                         let val d = 0wx10000000 (* 2^28 *)
-                             val q = UncheckedWord64.div (x, d)
-                             val r = UncheckedWord64.mod (x, d)
-                         in toString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromWord (Uint64ToWord r)])
-                         end
-    fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
-      | fmt StringCvt.OCT = toOctString
-      | fmt StringCvt.DEC = toDecString
+    fun fmtBIN (x : word) : string = raise Fail "StringCvt.BIN: not implemented yet"
+    fun fmtOCT (x : word) : string =
+      if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
+          Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord (Uint64ToWord x)]) : string
+      else
+          let val d = 0wx40000000 (* 2^30 = 0o10000000000 *)
+              val q = UncheckedWord64.div (x, d)
+              val r = UncheckedWord64.mod (x, d)
+          in fmtOCT q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromWord (Uint64ToWord r)])
+          end
+    fun fmtDEC (x : word) : string =
+      if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
+          Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord (Uint64ToWord x)]) : string
+      else
+          let val d = 0w1000000000
+              val q = UncheckedWord64.div (x, d)
+              val r = UncheckedWord64.mod (x, d)
+          in fmtDEC q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromWord (Uint64ToWord r)])
+          end
+    fun toString (x : word) : string =
+      if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
+          Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord (Uint64ToWord x)]) : string
+      else
+          let val d = 0wx10000000 (* 2^28 *)
+              val q = UncheckedWord64.div (x, d)
+              val r = UncheckedWord64.mod (x, d)
+          in toString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromWord (Uint64ToWord r)])
+          end
+    fun fmt StringCvt.BIN = fmtBIN
+      | fmt StringCvt.OCT = fmtOCT
+      | fmt StringCvt.DEC = fmtDEC
       | fmt StringCvt.HEX = toString
     end
     fun wordToWord64 x = WordToUint64 x

@@ -87,16 +87,22 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
-fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-  | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
-                          in Lua.unsafeFromValue result
-                          end
-  | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord x]
-                          in Lua.unsafeFromValue result
-                          end
-  | fmt StringCvt.HEX x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x]
-                          in Lua.unsafeFromValue result
-                          end
-val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x])
+fun fmtBIN (x : word) : string = raise Fail "StringCvt.BIN: not implemented yet"
+fun fmtOCT (x : word) : string =
+  let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
+  in Lua.unsafeFromValue result
+  end
+fun fmtDEC (x : word) : string =
+  let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord x]
+  in Lua.unsafeFromValue result
+  end
+fun toString (x : word) : string =
+  let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x]
+  in Lua.unsafeFromValue result
+  end
+fun fmt StringCvt.BIN = fmtBIN
+  | fmt StringCvt.OCT = fmtOCT
+  | fmt StringCvt.DEC = fmtDEC
+  | fmt StringCvt.HEX = toString
 (* scan, fromString *)
 end; (* structure Word *)
