@@ -24,8 +24,9 @@ struct
         \  " ^ progName
         ^
         " [subcommand] [options] file.sml\n\
-        \Subcommand:\n\
+        \Subcommands:\n\
         \  compile               Compile a program.\n\
+        \  typecheck             Check a program.\n\
         \  help                  Show this message.\n\
         \  version               Show version information.\n\
         \Options:\n\
