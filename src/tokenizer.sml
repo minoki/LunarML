@@ -1375,12 +1375,12 @@ struct
              | NONE => (c, SOME (vector (List.rev revAcc)), xs))
           and parseExpPart (c, xs as (p :: #"~" :: x :: xss)) =
                 if (p = #"p" orelse p = #"P") andalso Char.isDigit x then
-                  parseMoreExpPart (c + 2, ~1, digitToInt x, xss)
+                  parseMoreExpPart (c + 3, ~1, digitToInt x, xss)
                 else
                   (c, NONE, xs)
             | parseExpPart (c, xs as (p :: x :: xss)) =
                 if (p = #"p" orelse p = #"P") andalso Char.isDigit x then
-                  parseMoreExpPart (c + 1, 1, digitToInt x, xss)
+                  parseMoreExpPart (c + 2, 1, digitToInt x, xss)
                 else
                   (c, NONE, xs)
             | parseExpPart (c, xs) = (c, NONE, xs)
@@ -1388,7 +1388,7 @@ struct
             (case skipUnderscoresAndReadDigit (false, c, xs) of
                SOME (_, c', x, xss) =>
                  parseMoreExpPart (c', sign, acc * 10 + digitToInt x, xss)
-             | NONE => (c', SOME (sign * acc), xs))
+             | NONE => (c, SOME (sign * acc), xs))
         in
           parseIntPart (l1, c', x, xs)
         end
