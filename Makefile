@@ -26,14 +26,14 @@ sources = \
   src/compat/red-black-map-fn.sml \
   src/util/ord_map_x.sig \
   src/util/map_extra.fun \
-  src/void.sml \
-  src/list-util.sml \
-  src/vector-util.sml \
-  src/string-set.sml \
-  src/string-map.sml \
+  src/util/void.sml \
+  src/util/list.sml \
+  src/util/vector.sml \
+  src/util/string-set.sml \
+  src/util/string-map.sml \
+  src/util/strongly-connected-components.sml \
   src/numeric.sml \
   src/text.sml \
-  src/strongly-connected-components.sml \
   src/language-options-record.sml \
   src/language-options.sml \
   src/target-info.sml \
@@ -51,12 +51,12 @@ sources = \
   src/typing.sml \
   src/initialenv.sml \
   src/printer.sml \
-  src/fsyntax.sml \
-  src/fprinter.sml \
-  src/fcheck.sml \
-  src/pattern-match.sml \
-  src/ftransform.sml \
-  src/cps.sml \
+  src/f/syntax.sml \
+  src/f/printer.sml \
+  src/f/check.sml \
+  src/f/pattern-match.sml \
+  src/f/transform.sml \
+  src/cps/syntax.sml \
   src/cps/check.sml \
   src/cps/dead-code.sml \
   src/cps/uncurry.sml \
@@ -69,11 +69,11 @@ sources = \
   src/cps/erase-poly.sml \
   src/backend.sml \
   src/nested.sml \
-  src/lua-syntax.sml \
-  src/lua-transform.sml \
+  src/lua/syntax.sml \
+  src/lua/transform.sml \
   src/codegen-lua.sml \
-  src/js-syntax.sml \
-  src/js-transform.sml \
+  src/js/syntax.sml \
+  src/js/transform.sml \
   src/js/simplify-jumps.sml \
   src/codegen-js.sml \
   src/mlb-syntax.sml \
