@@ -14,6 +14,10 @@ sig
   structure LabelSet: ORD_SET where type Key.ord_key = Label
   structure LabelMap: ORD_MAP_X where type Key.ord_key = Label
   val LabelMapFromList: (Label * 'a) list -> 'a LabelMap.map
+  structure Label:
+  sig
+    val toString: Label -> string
+  end
   structure SourceName:
   sig
     type name
@@ -287,6 +291,11 @@ struct
   structure LabelMap = MapExtra(RedBlackMapFn(LabelKey))
   fun LabelMapFromList (xs: (Label * 'a) list) : 'a LabelMap.map =
     List.foldl LabelMap.insert' LabelMap.empty xs
+  structure Label =
+  struct
+    fun toString (NumericLabel i) = Int.toString i
+      | toString (IdentifierLabel x) = x
+  end
 
   structure SourceName =
   struct

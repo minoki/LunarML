@@ -1024,11 +1024,45 @@ struct
                 incompatible fields
           in
             if incompatible then
-              emitTypeError
-                ( ctx
-                , [span1, span2, span3]
-                , "unification failed: incompatible record types (different fields)"
-                )
+              let
+                val onlyInFirst =
+                  Syntax.LabelMap.foldri
+                    (fn (label, _, acc) =>
+                       if Syntax.LabelMap.inDomain (fields', label) then acc
+                       else Syntax.Label.toString label :: acc) [] fields
+                val onlyInSecond =
+                  Syntax.LabelMap.foldri
+                    (fn (label, _, acc) =>
+                       if Syntax.LabelMap.inDomain (fields, label) then acc
+                       else Syntax.Label.toString label :: acc) [] fields'
+                val firstRecord =
+                  if Syntax.LabelMap.numItems fields = List.length onlyInFirst then
+                    "{" ^ String.concatWith ", " onlyInFirst ^ "}"
+                  else
+                    "{" ^ String.concatWith ", " (onlyInFirst @ ["..."]) ^ "}"
+                val secondRecord =
+                  if Syntax.LabelMap.numItems fields' = List.length onlyInSecond then
+                    "{" ^ String.concatWith ", " onlyInSecond ^ "}"
+                  else
+                    "{" ^ String.concatWith ", " (onlyInSecond @ ["..."]) ^ "}"
+              in
+                case ConstraintInfo.sort (ci, firstRecord, secondRecord) of
+                  ConstraintInfo.SUBSUMPTION {expected, actual} =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; expected " ^ expected
+                        ^ ", but got " ^ actual
+                      )
+                | ConstraintInfo.SEQUENCE_OR_BRANCH
+                    {previous, current, place = _} =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; previous was " ^ previous
+                        ^ ", but now is " ^ current
+                      )
+              end
             else
               ()
           end
@@ -1059,11 +1093,48 @@ struct
             unify
               (ctx, env, ci, span1, T.RecordType (span2, extraFields), baseTy);
             if incompatible then
-              emitTypeError
-                ( ctx
-                , [span1, span2, span3]
-                , "unification failed: incompatible record types (different fields)"
-                )
+              let
+                val onlyInSecond =
+                  Syntax.LabelMap.foldri
+                    (fn (label, _, acc) =>
+                       if Syntax.LabelMap.inDomain (fields, label) then acc
+                       else Syntax.Label.toString label :: acc) [] fields'
+                val secondRecord =
+                  if Syntax.LabelMap.numItems fields' = List.length onlyInSecond then
+                    "{" ^ String.concatWith ", " onlyInSecond ^ "}"
+                  else
+                    "{" ^ String.concatWith ", " (onlyInSecond @ ["..."]) ^ "}"
+              in
+                case ci of
+                  ConstraintInfo.EXPECTED_ACTUAL =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; the actual record has extra fields: "
+                        ^ secondRecord
+                      )
+                | ConstraintInfo.ACTUAL_EXPECTED =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; some fields are missing from the actual record: "
+                        ^ secondRecord
+                      )
+                | ConstraintInfo.PREVIOUS_CURRENT _ =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; the later record has extra fields: "
+                        ^ secondRecord
+                      )
+                | ConstraintInfo.CURRENT_PREVIOUS _ =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; some fields are missing from the later record: "
+                        ^ secondRecord
+                      )
+              end
             else
               ()
           end
@@ -1094,11 +1165,48 @@ struct
             unify
               (ctx, env, ci, span1, baseTy, T.RecordType (span2, extraFields));
             if incompatible then
-              emitTypeError
-                ( ctx
-                , [span1, span2, span3]
-                , "unification failed: incompatible record types (different fields)"
-                )
+              let
+                val onlyInFirst =
+                  Syntax.LabelMap.foldri
+                    (fn (label, _, acc) =>
+                       if Syntax.LabelMap.inDomain (fields', label) then acc
+                       else Syntax.Label.toString label :: acc) [] fields
+                val firstRecord =
+                  if Syntax.LabelMap.numItems fields = List.length onlyInFirst then
+                    "{" ^ String.concatWith ", " onlyInFirst ^ "}"
+                  else
+                    "{" ^ String.concatWith ", " (onlyInFirst @ ["..."]) ^ "}"
+              in
+                case ci of
+                  ConstraintInfo.EXPECTED_ACTUAL =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; some fields are missing from the actual record: "
+                        ^ firstRecord
+                      )
+                | ConstraintInfo.ACTUAL_EXPECTED =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; the actual record has extra fields: "
+                        ^ firstRecord
+                      )
+                | ConstraintInfo.PREVIOUS_CURRENT _ =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; some fields are missing from the later record: "
+                        ^ firstRecord
+                      )
+                | ConstraintInfo.CURRENT_PREVIOUS _ =>
+                    emitTypeError
+                      ( ctx
+                      , [span1]
+                      , "incompatible record types; the later record has extra fields: "
+                        ^ firstRecord
+                      )
+              end
             else
               ()
           end
@@ -1776,7 +1884,7 @@ struct
                                   ( ctx
                                   , [span]
                                   , "duplicate record field: "
-                                    ^ Syntax.print_Label label
+                                    ^ Syntax.Label.toString label
                                   )
                               else
                                 ()
@@ -2345,7 +2453,7 @@ struct
                        ( emitTypeError
                            ( ctx
                            , [sourceSpan]
-                           , "expected " ^ Syntax.print_Label label
+                           , "expected " ^ Syntax.Label.toString label
                              ^ " to be present"
                            )
                        ; (vars, fieldPats)
@@ -2387,7 +2495,7 @@ struct
                            , [sourceSpan]
                            , "missing fields: "
                              ^
-                             Syntax.print_list Syntax.print_Label
+                             Syntax.print_list Syntax.Label.toString
                                (Syntax.LabelMap.foldri
                                   (fn (label, _, acc) => label :: acc) []
                                   baseFields)
@@ -3183,7 +3291,7 @@ struct
                        ( emitTypeError
                            ( ctx
                            , [span]
-                           , "extra field: " ^ Syntax.print_Label label
+                           , "extra field: " ^ Syntax.Label.toString label
                            )
                        ; NONE
                        )
@@ -3202,7 +3310,7 @@ struct
                        , [span]
                        , "missing fields: "
                          ^
-                         Syntax.print_list Syntax.print_Label
+                         Syntax.print_list Syntax.Label.toString
                            (Syntax.LabelMap.foldri
                               (fn (label, _, acc) => label :: acc) []
                               extraFields)
@@ -3235,7 +3343,7 @@ struct
                        ( emitTypeError
                            ( ctx
                            , [span]
-                           , "extra field: " ^ Syntax.print_Label label
+                           , "extra field: " ^ Syntax.Label.toString label
                            )
                        ; NONE
                        )
