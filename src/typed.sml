@@ -229,6 +229,7 @@ sig
       , expected: TypeScheme
       , actual: TypeScheme
       , origin: valdesc_origin
+      , tyToString: Ty -> string
       }
   | ESImportDec of
       { sourceSpan: SourcePos.span
@@ -618,6 +619,7 @@ struct
       , expected: TypeScheme
       , actual: TypeScheme
       , origin: valdesc_origin
+      , tyToString: Ty -> string
       }
   | ESImportDec of
       { sourceSpan: SourcePos.span
@@ -1298,6 +1300,7 @@ struct
                , expected = TypeScheme (tyvars, ty)
                , actual = TypeScheme (tyvars', ty')
                , origin
+               , tyToString
                }) =
             let
               val subst' =
@@ -1318,6 +1321,7 @@ struct
                 , expected = TypeScheme (tyvars, applySubstTy subst' ty)
                 , actual = TypeScheme (tyvars, applySubstTy subst'' ty')
                 , origin = origin
+                , tyToString = tyToString
                 }
             end
         | doDec (ESImportDec {sourceSpan, pure, specs, moduleName}) =
@@ -1674,6 +1678,7 @@ struct
                , expected = TypeScheme (tyvars, ty)
                , actual = TypeScheme (tyvars', ty')
                , origin
+               , tyToString
                }) =
             ValDescDec
               { sourceSpan = sourceSpan
@@ -1681,6 +1686,7 @@ struct
                   TypeScheme (tyvars, doTy ty) (* should not be needed *)
               , actual = TypeScheme (tyvars', doTy ty')
               , origin = origin
+              , tyToString = tyToString
               }
         | doDec (ESImportDec {sourceSpan, pure, specs, moduleName}) =
             ESImportDec
@@ -1914,6 +1920,7 @@ struct
          , expected = TypeScheme (_, ty)
          , actual = TypeScheme (_, ty')
          , origin = _
+         , tyToString = _
          } =>
          freeAnonymousTyVarsInTy ty (* should be empty *)
          @ freeAnonymousTyVarsInTy ty'

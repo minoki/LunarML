@@ -3114,6 +3114,7 @@ struct
                          , expected = T.TypeScheme ([], PrimTypes.unit)
                          , actual = T.TypeScheme ([], ty)
                          , origin = T.VALDESC_SEQUENCE
+                         , tyToString = print_Ty env
                          } :: decs
                    end) [] xs
             val (resultType, y) = synthTypeOfExp (ctx, env, y)
@@ -3471,6 +3472,7 @@ struct
                          , expected = T.TypeScheme ([], PrimTypes.unit)
                          , actual = T.TypeScheme ([], ty)
                          , origin = T.VALDESC_SEQUENCE
+                         , tyToString = print_Ty env
                          } :: decs
                    end) [] xs
             val y = checkTypeOfExp (ctx, env, y, expectedTy)
@@ -3919,6 +3921,7 @@ struct
                                (List.map doTyVar tyvarseq, ty)
                            , actual = tysc
                            , origin = T.VALDESC_COMMENT
+                           , tyToString = print_Ty env
                            })
                        end
                    | NONE =>
@@ -4186,6 +4189,7 @@ struct
                                (List.map doTyVar tyvarseq, ty)
                            , actual = tysc
                            , origin = T.VALDESC_COMMENT
+                           , tyToString = print_Ty env
                            })
                        end
                    | NONE =>
@@ -5419,6 +5423,7 @@ struct
         , expected as T.TypeScheme (_, _)
         , actual as T.TypeScheme (_, _)
         , origin
+        , tyToString
         ) =
         let
           val ictx = {context = ctx, level = 0}
@@ -5433,7 +5438,8 @@ struct
                          ( #messageHandler ctx
                          , [span]
                          , "type"
-                         , "value description mismatch"
+                         , "value description mismatch: the actual type was "
+                           ^ tyToString tyA
                          )
                      ; false
                      )
@@ -5442,7 +5448,8 @@ struct
                          ( #messageHandler ctx
                          , [span]
                          , "type"
-                         , "value description mismatch"
+                         , "value description mismatch: the actual type was "
+                           ^ tyToString tyA
                          )
                      ; false
                      )
@@ -5454,7 +5461,8 @@ struct
                          ( #messageHandler ctx
                          , [span]
                          , "type"
-                         , "sequence expression not of type unit"
+                         , "sequence expression not of type unit; the actual type was "
+                           ^ tyToString tyA
                          )
                      ; false
                      )
@@ -5463,7 +5471,8 @@ struct
                          ( #messageHandler ctx
                          , [span]
                          , "type"
-                         , "sequence expression not of type unit"
+                         , "sequence expression not of type unit; the actual type was "
+                           ^ tyToString tyA
                          )
                      ; false
                      )
@@ -5590,8 +5599,12 @@ struct
         | checkDec (ctx, env, T.EqualityDec (_, tyvars, _, exp)) =
             checkExp (ctx, T.TyVarSet.addList (env, tyvars), exp)
         | checkDec
-            (ctx, env, T.ValDescDec {sourceSpan, expected, actual, origin}) =
-            checkValDesc (ctx, env, sourceSpan, expected, actual, origin)
+            ( ctx
+            , env
+            , T.ValDescDec {sourceSpan, expected, actual, origin, tyToString}
+            ) =
+            checkValDesc
+              (ctx, env, sourceSpan, expected, actual, origin, tyToString)
         | checkDec (_, _, T.ESImportDec _) = ()
       and checkDecs (ctx, env, decs) =
         List.app (fn dec => checkDec (ctx, env, dec)) decs
@@ -5852,6 +5865,7 @@ struct
                  , expected = T.TypeScheme (tyvars, ty)
                  , actual = T.TypeScheme (tyvars', ty')
                  , origin = _
+                 , tyToString = _
                  }) =
               ( #goTy
                   (checkTyScope
