@@ -410,8 +410,7 @@ local function _Vector_unsafeFromListRevN(n, xs)
 end
 --END
 --BEGIN _VectorOrArray_tabulate: _raise _Size
-local function _VectorOrArray_tabulate(t)
-  local n, f = t[1], t[2]
+local function _VectorOrArray_tabulate(n, f)
   if n < 0 then -- or maxLen < n
     _raise(_Size, "(Vector|Array).tabulate")
   end

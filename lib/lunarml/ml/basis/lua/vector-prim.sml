@@ -6,7 +6,7 @@ fun sub (vec, i) = if i < 0 orelse length vec <= i then
                    else
                        Unsafe.Vector.sub (vec, i)
 val fromList = _Prim.Vector.fromList
-val tabulate = _Prim.Vector.tabulate
+fun tabulate (n, f) = _primCall "call2" (_Prim.Vector.tabulate, n, f)
 val concat = _Prim.Vector.concat
 end
 _equality ''a vector = fn (x, y) => let val n = Vector.length x

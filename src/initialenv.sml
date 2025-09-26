@@ -527,7 +527,7 @@ struct
               , VId_Vector_tabulate
               , TypeScheme
                   ( [(tyVarA, NONE)]
-                  , PT.pair (PT.int, PT.int --> tyA) --> PT.vector tyA
+                  , PT.function2 (PT.int, PT.int --> tyA) (PT.vector tyA)
                   )
               )
             , ( "_Prim.Vector.concat"
@@ -543,7 +543,7 @@ struct
               , VId_Array_tabulate
               , TypeScheme
                   ( [(tyVarA, NONE)]
-                  , PT.pair (PT.int, PT.int --> tyA) --> PT.array tyA
+                  , PT.function2 (PT.int, PT.int --> tyA) (PT.array tyA)
                   )
               )
             , ("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], PT.lua_value))
