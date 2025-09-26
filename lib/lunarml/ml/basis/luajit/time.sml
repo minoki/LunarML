@@ -29,15 +29,15 @@ signature TIME = sig
 end;
 local
     (* Avoid 1970-01-01 00:00:00 in local time, which might be negative *)
-    val epoch = LunarML.assumeDiscardable (fn () =>
-                                              let val t = Lua.newTable ()
-                                              in Lua.setField (t, "year", Lua.fromInt 2001)
-                                               ; Lua.setField (t, "month", Lua.fromInt 1)
-                                               ; Lua.setField (t, "day", Lua.fromInt 1)
-                                               ; Lua.setField (t, "hour", Lua.fromInt 0)
-                                               ; Lua.call1 Lua.Lib.os.time #[t]
-                                              end
-                                          ) () (* local time; depends on time zone *)
+    val epoch =
+        let val t = Lua.newTableWith
+              #[("year", Lua.fromInt 2001)
+               ,("month", Lua.fromInt 1)
+               ,("day", Lua.fromInt 1)
+               ,("hour", Lua.fromInt 0)
+               ]
+        in Lua.call1WithEffect Lua.PrimEffect.discardable Lua.Lib.os.time #[t]
+        end (* local time; depends on time zone *)
 in
 structure TimeImpl :> sig
               structure Time : TIME
@@ -157,13 +157,14 @@ fun monthToInt Jan = 1
   | monthToInt Nov = 11
   | monthToInt Dec = 12
 fun date { year : int, month : month, day : int, hour : int, minute : int, second : int, offset : Time.time option }
-    = let val t = Lua.newTable ()
-          val () = Lua.setField (t, "year", Lua.fromInt year)
-          val () = Lua.setField (t, "month", Lua.fromInt (monthToInt month))
-          val () = Lua.setField (t, "day", Lua.fromInt day)
-          val () = Lua.setField (t, "hour", Lua.fromInt hour)
-          val () = Lua.setField (t, "min", Lua.fromInt minute)
-          val () = Lua.setField (t, "sec", Lua.fromInt second)
+    = let val t = Lua.newTableWith
+            #[("year", Lua.fromInt year)
+             ,("month", Lua.fromInt (monthToInt month))
+             ,("day", Lua.fromInt day)
+             ,("hour", Lua.fromInt hour)
+             ,("min", Lua.fromInt minute)
+             ,("sec", Lua.fromInt second)
+             ]
           val u = Lua.call1 Lua.Lib.os.date #[Lua.fromString "*t", Lua.call1 Lua.Lib.os.time #[t]] (* TODO: error handling *)
           val () = Lua.setField (u, "offset", Lua.unsafeToValue offset)
       in u
