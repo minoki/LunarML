@@ -1396,8 +1396,21 @@ struct
           collectConcat (x, collectConcat (y, acc))
       | collectConcat (x, acc) = x :: acc
     fun doExp (L.BinExp (L.CONCAT, L.BinExp (L.CONCAT, x, y), z)) =
-          let val xs = collectConcat (x, collectConcat (y, []))
-          in List.foldr (fn (a, acc) => L.BinExp (L.CONCAT, a, acc)) z xs
+          let
+            val xs = collectConcat (x, collectConcat (y, []))
+            fun cat
+                  ( L.ConstExp (L.LiteralString s)
+                  , L.ConstExp (L.LiteralString t)
+                  ) =
+                  L.ConstExp (L.LiteralString (s ^ t))
+              | cat
+                  ( L.ConstExp (L.LiteralString s)
+                  , L.BinExp (L.CONCAT, L.ConstExp (L.LiteralString t), c)
+                  ) =
+                  L.BinExp (L.CONCAT, L.ConstExp (L.LiteralString (s ^ t)), c)
+              | cat (a, b) = L.BinExp (L.CONCAT, a, b)
+          in
+            List.foldr cat z xs
           end
       | doExp x = x
     fun doBlock block =
