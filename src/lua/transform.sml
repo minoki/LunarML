@@ -45,6 +45,10 @@ sig
   sig
     val doBlock: LuaSyntax.Block -> LuaSyntax.Block
   end
+  structure NaturalIfThenElse:
+  sig
+    val doBlock: LuaSyntax.Block -> LuaSyntax.Block
+  end
 end =
 struct
   structure L = LuaSyntax
@@ -1394,5 +1398,203 @@ struct
       | doExp x = x
     fun doBlock block =
       L.recursePre {exp = doExp, stat = fn x => x, block = fn x => x} block
+  end
+  structure LabelUsageAnalysis :>
+  sig
+    datatype frequency = NEVER | ONCE | MANY
+    type label_usage_table
+    val getLabelUsage: label_usage_table * L.Label -> frequency
+    val analyze: L.Block -> label_usage_table
+  end =
+  struct
+    datatype frequency = NEVER | ONCE | MANY
+    fun oneMore NEVER = ONCE
+      | oneMore ONCE = MANY
+      | oneMore (many as MANY) = many
+    type label_usage_table = frequency TypedSyntax.VIdTable.hash_table
+    fun getLabelUsage (table: label_usage_table, label) =
+      case TypedSyntax.VIdTable.find table label of
+        SOME r => r
+      | NONE => MANY (* unknown *)
+    fun useLabel table label =
+      case TypedSyntax.VIdTable.find table label of
+        SOME r => TypedSyntax.VIdTable.insert table (label, oneMore r)
+      | NONE => ()
+    fun analyze block =
+      let
+        val table = TypedSyntax.VIdTable.mkTable (1, Fail
+          "label usage table lookup failed")
+        fun goExp exp =
+          case exp of
+            L.ConstExp _ => ()
+          | L.VarExp _ => ()
+          | L.TableExp fields => Vector.app (fn (_, x) => goExp x) fields
+          | L.CallExp (f, xs) => (goExp f; Vector.app goExp xs)
+          | L.MethodExp (f, _, xs) => (goExp f; Vector.app goExp xs)
+          | L.FunctionExp (_, block) => goBlock block
+          | L.BinExp (_, x, y) => (goExp x; goExp y)
+          | L.UnaryExp (_, x) => goExp x
+        and goStat stat =
+          case stat of
+            L.LocalStat (_, xs) => List.app goExp xs
+          | L.AssignStat (xs, ys) => (List.app goExp xs; List.app goExp ys)
+          | L.CallStat (f, xs) => (goExp f; Vector.app goExp xs)
+          | L.MethodStat (f, _, xs) => (goExp f; Vector.app goExp xs)
+          | L.IfStat (cond, t, e) => (goExp cond; goBlock t; goBlock e)
+          | L.ReturnStat xs => Vector.app goExp xs
+          | L.DoStat {loopLike = _, body = block} => goBlock block
+          | L.GotoStat label => useLabel table label
+          | L.LabelStat _ => ()
+        and goBlock block =
+          let
+            fun lookForLabel (L.LabelStat label) =
+                  if TypedSyntax.VIdTable.inDomain table label then
+                    raise Fail
+                      ("LabelUsageAnalysis: duplicate label in AST: "
+                       ^ TypedSyntax.print_VId label)
+                  else
+                    TypedSyntax.VIdTable.insert table (label, NEVER)
+              | lookForLabel _ = ()
+          in
+            Vector.app lookForLabel block;
+            Vector.app goStat block
+          end
+      in
+        goBlock block;
+        table
+      end
+  end
+  structure NaturalIfThenElse =
+  struct
+    (*
+     * Convert
+     *   if ... then
+     *     goto then_
+     *   else
+     *     ...
+     *   end
+     *   ::then_::
+     *   do
+     *     ...
+     *   end
+     * or
+     *   if ... then
+     *   else
+     *     ...
+     *     (return or goto)
+     *   end
+     *   do
+     *     ...
+     *   end
+     * to
+     *   if ... then
+     *     ...
+     *   else
+     *     ...
+     *   end
+     * Also, convert
+     *   if ... then
+     *     ...
+     *     (return or goto)
+     *   end
+     *   if ... then
+     *     ...
+     *   else
+     *     ...
+     *   end
+     * to
+     *    if ... then
+     *      ...
+     *      (return or goto)
+     *    elseif ... then
+     *      ...
+     *    else
+     *      ...
+     *    end
+     *)
+    fun endsWithJump block =
+      if Vector.length block = 0 then
+        false
+      else
+        let
+          val finalStat = Vector.sub (block, Vector.length block - 1)
+        in
+          case finalStat of
+            L.IfStat (_, t, e) => endsWithJump t andalso endsWithJump e
+          | L.ReturnStat _ => true
+          | L.DoStat {loopLike = _, body} => endsWithJump body
+          | L.GotoStat _ => true
+          | L.CallStat (L.VarExp (L.PredefinedId "_raise"), _) => true
+          | _ => false
+        end
+    fun extractGoto block =
+      if Vector.length block = 1 then
+        case Vector.sub (block, 0) of
+          L.GotoStat label => SOME label
+        | _ => NONE
+      else
+        NONE
+    fun doBlock program =
+      let
+        val labelUsage = LabelUsageAnalysis.analyze program
+        fun coalesceIfElse ([], acc) = acc
+          | coalesceIfElse (stat :: revStats, acc) =
+              let
+                fun default () =
+                  coalesceIfElse (revStats, stat :: acc)
+              in
+                case (stat, revStats) of
+                  (L.IfStat (c, t, e), L.IfStat (c', t', e') :: revStats') =>
+                    if Vector.length e' = 0 andalso endsWithJump t' then
+                      coalesceIfElse
+                        ( L.IfStat (c', t', vector [L.IfStat (c, t, e)])
+                          :: revStats'
+                        , acc
+                        )
+                    else
+                      default ()
+                | _ => default ()
+              end
+        fun go (slice, revAcc) =
+          case VectorSlice.getItem slice of
+            SOME (stat, slice') =>
+              let
+                fun default () =
+                  go (slice', stat :: revAcc)
+              in
+                case stat of
+                  L.IfStat (c, t, e) =>
+                    if endsWithJump e then
+                      case (extractGoto t, VectorSlice.getItem slice') of
+                        (SOME label, SOME (L.LabelStat label', slice'')) =>
+                          if
+                            TypedSyntax.eqVId (label, label')
+                            andalso
+                            LabelUsageAnalysis.getLabelUsage (labelUsage, label)
+                            = LabelUsageAnalysis.ONCE
+                          then
+                            case VectorSlice.getItem slice'' of
+                              SOME (L.DoStat {loopLike = false, body}, slice''') =>
+                                go (slice''', L.IfStat (c, body, e) :: revAcc)
+                            | _ => default ()
+                          else
+                            default ()
+                      | (_, SOME (L.DoStat {loopLike = false, body}, slice'')) =>
+                          if Vector.length t = 0 then
+                            go (slice'', L.IfStat (c, body, e) :: revAcc)
+                          else
+                            default ()
+                      | _ => default ()
+                    else
+                      default ()
+                | _ => default ()
+              end
+          | NONE => Vector.fromList (coalesceIfElse (revAcc, []))
+        fun doBlock block =
+          go (VectorSlice.full block, [])
+      in
+        L.recursePost {exp = fn e => e, stat = fn s => s, block = doBlock}
+          program
+      end
   end
 end;

@@ -172,6 +172,7 @@ struct
           val lua =
             LuaTransform.InsertDo.doBlock
               (0, lua) (* TODO: pre-declared locals *)
+          val lua = LuaTransform.NaturalIfThenElse.doBlock lua
           val lua = #3
             (LuaTransform.ProcessUpvalue.doBlock
                {nextId = nextId, maxUpvalue = 255}
