@@ -22,12 +22,13 @@ struct
     type value_info =
       {exp: C.SimpleExp option (* , isDiscardableFunction : bool *)}
     type env = value_info TypedSyntax.VIdMap.map
+    fun isInt31 (x: IntInf.int) = ~0x40000000 <= x andalso x <= 0x3fffffff
     fun isInt32 (x: IntInf.int) = ~0x80000000 <= x andalso x <= 0x7fffffff
     fun isInt54 (x: IntInf.int) =
       ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff
     fun isInt64 (x: IntInf.int) =
       ~0x8000000000000000 <= x andalso x <= 0x7fffffffffffffff
-    fun isInt (P.INT, _) = false
+    fun isInt (P.INT, x) = isInt31 x (* Assume 31 bits or larger *)
       | isInt (P.I32, x) = isInt32 x
       | isInt (P.I54, x) = isInt54 x
       | isInt (P.I64, x) = isInt64 x
