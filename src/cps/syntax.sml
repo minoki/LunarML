@@ -266,6 +266,12 @@ struct
       | isDiscardable (PrimOp {primOp = F.ConstructExnOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.ConstructExnWithPayloadOp, ...}) =
           true
+      | isDiscardable
+          (PrimOp
+             { primOp = F.PrimCall (Primitives.Array_array _)
+             , args = [IntConst (_, n), _]
+             , ...
+             }) = n >= 0
       | isDiscardable (PrimOp {primOp = F.PrimCall p, args, ...}) =
           Primitives.isDiscardableWithArgs (p, List.map getPrimEffect args)
       | isDiscardable (PrimOp {primOp = F.JsCallOp, args = e :: _, ...}) =

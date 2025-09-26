@@ -863,7 +863,7 @@ do
       srcname = "Array_array",
       type = { vars = {TV.a}, args = {intA, TV.a}, results = {array(TV.a)} },
       mayraise = true,
-      discardable = false,
+      discardable = false, -- There is a special rule in CSyntax.isDiscardable
     },
     {
       name = "Unsafe.cast",
