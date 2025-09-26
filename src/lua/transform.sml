@@ -49,6 +49,10 @@ sig
   sig
     val doBlock: LuaSyntax.Block -> LuaSyntax.Block
   end
+  structure StripRedundantDo:
+  sig
+    val doBlock: LuaSyntax.Block -> LuaSyntax.Block
+  end
 end =
 struct
   structure L = LuaSyntax
@@ -1596,5 +1600,29 @@ struct
         L.recursePost {exp = fn e => e, stat = fn s => s, block = doBlock}
           program
       end
+  end
+  structure StripRedundantDo =
+  struct
+    fun isDeclaration (L.LocalStat _) = true
+      (* | isDeclaration (L.LabelStat _) = true *)
+      | isDeclaration _ = false
+    fun isLastStatReturn block =
+      Vector.length block >= 1
+      andalso
+      case Vector.sub (block, Vector.length block - 1) of
+        L.ReturnStat _ => true
+      | _ => false
+    fun goStat (stat as L.DoStat {loopLike = _, body}, (isLast, acc)) =
+          if
+            isLast
+            orelse
+            not (Vector.exists isDeclaration body orelse isLastStatReturn body)
+          then (false, Vector.foldr (op::) acc body) (* flatten *)
+          else (false, stat :: acc)
+      | goStat (stat, (_, acc)) = (false, stat :: acc)
+    fun goBlock block =
+      Vector.fromList (#2 (Vector.foldr goStat (true, []) block))
+    val doBlock =
+      L.recursePost {exp = fn e => e, stat = fn s => s, block = goBlock}
   end
 end;
