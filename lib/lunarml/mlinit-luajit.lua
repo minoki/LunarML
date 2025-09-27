@@ -66,6 +66,9 @@ local function table_unpackN(t)
   return table_unpack(t, 1, t.n)
 end
 --END
+--BEGIN table_new
+local table_new = require "table.new"
+--END
 --BEGIN table_move: table
 local table_move = table.move
 --END
@@ -404,12 +407,13 @@ end
 --END
 
 -- Vector/Array
---BEGIN _Array_array: _raise _Size
+--BEGIN _Array_array: _raise _Size table_new
 local function _Array_array(n, init)
   if n < 0 then -- or maxLen < n
     _raise(_Size, "Array.array")
   end
-  local t = { n = n }
+  local t = table_new(n, 1)
+  t.n = n
   for i = 1, n do
     t[i] = init
   end
@@ -429,9 +433,10 @@ local function _VectorOrArray_fromList(xs)
   return t
 end
 --END
---BEGIN _Vector_unsafeFromListRevN
+--BEGIN _Vector_unsafeFromListRevN table_new
 local function _Vector_unsafeFromListRevN(n, xs)
-  local t = { n = n }
+  local t = table_new(n, 1)
+  t.n = n
   while xs ~= nil do
     t[n] = xs[1]
     xs = xs[2]
@@ -441,12 +446,13 @@ local function _Vector_unsafeFromListRevN(n, xs)
   return t
 end
 --END
---BEGIN _VectorOrArray_tabulate: _raise _Size
+--BEGIN _VectorOrArray_tabulate: _raise _Size table_new
 local function _VectorOrArray_tabulate(n, f)
   if n < 0 then -- or maxLen < n
     _raise(_Size, "(Vector|Array).tabulate")
   end
-  local t = { n = n }
+  local t = table_new(n, 1)
+  t.n = n
   for i = 1, n do
     t[i] = f(i - 1)
   end
