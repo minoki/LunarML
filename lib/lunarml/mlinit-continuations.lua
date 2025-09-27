@@ -63,6 +63,9 @@ local function table_unpackN(t)
   return table_unpack(t, 1, t.n)
 end
 --END
+--BEGIN table_move: table
+local table_move = table.move
+--END
 
 --BEGIN _id
 local function _id(x)
@@ -422,16 +425,14 @@ local function _VectorOrArray_tabulate(n, f)
 end
 
 -- Vector
---BEGIN _Vector_concat
+--BEGIN _Vector_concat: table_move
 local function _Vector_concat(xs)
   local n = 0
   local t = {}
   while xs ~= nil do
     local u = xs[1]
     local m = u.n
-    for i = 1,m do
-      t[n + i] = u[i]
-    end
+    table_move(u, 1, m, n + 1, t)
     n = n + m
     xs = xs[2]
   end

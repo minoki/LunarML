@@ -66,6 +66,9 @@ local function table_unpackN(t)
   return table_unpack(t, 1, t.n)
 end
 --END
+--BEGIN table_move: table
+local table_move = table.move
+--END
 --BEGIN tonumber
 local tonumber = tonumber
 --END
@@ -452,21 +455,38 @@ end
 --END
 
 -- Vector
---BEGIN _Vector_concat
-local function _Vector_concat(xs)
-  local n = 0
-  local t = {}
-  while xs ~= nil do
-    local u = xs[1]
-    local m = u.n
-    for i = 1,m do
-      t[n + i] = u[i]
+--BEGIN _Vector_concat: table_move
+local _Vector_concat
+if table_move == nil then
+  function _Vector_concat(xs)
+    local n = 0
+    local t = {}
+    while xs ~= nil do
+      local u = xs[1]
+      local m = u.n
+      for i = 1,m do
+        t[n + i] = u[i]
+      end
+      n = n + m
+      xs = xs[2]
     end
-    n = n + m
-    xs = xs[2]
+    t.n = n
+    return t
   end
-  t.n = n
-  return t
+else
+  function _Vector_concat(xs)
+    local n = 0
+    local t = {}
+    while xs ~= nil do
+      local u = xs[1]
+      local m = u.n
+      table_move(u, 1, m, n + 1, t)
+      n = n + m
+      xs = xs[2]
+    end
+    t.n = n
+    return t
+  end
 end
 --END
 
