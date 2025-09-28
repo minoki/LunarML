@@ -409,6 +409,12 @@ struct
               LogicalOr (goExp x, goExp y)
         and goDecs (_, [], revAcc) = revAcc (* reversed *)
           | goDecs (i, ValDec {exp, results as [SOME v]} :: decs, revAcc) =
+              (*
+               * Situation:
+               *   ...(rev revAcc)...
+               *   val v = exp
+               *   ...decs...
+               *)
               let
                 val exp = goExp exp
               in
@@ -465,6 +471,9 @@ struct
               goDecs (0, decs, dec :: revAcc)
         and goStat (Let {decs, cont}) =
               let
+                fun LetRev ([], cont) = cont
+                  | LetRev (revDecs, cont) =
+                      Let {decs = List.rev revDecs, cont = cont}
                 fun searchFirstValDec
                       (acc, ValDec {exp, results = [SOME v]} :: revDecs) =
                       SOME (List.revAppend (acc, revDecs), exp, v)
@@ -481,6 +490,12 @@ struct
               in
                 case searchFirstValDec ([], revDecs0) of
                   SOME (revDecs1, exp, v) =>
+                    (*
+                     * Situation:
+                     *   let ...(rev revDecs1)...
+                     *       val v = exp
+                     *   in cont
+                     *)
                     if
                       canInline exp
                       andalso Analysis.get (usage, v) = Analysis.ONCE
@@ -490,53 +505,49 @@ struct
                           let
                             val cont = goStat cont
                           in
-                            if List.null revDecs1 then
-                              cont
-                            else
-                              case (revDecs1, cont) of
-                                ( ContDec {name, params as [SOME p], body} ::
-                                    revDecs2
-                                , AppCont {applied, args = [a]}
-                                ) =>
-                                  if name = applied then
-                                    if
-                                      canInline a
-                                      andalso
-                                      Analysis.get (usage, p) = Analysis.ONCE
-                                    then
-                                      case #goStat (replaceOnce (p, a)) body of
-                                        SOME body =>
-                                          if List.null revDecs2 then
-                                            body
-                                          else
-                                            Let
-                                              { decs = List.rev revDecs2
-                                              , cont = body
-                                              }
-                                      | NONE =>
-                                          Let
-                                            { decs = List.rev
-                                                (ValDec
-                                                   {exp = a, results = params}
-                                                 :: revDecs2)
-                                            , cont = body
-                                            }
-                                    else
-                                      Let
-                                        { decs = List.rev
-                                            (ValDec {exp = a, results = params}
-                                             :: revDecs2)
-                                        , cont = body
-                                        }
+                            case (revDecs1, cont) of
+                              ( ContDec {name, params as [SOME p], body} ::
+                                  revDecs2
+                              , AppCont {applied, args = [a]}
+                              ) =>
+                                if name = applied then
+                                  (*
+                                   *   letcont k p = ...body...
+                                   *   in k a
+                                   * ~>
+                                   *   val p = a
+                                   *   ...body...
+                                   *)
+                                  if
+                                    canInline a
+                                    andalso
+                                    Analysis.get (usage, p) = Analysis.ONCE
+                                  then
+                                    case #goStat (replaceOnce (p, a)) body of
+                                      SOME body => LetRev (revDecs2, body)
+                                    | NONE =>
+                                        Let
+                                          { decs = List.rev
+                                              (ValDec
+                                                 {exp = a, results = params}
+                                               :: revDecs2)
+                                          , cont = body
+                                          }
                                   else
-                                    Let {decs = List.rev revDecs1, cont = cont}
-                              | _ => Let {decs = List.rev revDecs1, cont = cont}
+                                    Let
+                                      { decs = List.rev
+                                          (ValDec {exp = a, results = params}
+                                           :: revDecs2)
+                                      , cont = body
+                                      }
+                                else
+                                  LetRev (revDecs1, cont)
+                            | _ => LetRev (revDecs1, cont)
                           end
-                      | NONE =>
-                          Let {decs = List.rev revDecs0, cont = goStat cont}
+                      | NONE => LetRev (revDecs0, goStat cont)
                     else
-                      Let {decs = List.rev revDecs0, cont = goStat cont}
-                | NONE => Let {decs = List.rev revDecs0, cont = goStat cont}
+                      LetRev (revDecs0, goStat cont)
+                | NONE => LetRev (revDecs0, goStat cont)
               end
           | goStat (App {applied, cont, args, attr}) =
               App
