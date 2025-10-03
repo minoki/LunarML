@@ -35,6 +35,7 @@ local
                ,("month", Lua.fromInt 1)
                ,("day", Lua.fromInt 1)
                ,("hour", Lua.fromInt 0)
+               ,("isdst", Lua.fromBool false)
                ]
         in Lua.call1WithEffect Lua.PrimEffect.discardable Lua.Lib.os.time #[t]
         end (* local time; depends on time zone *)
@@ -98,6 +99,7 @@ fun toLuaTime (x : int) : Lua.value
              ,("hour", Lua.fromInt hour)
              ,("min", Lua.fromInt min)
              ,("sec", Lua.fromInt sec)
+             ,("isdst", Lua.fromBool false)
              ]
       in Lua.call1 Lua.Lib.os.time #[t]
       end
