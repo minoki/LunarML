@@ -7,7 +7,7 @@ on:
 
 jobs:
   package_npm:
-    runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

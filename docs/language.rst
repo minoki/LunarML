@@ -98,6 +98,7 @@ Examples:
    ("\u{3042}" : string) = "\227\129\130"
    ("\u{80}" : string) = "\194\128"
    ("\u{1F600}" : string) = "\240\159\152\128"
+   ("\u{1F600}" : String16.string) = "\uD83D\uDE00"
    if WideChar.maxOrd = 255 then
        ("\u{1F600}" : WideString.string) = "\240\159\152\128"
    else if WideChar.maxOrd = 65535 then
@@ -110,15 +111,16 @@ Examples of invalid constants:
 .. code-block::
 
    #"\u{80}" : char (* equivalent to #"\194\128" *)
+   #"\u{10000}" : Char16.char (* would be equivalent to #"\uD800\uDC00" *)
    if WideChar.maxOrd = 65535 then
-       #"\u{10000}" : WideChar.char (* equivalent to #"\uD800\uDC00" *)
+       #"\u{10000}" : WideChar.char (* would be equivalent to #"\uD800\uDC00" *)
 
 Infix operators with surrounding dots
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Status: experimental.
 
-To use this extension, `allowInfixingDot` annotation in MLB file is needed::
+To use this extension, ``allowInfixingDot`` annotation in MLB file is needed::
 
    ann "allowInfixingDot true" in
    ...
@@ -166,7 +168,7 @@ To use this extension, ``valDescInComments`` annotation in MLB file is needed::
    *)
 
 With this extension, comments that start with ``(*:`` will be parsed and the compatibility with the following value declaration (``val``, ``fun``) is checked against.
-Type mismatch is reported as warning or error.
+Type mismatch is reported as a warning or an error.
 
 The content in the special comment does not affect type inference.
 

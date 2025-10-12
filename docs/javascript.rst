@@ -74,11 +74,11 @@ Do not rely on it!
 ``string``
    ``Uint8Array``. Must not be modified.
 
-``WideChar.char``
+``Char16.char``
    16-bit unsigned integer.
    The sign of zero must be positive.
 
-``WideString.string``
+``String16.string``
    16-bit string (JavaScript's native String).
 
 ``Int54.int``

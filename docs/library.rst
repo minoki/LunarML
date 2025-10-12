@@ -504,6 +504,8 @@ signature STRING
    structure String :> STRING where type string = string where type char = char
    structure WideString :> STRING where type char = WideChar.char
 
+See also :ref:`text16`.
+
 signature SUBSTRING
 ^^^^^^^^^^^^^^^^^^^
 
@@ -559,6 +561,8 @@ Status: partial.
                                         where type string = WideString.string
                                         where type char = WideChar.char
 
+See also :ref:`text16`.
+
 signature TEXT
 ^^^^^^^^^^^^^^
 
@@ -594,6 +598,8 @@ signature TEXT
                               where type CharArray.array = WideCharArray.array
                               where type CharVectorSlice.slice = WideCharVectorSlice.slice
                               where type CharArraySlice.slice = WideCharArraySlice.slice
+
+See also :ref:`text16`.
 
 structure List
 ^^^^^^^^^^^^^^

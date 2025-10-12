@@ -23,10 +23,18 @@ Installation
 Pre-built binaries
 ^^^^^^^^^^^^^^^^^^
 
-Docker image is available::
+If you obtained an archive named ``lunarml-{version}-{arch}-{os}.tar.gz``::
+
+  $ tar xf lunarml-0.3.0-{arch}-{os}.tar.gz
+  $ cd lunarml-0.3.0
+  $ make install PREFIX=/opt/lunarml
+  $ export PATH=/opt/lunarml/bin:$PATH
+  $ lunarml compile example/hello.sml
+
+Also, Docker image is available::
 
   $ docker pull ghcr.io/minoki/lunarml:latest
-  $ docker run --rm --platform linux/amd64 -v "$(pwd)":/work -w /work ghcr.io/minoki/lunarml:latest lunarml compile example/hello.sml
+  $ docker run --rm -v "$(pwd)":/work -w /work ghcr.io/minoki/lunarml:latest lunarml compile example/hello.sml
   $ lua example/hello.lua
   Hello world!
 
@@ -70,7 +78,7 @@ You can install the built binary with ``make install``::
 
 Alternatively, you can use Docker to build and run LunarML::
 
-  $ docker build --platform linux/amd64 -f package/docker/Dockerfile -t lunarml:0.2.1 .
-  $ docker run --rm -v "$(pwd)":/work -w /work --platform linux/amd64 lunarml:0.2.1 lunarml compile example/hello.sml
+  $ docker build -f package/docker/Dockerfile -t lunarml:0.3.0 .
+  $ docker run --rm -v "$(pwd)":/work -w /work lunarml:0.3.0 lunarml compile example/hello.sml
   $ lua example/hello.lua
   Hello world!

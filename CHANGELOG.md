@@ -1,8 +1,10 @@
-## Version X.X.X
+## Version 0.3.0 (2025-10-12)
 
-* JavaScript: Add `JavaScript.isTruthy`
-* Lua: Add `Lua.isTruthy`
-* Lua: Add `Lua.call4`/.../`Lua.call9`/`Lua.method4`/.../`Lua.method9`
+* Add `check` subcommand
+* Add the Web targets: `--webjs`/`--webjs-cps`
+* Add `String16` and related structures in `$(SML_LIB)/basis/text16.mlb`
+* JavaScript: Add `JavaScript.Error`, `JavaScript.isTruthy`, `JavaScript.isNullOrUndefined`, `JavaScript.fromString16`, `JavaScript.Promise`, `JavaScript.async`/`JavaScript.await`
+* Lua: Add `Lua.isTruthy`, `Lua.newTableWith`, `Lua.newTableWithMetatable`, and `Lua.call4`/.../`Lua.call9`/`Lua.method4`/.../`Lua.method9`
 
 ## Version 0.2.1 (2024-11-12)
 
