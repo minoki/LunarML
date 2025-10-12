@@ -26,7 +26,7 @@ struct
         " [subcommand] [options] file.sml\n\
         \Subcommands:\n\
         \  compile               Compile a program.\n\
-        \  typecheck             Check a program.\n\
+        \  check                 Check a program.\n\
         \  help                  Show this message.\n\
         \  version               Show version information.\n\
         \Options:\n\
@@ -53,7 +53,7 @@ struct
         \"
       )
   datatype dump_mode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-  structure Subcommand = struct datatype subcommand = COMPILE | TYPECHECK end
+  structure Subcommand = struct datatype subcommand = COMPILE | CHECK end
   type options =
     { subcommand: Subcommand.subcommand option
     , output: string option
@@ -609,7 +609,7 @@ struct
           ()
       val () =
         case #subcommand opts of
-          SOME Subcommand.TYPECHECK =>
+          SOME Subcommand.CHECK =>
             ( if #printTimings opts then
                 let
                   val {lexTime, parseTime, typecheckTime} = !(#time ctx)
@@ -1140,10 +1140,9 @@ struct
                          parseArgs
                            (S.set.subcommand (SOME Subcommand.COMPILE) opts)
                            args'
-                     | "typecheck" =>
+                     | "check" =>
                          parseArgs
-                           (S.set.subcommand (SOME Subcommand.TYPECHECK) opts)
-                           args'
+                           (S.set.subcommand (SOME Subcommand.CHECK) opts) args'
                      | "help" =>
                          (showHelp (); OS.Process.exit OS.Process.success)
                      | "version" =>
