@@ -1489,7 +1489,7 @@ struct
                      SOME x => x
                    | NONE => genSym ctx
                  val fieldTy =
-                   case recordTy of
+                   case F.weakNormalizeTy recordTy of
                      F.RecordType fieldTypes' =>
                        (case Syntax.LabelMap.find (fieldTypes', label) of
                           SOME ty => ty
