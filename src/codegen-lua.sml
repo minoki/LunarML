@@ -2779,11 +2779,13 @@ struct
           val resultOrError = e
           val functionExp = L.FunctionExp (vector [], vector
             (doStat (ctx, env', NONE, body)))
+          val pcallId =
+            if #hasDelimitedContinuations ctx then L.PredefinedId "_handle"
+            else L.PredefinedId "pcall"
         in
           [ L.LocalStat
               ( [(status, L.CONST), (resultOrError, L.CONST)]
-              , [L.CallExp
-                   (L.VarExp (L.PredefinedId "pcall"), vector [functionExp])]
+              , [L.CallExp (L.VarExp pcallId, vector [functionExp])]
               )
           , L.IfStat
               ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))

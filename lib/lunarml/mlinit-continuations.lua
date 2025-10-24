@@ -461,13 +461,12 @@ end
 --END
 
 -- Delimited continuations
---BEGIN _handle _withSubCont _pushSubCont _run: table pcall getmetatable error table_unpack
+--BEGIN _handle _withSubCont _pushSubCont _run: table table_move pcall getmetatable error table_unpack
 local _handle, _withSubCont, _pushSubCont, _run
 do
   local ipairs = ipairs
   local table_insert = table.insert
   local table_remove = table.remove
-  local table_move = table.move
   local coroutine = coroutine
   local coroutine_create = coroutine.create
   local coroutine_yield = coroutine.yield
@@ -488,9 +487,6 @@ do
       _depth = olddepth + 1
       success, result = pcall(f)
       _depth = olddepth
-    end
-    if not success and getmetatable(result) ~= _exn_meta then
-      result = _Error(result)
     end
     return success, result
   end

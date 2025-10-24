@@ -83,6 +83,15 @@ should_run += should_run/xorshift64.sml
 else ifeq ($(VARIANT), lua-continuations)
 should_run += should_run/xorshift64.sml
 endif
+ifeq ($(VARIANT), luajit)
+should_run += should_run/deephandle.sml
+else ifeq ($(VARIANT), lua-continuations)
+should_run += should_run/deephandle.sml
+else ifeq ($(VARIANT), nodejs)
+should_run += should_run/deephandle.sml
+else ifeq ($(VARIANT), nodejs-cps)
+should_run += should_run/deephandle.sml
+endif
 should_compile += $(addprefix should_compile/,\
   signature_sharing1.sml \
   signature_sharing2.sml \
@@ -207,11 +216,11 @@ should_run += $(addprefix mlbasis/should_run/,\
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)
-should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb lua/should_run/foreignexn.mlb
 else ifeq ($(VARIANT), lua-continuations)
-should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb lua/should_run/foreignexn.mlb
 else ifeq ($(VARIANT), luajit)
-should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb lua/should_run/foreignexn.mlb
 endif
 should_compile += $(addprefix interface/should_compile/,\
   INTEGER.sml \
