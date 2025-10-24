@@ -2815,33 +2815,26 @@ struct
     type table =
       { escapes: bool ref
       , escapesTransitively: bool ref
-      , level: int
       , free: CSyntax.CVarSet.set
       } CSyntax.CVarTable.hash_table
-    fun direct (table: table, level, k, acc) =
-      let
-        val {escapes = _, escapesTransitively = _, level = level', free = _} =
-          C.CVarTable.lookup table k
-      in
-        if level' < level then C.CVarSet.add (acc, k) else acc
-      end
+    fun direct (_: table, k, acc) = C.CVarSet.add (acc, k)
     fun recEscape (table: table) k =
       let
-        val {escapes = _, escapesTransitively, level = _, free} =
+        val {escapes = _, escapesTransitively, free} =
           C.CVarTable.lookup table k
       in
         if !escapesTransitively then ()
         else (escapesTransitively := true; C.CVarSet.app (recEscape table) free)
       end
-    fun escape (table: table, level, k, acc) =
+    fun escape (table: table, k, acc) =
       let
-        val {escapes, escapesTransitively = _, level = level', free = _} =
+        val {escapes, escapesTransitively = _, free = _} =
           C.CVarTable.lookup table k
       in
         escapes := true;
-        if level' < level then C.CVarSet.add (acc, k) else acc
+        C.CVarSet.add (acc, k)
       end
-    fun goDec (table, level) (dec, acc) =
+    fun goDec table (dec, acc) =
       case dec of
         C.ValDec
           { exp =
@@ -2859,36 +2852,36 @@ struct
               ( contParam
               , { escapes = ref false
                 , escapesTransitively = ref false
-                , level = 0
                 , free = C.CVarSet.empty
                 }
               )
-          ; go (table, 0, body, acc)
+          ; ignore (go (table, body, C.CVarSet.empty))
+          ; acc
           )
       | C.ValDec {exp = _, results = _} => acc
       | C.RecDec defs =>
-          List.foldl
-            (fn ({contParam, body, ...}, acc) =>
-               ( C.CVarTable.insert table
-                   ( contParam
-                   , { escapes = ref false
-                     , escapesTransitively = ref false
-                     , level = 0
-                     , free = C.CVarSet.empty
-                     }
-                   )
-               ; go (table, 0, body, acc)
-               )) acc defs
+          ( List.app
+              (fn {contParam, body, ...} =>
+                 ( C.CVarTable.insert table
+                     ( contParam
+                     , { escapes = ref false
+                       , escapesTransitively = ref false
+                       , free = C.CVarSet.empty
+                       }
+                     )
+                 ; ignore (go (table, body, C.CVarSet.empty))
+                 )) defs
+          ; acc
+          )
       | C.UnpackDec _ => acc
       | C.ContDec {name, params = _, body, attr = _} =>
           let
-            val free = go (table, level + 1, body, C.CVarSet.empty)
+            val free = go (table, body, C.CVarSet.empty)
           in
             C.CVarTable.insert table
               ( name
               , { escapes = ref false
                 , escapesTransitively = ref false
-                , level = level
                 , free = free
                 }
               );
@@ -2901,22 +2894,20 @@ struct
                    ( name
                    , { escapes = ref false
                      , escapesTransitively = ref false
-                     , level = level
                      , free = C.CVarSet.empty
                      }
                    )) defs
           ; List.foldl
               (fn ((name, _, body), acc) =>
                  let
-                   val {escapes, escapesTransitively, level, free = _} =
+                   val {escapes, escapesTransitively, free = _} =
                      C.CVarTable.lookup table name
-                   val free = go (table, level + 1, body, C.CVarSet.empty)
+                   val free = go (table, body, C.CVarSet.empty)
                  in
                    C.CVarTable.insert table
                      ( name
                      , { escapes = escapes
                        , escapesTransitively = escapesTransitively
-                       , level = level
                        , free = free
                        }
                      );
@@ -2926,21 +2917,19 @@ struct
       | C.DatatypeDec _ => acc
       | C.ESImportDec _ => acc
     (* Returns free continuations for a statement *)
-    and go (table, level, C.Let {decs, cont}, acc) =
-          go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
+    and go (table, C.Let {decs, cont}, acc) =
+          go (table, cont, List.foldl (goDec table) acc decs)
       | go
           ( table
-          , level
           , C.App {applied = _, cont, tyArgs = _, args = _, attr = _}
           , acc
-          ) = escape (table, level, cont, acc)
-      | go (table, level, C.AppCont {applied, args = _}, acc) =
-          direct (table, level, applied, acc)
-      | go (table, level, C.If {cond = _, thenCont, elseCont}, acc) =
-          go (table, level, elseCont, go (table, level, thenCont, acc))
+          ) = escape (table, cont, acc)
+      | go (table, C.AppCont {applied, args = _}, acc) =
+          direct (table, applied, acc)
+      | go (table, C.If {cond = _, thenCont, elseCont}, acc) =
+          go (table, elseCont, go (table, thenCont, acc))
       | go
           ( table
-          , level
           , C.Handle
               { body
               , handler = (_, h)
@@ -2951,23 +2940,22 @@ struct
           , acc
           ) =
           let
-            val free = go (table, level + 1, h, C.CVarSet.empty)
+            val free = go (table, h, C.CVarSet.empty)
           in
             C.CVarTable.insert table
               ( successfulExitIn
               , { escapes = ref false
                 , escapesTransitively = ref false
-                , level = level
                 , free = C.CVarSet.singleton successfulExitOut
                 }
               );
-            C.CVarSet.app
-              (fn k => ignore (escape (table, level + 1, k, C.CVarSet.empty)))
+            C.CVarSet.app (fn k => ignore (escape (table, k, C.CVarSet.empty)))
               free;
-            go (table, level, body, C.CVarSet.union (acc, free))
+            ignore (go (table, body, C.CVarSet.empty));
+            C.CVarSet.union (acc, free)
           end
-      | go (_, _, C.Raise _, acc) = acc
-      | go (_, _, C.Unreachable, acc) = acc
+      | go (_, C.Raise _, acc) = acc
+      | go (_, C.Unreachable, acc) = acc
     fun contEscape (cont, stat) =
       let
         val table =
@@ -2977,11 +2965,10 @@ struct
           ( cont
           , { escapes = ref false
             , escapesTransitively = ref false
-            , level = 0
             , free = C.CVarSet.empty
             }
           );
-        ignore (go (table, 0, stat, C.CVarSet.empty));
+        ignore (go (table, stat, C.CVarSet.empty));
         C.CVarTable.appi
           (fn (k, {escapes = ref true, escapesTransitively = ref false, ...}) =>
              recEscape table k
