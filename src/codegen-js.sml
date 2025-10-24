@@ -202,6 +202,7 @@ struct
       }
   | TAILCALL of C.CVar (* continuation passing style *)
   | RETURN_TRAMPOLINE (* direct style *)
+  | RETURN_TRAMPOLINE_NONTAIL (* direct style *)
   | RETURN_SIMPLE (* direct style *)
   type Env =
     { continuations: cont_type C.CVarMap.map
@@ -333,6 +334,8 @@ struct
         [J.ReturnStat (SOME (J.ArrayExp (vector
            [J.ConstExp J.False, doCVar k, J.ArrayExp (vector args)])))] (* continuation passing style *)
     | SOME RETURN_TRAMPOLINE =>
+        [J.ReturnStat (SOME (J.ArrayExp (vector (J.ConstExp J.True :: args))))] (* direct style *)
+    | SOME RETURN_TRAMPOLINE_NONTAIL =>
         [J.ReturnStat (SOME (J.ArrayExp (vector (J.ConstExp J.True :: args))))] (* direct style *)
     | SOME RETURN_SIMPLE =>
         (case args of
@@ -2079,8 +2082,19 @@ struct
                 , J.ArrayExp
                     (Vector.map (fn x => doExp (ctx, env, x)) (vector args))
                 ])))] (* direct style, tail call *)
+         | SOME RETURN_TRAMPOLINE_NONTAIL =>
+             [J.ReturnStat (SOME (J.ArrayExp (vector
+                [ J.ConstExp J.True
+                , (J.CallExp
+                     ( doExp (ctx, env, applied)
+                     , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+                     ))
+                ])))] (* direct style, non-tail call *)
          | SOME RETURN_SIMPLE =>
-             raise CodeGenError "invalid RETURN_SIMPLE continuation"
+             [J.ReturnStat (SOME (J.CallExp
+                ( doExp (ctx, env, applied)
+                , Vector.map (fn x => doExp (ctx, env, x)) (vector args)
+                )))] (* direct style, non-tail call *)
          | _ => raise CodeGenError "invalid continuation")
     | doStat ctx env (N.AppCont {applied, args}) =
         applyCont
@@ -2096,11 +2110,12 @@ struct
         (case #style ctx of
            Backend.DIRECT_STYLE =>
              let
+               val k =
+                 case C.CVarMap.lookup (#continuations env, successfulExitOut) of
+                   RETURN_TRAMPOLINE => RETURN_TRAMPOLINE_NONTAIL
+                 | k => k
                val env' =
-                 { continuations = C.CVarMap.singleton
-                     ( successfulExitIn
-                     , C.CVarMap.lookup (#continuations env, successfulExitOut)
-                     )
+                 { continuations = C.CVarMap.singleton (successfulExitIn, k)
                  , subst = #subst env
                  }
              in
