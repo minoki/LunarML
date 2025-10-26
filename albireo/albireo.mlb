@@ -1,0 +1,14 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+  $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
+in
+  ann "sequenceNonUnit warn" in
+    syntax.sml
+    parse.grm.sig
+    tokenize.lex.sml
+    parse.grm.sml
+    parse.sml
+    main.sml
+  end
+end

@@ -1,0 +1,99 @@
+structure ASyntax = AlbireoSyntax
+%%
+
+%pos int
+%pure
+%name Albireo
+%arg (filename) : string
+
+%term INT of int * AlbireoSyntax.int_type option
+    | PLUS
+    | MINUS
+    | TIMES
+    | DIV
+    | LPAREN
+    | RPAREN
+    | LBRACE
+    | RBRACE
+    | EQ (* = *)
+    | SEMICOLON
+    | RETURN
+    | IDENT of string
+    | COLON
+    | COMMA
+    | I32
+    | FUNC (* func *)
+    | ARROW (* -> *)
+    | EOF
+%nonterm typ of ASyntax.typ
+       | typ_list of ASyntax.typ list
+       | typ_list_1 of ASyntax.typ list
+       | opt_comma_typ_list_1 of ASyntax.typ list
+       | exp of ASyntax.exp
+       | exp_list of ASyntax.exp list
+       | exp_list_1 of ASyntax.exp list
+       | opt_comma_exp_list_1 of ASyntax.exp list
+       | stmt of ASyntax.stmt
+       | stmts of ASyntax.stmt list
+       | param_list of (ASyntax.ident * ASyntax.typ) list
+       | param_list_1 of (ASyntax.ident * ASyntax.typ) list
+       | opt_comma_param_list_1 of (ASyntax.ident * ASyntax.typ) list
+       | dec of ASyntax.dec
+       | decs of ASyntax.dec list
+       | program of ASyntax.dec list
+
+%left PLUS MINUS
+%left TIMES DIV
+
+%eop EOF
+%noshift EOF
+%nodefault
+%start program
+
+%%
+
+typ : I32 (ASyntax.I32)
+
+typ_list : ([])
+         | typ_list_1 (typ_list_1)
+
+typ_list_1 : typ opt_comma_typ_list_1 (typ :: opt_comma_typ_list_1)
+
+opt_comma_typ_list_1 : ([])
+                     | COMMA typ_list_1 (typ_list_1)
+
+exp : INT (ASyntax.IntConstExp INT)
+    | IDENT (ASyntax.VarExp IDENT)
+    | exp PLUS exp (ASyntax.BinExp (ASyntax.PlusOp, exp1, exp2))
+    | exp MINUS exp (ASyntax.BinExp (ASyntax.MinusOp, exp1, exp2))
+    | exp TIMES exp (ASyntax.BinExp (ASyntax.TimesOp, exp1, exp2))
+    | exp DIV exp (ASyntax.BinExp (ASyntax.DivOp, exp1, exp2))
+    | LPAREN exp RPAREN (exp)
+
+exp_list : ([])
+         | exp_list_1 (exp_list_1)
+
+exp_list_1 : exp opt_comma_exp_list_1 (exp :: opt_comma_exp_list_1)
+
+opt_comma_exp_list_1 : ([])
+                     | COMMA exp_list_1 (exp_list_1)
+
+stmt : RETURN exp_list SEMICOLON (ASyntax.ReturnStat exp_list)
+
+stmts : ([])
+      | stmt stmts (stmt :: stmts)
+
+param_list : ([])
+           | param_list_1 (param_list_1)
+
+param_list_1 : IDENT COLON typ opt_comma_param_list_1 ((IDENT, typ) :: opt_comma_param_list_1)
+
+opt_comma_param_list_1 : ([])
+                       | COMMA param_list_1 (param_list_1)
+
+dec : FUNC IDENT LPAREN param_list RPAREN ARROW typ_list LBRACE stmts RBRACE (ASyntax.FuncDec {name = IDENT, params = param_list, results = typ_list, body = stmts })
+
+decs : ([])
+     | dec decs (dec :: decs)
+
+program : decs (decs)
