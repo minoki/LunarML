@@ -16,6 +16,7 @@ sources = \
   tokenize.lex.sml \
   parse.grm.sml \
   parse.sml \
+  emit.sml \
   main.sml
 
 albireo: albireo.mlb $(sources)

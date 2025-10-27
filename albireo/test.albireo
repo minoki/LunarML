@@ -1,0 +1,4 @@
+func foo(x: i32) -> i32
+{
+    return x * x + 2 * x;
+}
