@@ -52,8 +52,10 @@ struct
      | C.WordConst (Primitives.W64, _) => FSyntax.Types.word64
      | C.CharConst _ => FSyntax.Types.char
      | C.Char16Const _ => FSyntax.Types.char16
+     | C.Char32Const _ => FSyntax.Types.char32
      | C.StringConst _ => FSyntax.Types.string
      | C.String16Const _ => FSyntax.Types.string16
+     | C.String32Const _ => FSyntax.Types.string32
      | C.PrimEffect _ => FSyntax.Types.prim_effect
      | C.Cast {value, from, to} =>
       (checkValue (env, fn () => "Cast", from) value; to)
@@ -82,6 +84,7 @@ struct
              let
                val {vars, args = argTypes, results} =
                  CheckF.TypeOfPrimitives.typeOf primOp
+               (* val () = print ("CpsCheck " ^ Primitives.toString primOp ^ "\n") *)
                val subst =
                  ListPair.foldlEq
                    (fn ((tv, ()), ty, acc) =>
@@ -114,8 +117,10 @@ struct
          | F.WordConstOp _ => raise TypeError "unexpected WordConstOp"
          | F.Char8ConstOp _ => raise TypeError "unexpected Char8ConstOp"
          | F.Char16ConstOp _ => raise TypeError "unexpected Char16ConstOp"
+         | F.Char32ConstOp _ => raise TypeError "unexpected Char32ConstOp"
          | F.String8ConstOp _ => raise TypeError "unexpected String8ConstOp"
          | F.String16ConstOp _ => raise TypeError "unexpected String16ConstOp"
+         | F.String32ConstOp _ => raise TypeError "unexpected String32ConstOp"
          | F.RealConstOp _ => [F.Types.real]
          | F.RaiseOp _ => raise TypeError "unexpected RaiseOp"
          | F.ListOp =>

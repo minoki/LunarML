@@ -27,8 +27,10 @@ sig
   | RealConstOp of Numeric.float_notation (* 1 type argument *)
   | Char8ConstOp of char (* 1 type argument *)
   | Char16ConstOp of int (* 1 type argument *)
+  | Char32ConstOp of int (* 1 type argument *)
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
+  | String32ConstOp of int vector (* 1 type argument *)
   | RaiseOp of
       SourcePos.span (* type argument: result type, value argument: the exception *)
   | ListOp (* type argument: element type, value arguments: the elements *)
@@ -63,8 +65,10 @@ sig
   | WordConstant of IntInf.int
   | CharConstant of char
   | Char16Constant of int
+  | Char32Constant of int
   | StringConstant of string
   | String16Constant of int vector
+  | String32Constant of int vector
   datatype Pat =
     WildcardPat of SourcePos.span
   | SConPat of
@@ -179,8 +183,10 @@ sig
     val real: Ty
     val char: Ty
     val char16: Ty
+    val char32: Ty
     val string: Ty
     val string16: Ty
+    val string32: Ty
     val exn: Ty
     val exntag: Ty
     val lua_value: Ty
@@ -254,8 +260,10 @@ struct
   | RealConstOp of Numeric.float_notation (* 1 type argument *)
   | Char8ConstOp of char (* 1 type argument *)
   | Char16ConstOp of int (* 1 type argument *)
+  | Char32ConstOp of int (* 1 type argument *)
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
+  | String32ConstOp of int vector (* 1 type argument *)
   | RaiseOp of
       SourcePos.span (* type argument: result type, value argument: the exception *)
   | ListOp (* type argument: element type, value arguments: the elements *)
@@ -290,8 +298,10 @@ struct
   | WordConstant of IntInf.int
   | CharConstant of char
   | Char16Constant of int
+  | Char32Constant of int
   | StringConstant of string
   | String16Constant of int vector
+  | String32Constant of int vector
   datatype Pat =
     WildcardPat of SourcePos.span
   | SConPat of
@@ -410,8 +420,10 @@ struct
     val real = TyVar PrimTypes.Names.real
     val char = TyVar PrimTypes.Names.char
     val char16 = TyVar PrimTypes.Names.char16
+    val char32 = TyVar PrimTypes.Names.char32
     val string = TyVar PrimTypes.Names.string
     val string16 = TyVar PrimTypes.Names.string16
+    val string32 = TyVar PrimTypes.Names.string32
     val exn = TyVar PrimTypes.Names.exn
     val exntag = TyVar PrimTypes.Names.exntag
     val lua_value = TyVar PrimTypes.Names.lua_value
@@ -1597,10 +1609,20 @@ struct
       | print_PrimOp (Char16ConstOp x) =
           "Char16ConstOp \""
           ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
+      | print_PrimOp (Char32ConstOp x) =
+          "Char32ConstOp \""
+          ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
       | print_PrimOp (String8ConstOp x) =
           "String8ConstOp \"" ^ String.toString x ^ "\""
       | print_PrimOp (String16ConstOp x) =
           "String16ConstOp \""
+          ^
+          Vector.foldr
+            (fn (c, acc) =>
+               StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\""
+            x
+      | print_PrimOp (String32ConstOp x) =
+          "String32ConstOp \""
           ^
           Vector.foldr
             (fn (c, acc) =>
@@ -1663,6 +1685,14 @@ struct
       | print_Pat
           (SConPat
              { sourceSpan = _
+             , scon = Char32Constant x
+             , equality = _
+             , cookedValue = _
+             }) =
+          "SConPat(Char32Constant " ^ Int.toString x ^ ")"
+      | print_Pat
+          (SConPat
+             { sourceSpan = _
              , scon = StringConstant x
              , equality = _
              , cookedValue = _
@@ -1675,6 +1705,13 @@ struct
              , equality = _
              , cookedValue = _
              }) = "SConPat(String16Constant)"
+      | print_Pat
+          (SConPat
+             { sourceSpan = _
+             , scon = String32Constant _
+             , equality = _
+             , cookedValue = _
+             }) = "SConPat(String32Constant)"
       | print_Pat (VarPat (_, vid, ty)) =
           "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
       | print_Pat (LayeredPat (_, vid, ty, pat)) =
@@ -2530,7 +2567,7 @@ struct
            else
              emitFatalError (ctx, [span], "invalid real constant: type")
        | _ => emitFatalError (ctx, [span], "invalid real constant: type"))
-    datatype char_width = C8 | C16
+    datatype char_width = C8 | C16 | C32
     fun cookCharacterConstant
       (ctx: Context, env: Env, span, value: StringElement.char, ty) =
       (case ty of
@@ -2541,6 +2578,8 @@ struct
                  C8
                else if T.eqTyName (tycon, PrimTypes.Names.char16) then
                  C16
+               else if T.eqTyName (tycon, PrimTypes.Names.char32) then
+                 C32
                else
                  let
                    val overloadMap =
@@ -2564,6 +2603,7 @@ struct
                    case maxOrd of
                      255 => C8
                    | 65535 => C16
+                   | 0x10FFFF => C32
                    | _ =>
                        ( emitError
                            (ctx, [span], "invalid character constant: type")
@@ -2635,6 +2675,37 @@ struct
                    , F.PrimExp (F.Char16ConstOp x, [toFTy (ctx, env, ty)], [])
                    )
                  end
+             | C32 =>
+                 let
+                   val x =
+                     case value of
+                       StringElement.CODEUNIT x =>
+                         if 0 <= x andalso x <= 0x10ffff then
+                           x
+                         else
+                           ( emitError
+                               ( ctx
+                               , [span]
+                               , "invalid character constant: out of range"
+                               )
+                           ; 0
+                           )
+                     | StringElement.UNICODE_SCALAR x =>
+                         if 0 <= x andalso x <= 0x10ffff then
+                           x
+                         else
+                           ( emitError
+                               ( ctx
+                               , [span]
+                               , "invalid character constant: out of range"
+                               )
+                           ; 0
+                           )
+                 in
+                   ( F.Char32Constant x
+                   , F.PrimExp (F.Char32ConstOp x, [toFTy (ctx, env, ty)], [])
+                   )
+                 end
            end
        | _ => emitFatalError (ctx, [span], "invalid character constant: type"))
     fun cookStringConstant (ctx: Context, env: Env, span, value, ty) =
@@ -2646,6 +2717,8 @@ struct
                  C8
                else if T.eqTyName (tycon, PrimTypes.Names.string16) then
                  C16
+               else if T.eqTyName (tycon, PrimTypes.Names.string32) then
+                 C32
                else
                  let
                    val overloadMap =
@@ -2669,6 +2742,7 @@ struct
                    case maxOrd of
                      255 => C8
                    | 65535 => C16
+                   | 0x10FFFF => C32
                    | _ =>
                        ( emitError
                            (ctx, [span], "invalid string constant: type")
@@ -2711,6 +2785,24 @@ struct
                    ( F.String16Constant cooked
                    , F.PrimExp
                        (F.String16ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                   )
+                 end
+             | C32 =>
+                 let
+                   val cooked =
+                     StringElement.encode32bit value
+                     handle Chr =>
+                       ( emitError
+                           ( ctx
+                           , [span]
+                           , "invalid string constant: out of range"
+                           )
+                       ; vector []
+                       )
+                 in
+                   ( F.String32Constant cooked
+                   , F.PrimExp
+                       (F.String32ConstOp cooked, [toFTy (ctx, env, ty)], [])
                    )
                  end
            end

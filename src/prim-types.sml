@@ -18,8 +18,10 @@ sig
     val real: TypedSyntax.TyName
     val char: TypedSyntax.TyName
     val char16: TypedSyntax.TyName
+    val char32: TypedSyntax.TyName
     val string: TypedSyntax.TyName
     val string16: TypedSyntax.TyName
+    val string32: TypedSyntax.TyName
     val exn: TypedSyntax.TyName
     val exntag: TypedSyntax.TyName
     val lua_value: TypedSyntax.TyName
@@ -47,8 +49,10 @@ sig
   val real: 'l TypedSyntax.BaseTy
   val char: 'l TypedSyntax.BaseTy
   val char16: 'l TypedSyntax.BaseTy
+  val char32: 'l TypedSyntax.BaseTy
   val string: 'l TypedSyntax.BaseTy
   val string16: 'l TypedSyntax.BaseTy
+  val string32: 'l TypedSyntax.BaseTy
   val exn: 'l TypedSyntax.BaseTy
   val exntag: 'l TypedSyntax.BaseTy
   val lua_value: 'l TypedSyntax.BaseTy
@@ -104,6 +108,8 @@ struct
     val word32 = TypedSyntax.MkTyName ("Word32.word", 24)
     val word64 = TypedSyntax.MkTyName ("Word64.word", 25)
     val prim_effect = TypedSyntax.MkTyName ("LunarML.prim_effect", 26)
+    val char32 = TypedSyntax.MkTyName ("Char32.char", 27)
+    val string32 = TypedSyntax.MkTyName ("String32.string", 28)
   end
 
   val unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
@@ -117,6 +123,8 @@ struct
   val bool = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.bool)
   val char16 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.char16)
   val string16 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.string16)
+  val char32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.char32)
+  val string32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.string32)
   val intInf = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.intInf)
   val lua_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.lua_value)
   val js_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.js_value)

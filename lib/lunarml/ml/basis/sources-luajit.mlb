@@ -8,13 +8,16 @@ ann "nonexhaustiveRaise ignore"
     "allowHexFloatConsts true"
     "allowInfixingDot true"
     "allowPrim true"
-    "allowOverload true" in
+    "allowOverload true"
+    "allowExtendedTextConsts true"
+in
 lua/general-prim.sml
 general.sml
 option.sml (* depends on unit (general.sml) *)
 lunarml.sml
 string-prim.sml
 text16-prim.sml
+text32-prim.sml
 bool.sml
 luajit/lua.sml
 lua/bool-tostring.sml
@@ -66,6 +69,7 @@ pack-word.sml
 string.sml
 text.sml
 lua/text16.sml
+lua/text32.sml
 widetext-8.sml
 luajit/time.sml
 timer.sig
@@ -131,9 +135,17 @@ structure Char16Array (* extension *)
 structure Char16ArraySlice (* extension *)
 structure Char16Vector (* extension *)
 structure Char16VectorSlice (* extension *)
+structure Char32 (* extension *)
+structure Char32Array (* extension *)
+structure Char32ArraySlice (* extension *)
+structure Char32Vector (* extension *)
+structure Char32VectorSlice (* extension *)
 structure String16 (* extension *)
+structure String32 (* extension *)
 structure Substring16 (* extension *)
+structure Substring32 (* extension *)
 structure Text16 (* extension *)
+structure Text32 (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO

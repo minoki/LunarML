@@ -30,8 +30,10 @@ sig
   | WordConst of Primitives.word_width * IntInf.int
   | CharConst of char
   | Char16Const of int
+  | Char32Const of int
   | StringConst of string
   | String16Const of int vector
+  | String32Const of int vector
   | PrimEffect of Primitives.prim_effect
   | Cast of {value: Value, from: Ty, to: Ty}
   | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
@@ -150,8 +152,10 @@ struct
   | WordConst of Primitives.word_width * IntInf.int
   | CharConst of char
   | Char16Const of int
+  | Char32Const of int
   | StringConst of string
   | String16Const of int vector
+  | String32Const of int vector
   (*
   | RealConst of Numeric.float_notation
   *)
@@ -231,8 +235,10 @@ struct
     | extractVarFromValue (WordConst _) = NONE
     | extractVarFromValue (CharConst _) = NONE
     | extractVarFromValue (Char16Const _) = NONE
+    | extractVarFromValue (Char32Const _) = NONE
     | extractVarFromValue (StringConst _) = NONE
     | extractVarFromValue (String16Const _) = NONE
+    | extractVarFromValue (String32Const _) = NONE
     | extractVarFromValue (PrimEffect _) = NONE
     | extractVarFromValue (Cast {value, ...}) = extractVarFromValue value
     | extractVarFromValue (Pack {value, ...}) = extractVarFromValue value
@@ -251,8 +257,10 @@ struct
       | isDiscardable (PrimOp {primOp = F.RealConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char16ConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.Char32ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String16ConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.String32ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.RaiseOp _, ...}) = false
       | isDiscardable (PrimOp {primOp = F.ListOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.VectorOp, ...}) = true
@@ -588,10 +596,17 @@ struct
           "Char(" ^ Char.toString x ^ ")"
       | valueToString (Char16Const x) =
           "Char16(" ^ Int.toString x ^ ")"
+      | valueToString (Char32Const x) =
+          "Char32(" ^ Int.toString x ^ ")"
       | valueToString (StringConst x) =
           "String(\"" ^ String.toString x ^ "\")"
       | valueToString (String16Const x) =
           "String16(["
+          ^
+          String.concatWith ","
+            (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
+      | valueToString (String32Const x) =
+          "String32(["
           ^
           String.concatWith ","
             (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
@@ -611,8 +626,10 @@ struct
            | F.RealConstOp _ => "PrimOp(RealConstOp)"
            | F.Char8ConstOp _ => "PrimOp(Char8ConstOp)"
            | F.Char16ConstOp _ => "PrimOp(Char16ConstOp)"
+           | F.Char32ConstOp _ => "PrimOp(Char32ConstOp)"
            | F.String8ConstOp _ => "PrimOp(String8ConstOp)"
            | F.String16ConstOp _ => "PrimOp(String16ConstOp)"
+           | F.String32ConstOp _ => "PrimOp(String32ConstOp)"
            | F.RaiseOp _ => "PrimOp(RaiseOp)"
            | F.ListOp => "PrimOp(ListOp)"
            | F.VectorOp => "PrimOp(VectorOp)"
@@ -934,8 +951,10 @@ struct
               | (F.RealConstOp _, [ty]) => ([], [ty])
               | (F.Char8ConstOp _, [ty]) => ([], [ty])
               | (F.Char16ConstOp _, [ty]) => ([], [ty])
+              | (F.Char32ConstOp _, [ty]) => ([], [ty])
               | (F.String8ConstOp _, [ty]) => ([], [ty])
               | (F.String16ConstOp _, [ty]) => ([], [ty])
+              | (F.String32ConstOp _, [ty]) => ([], [ty])
               | (F.RaiseOp _, [ty]) => ([FSyntax.Types.exn], [ty])
               | (F.ListOp, [elemTy]) =>
                   (List.map (fn _ => elemTy) args, [FSyntax.Types.list elemTy])
@@ -1106,6 +1125,11 @@ struct
                            ( C.Char16Const x
                            , FSyntax.Types.char16
                            ) (* assume the type is correct *)
+                     | F.Char32ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.Char32Const x
+                           , FSyntax.Types.char32
+                           ) (* assume the type is correct *)
                      | F.String8ConstOp x =>
                          (case tyargs of
                             [ty as F.TyVar tv] =>
@@ -1130,6 +1154,11 @@ struct
                          apply revDecs k valueTransforms
                            ( C.String16Const x
                            , FSyntax.Types.string16
+                           ) (* assume the type is correct *)
+                     | F.String32ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.String32Const x
+                           , FSyntax.Types.string32
                            ) (* assume the type is correct *)
                      | _ =>
                          let
@@ -1794,8 +1823,10 @@ struct
           | goVal (v as C.WordConst _) = v
           | goVal (v as C.CharConst _) = v
           | goVal (v as C.Char16Const _) = v
+          | goVal (v as C.Char32Const _) = v
           | goVal (v as C.StringConst _) = v
           | goVal (v as C.String16Const _) = v
+          | goVal (v as C.String32Const _) = v
           | goVal (v as C.PrimEffect _) = v
       in
         goVal
@@ -1980,6 +2011,9 @@ struct
                 (fn ((tv, kind), (tyParams', tysubst)) =>
                    let
                      val tv' = renewTyVar (ctx, tv)
+                   (* val () = print
+                     ("alphaConvert: Abs: " ^ TypedSyntax.print_TyVar tv
+                      ^ " -> " ^ TypedSyntax.print_TyVar tv' ^ "\n") *)
                    in
                      ( (tv', kind) :: tyParams'
                      , TypedSyntax.TyVarMap.insert
@@ -2058,6 +2092,10 @@ struct
                           (fn ((tv, kind), (tyParams', tysubst)) =>
                              let
                                val tv' = renewTyVar (ctx, tv)
+                             (* val () = print
+                               ("alphaConvert: Rec: "
+                                ^ TypedSyntax.print_TyVar tv ^ " -> "
+                                ^ TypedSyntax.print_TyVar tv' ^ "\n") *)
                              in
                                ( (tv', kind) :: tyParams'
                                , TypedSyntax.TyVarMap.insert
@@ -2095,6 +2133,9 @@ struct
             val package' = substValue (tysubst, subst) package
             val vid' = renewVId (ctx, vid)
             val tyVar' = renewTyVar (ctx, tyVar)
+            (* val () = print
+              ("alphaConvert: Unpack: " ^ TypedSyntax.print_TyVar tyVar ^ " -> "
+               ^ TypedSyntax.print_TyVar tyVar' ^ "\n") *)
             val subst' = TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')
             val tysubst' =
               TypedSyntax.TyVarMap.insert (tysubst, tyVar, FSyntax.TyVar tyVar')

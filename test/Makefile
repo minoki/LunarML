@@ -203,6 +203,7 @@ should_run += $(addprefix mlbasis/should_run/,\
   substring.sml \
   char.sml \
   char16.mlb \
+  char32.mlb \
   scan-word.sml \
   string-issubstring.sml \
   widestring-issubstring.sml \
@@ -213,6 +214,10 @@ should_run += $(addprefix mlbasis/should_run/,\
   string16_fields.mlb \
   string16-issubstring.mlb \
   substring16.mlb \
+  string32.mlb \
+  string32_fields.mlb \
+  string32-issubstring.mlb \
+  substring32.mlb \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)

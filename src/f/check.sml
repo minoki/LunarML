@@ -262,8 +262,10 @@ struct
          val real = F.TyVar PrimTypes.Names.real
          val char = F.TyVar PrimTypes.Names.char
          val char16 = F.TyVar PrimTypes.Names.char16
+         val char32 = F.TyVar PrimTypes.Names.char32
          val string = F.TyVar PrimTypes.Names.string
          val string16 = F.TyVar PrimTypes.Names.string16
+         val string32 = F.TyVar PrimTypes.Names.string32
          val intInf = F.TyVar PrimTypes.Names.intInf
          val int32 = F.TyVar PrimTypes.Names.int32
          val int54 = F.TyVar PrimTypes.Names.int54
@@ -467,8 +469,10 @@ struct
       | inferExp (_, F.PrimExp (F.RealConstOp _, [ty], [])) = ty
       | inferExp (_, F.PrimExp (F.Char8ConstOp _, [ty], [])) = ty
       | inferExp (_, F.PrimExp (F.Char16ConstOp _, [ty], [])) = ty
+      | inferExp (_, F.PrimExp (F.Char32ConstOp _, [ty], [])) = ty
       | inferExp (_, F.PrimExp (F.String8ConstOp _, [ty], [])) = ty
       | inferExp (_, F.PrimExp (F.String16ConstOp _, [ty], [])) = ty
+      | inferExp (_, F.PrimExp (F.String32ConstOp _, [ty], [])) = ty
       | inferExp (env, F.PrimExp (F.RaiseOp _, [ty], [e])) =
           (checkExp (env, F.Types.exn, e); ty)
       | inferExp (env, F.PrimExp (F.ListOp, [elemTy], elements)) =

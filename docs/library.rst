@@ -458,7 +458,7 @@ Lua backend: ``WideChar.maxOrd`` is 255 and ``WideChar`` is an opaque alias of `
 
 JavaScript backend: ``WideChar.maxOrd`` is 65535.
 
-See also :ref:`text16`.
+See also :ref:`text16` and :ref:`text32`.
 
 signature STRING
 ^^^^^^^^^^^^^^^^
@@ -504,7 +504,7 @@ signature STRING
    structure String :> STRING where type string = string where type char = char
    structure WideString :> STRING where type char = WideChar.char
 
-See also :ref:`text16`.
+See also :ref:`text16` and :ref:`text32`.
 
 signature SUBSTRING
 ^^^^^^^^^^^^^^^^^^^
@@ -561,7 +561,7 @@ Status: partial.
                                         where type string = WideString.string
                                         where type char = WideChar.char
 
-See also :ref:`text16`.
+See also :ref:`text16` and :ref:`text32`.
 
 signature TEXT
 ^^^^^^^^^^^^^^
@@ -599,7 +599,7 @@ signature TEXT
                               where type CharVectorSlice.slice = WideCharVectorSlice.slice
                               where type CharArraySlice.slice = WideCharArraySlice.slice
 
-See also :ref:`text16`.
+See also :ref:`text16` and :ref:`text32`.
 
 structure List
 ^^^^^^^^^^^^^^
@@ -1713,6 +1713,42 @@ It is unspecified if predicates like ``Char16.isAlpha`` are aware of non-ASCII c
                             where type CharArray.array = Char16Array.array
                             where type CharVectorSlice.slice = Char16VectorSlice.slice
                             where type CharArraySlice.slice = Char16ArraySlice.slice
+
+.. _text32:
+
+32-bit string
+-------------
+
+A UTF-32 code unit is an integer between ``0`` and ``0x10FFFF`` (inclusive), denoted by ``#"\U0010FFFF"``.
+
+A 32-bit string consists of UTF-32 code units.
+Structures for 32-bit characters and strings are defined in ``$(SML_LIB)/basis/text32.mlb``.
+
+It is unspecified if predicates like ``Char32.isAlpha`` are aware of non-ASCII code units.
+
+.. code-block:: sml
+   
+   structure Char32 :> CHAR
+   structure String32 :> STRING where type char = Char32.char
+   structure Substring32 :> SUBSTRING where type string = String32.string
+                                      where type char = Char32.char
+   structure Char32Vector :> MONO_VECTOR where type vector = String32.string
+                                         where type elem = Char32.char
+   structure Char32VectorSlice :> MONO_VECTOR_SLICE where type vector = Char32Vector.vector
+                                                    where type elem = Char32.char
+                                                    where type slice = Substring32.substring
+   structure Char32Array :> MONO_ARRAY where type vector = Char32Vector.vector
+                                       where type elem = Char32.char
+   structure Char32ArraySlice :> MONO_ARRAY_SLICE where type vector = Char32Vector.vector
+                                                  where type vector_slice = Char32VectorSlice.slice
+                                                  where type array = Char32Array.array
+                                                  where type elem = Char32.char
+   structure Text32 :> TEXT where type Char.char = Char32.char
+                            where type String.string = String32.string
+                            where type Substring.substring = Substring32.substring
+                            where type CharArray.array = Char32Array.array
+                            where type CharVectorSlice.slice = Char32VectorSlice.slice
+                            where type CharArraySlice.slice = Char32ArraySlice.slice
 
 .. _lua-structure:
 

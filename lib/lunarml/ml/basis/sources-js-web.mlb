@@ -66,9 +66,17 @@ structure Char16Array (* extension *)
 structure Char16ArraySlice (* extension *)
 structure Char16Vector (* extension *)
 structure Char16VectorSlice (* extension *)
+structure Char32 (* extension *)
+structure Char32Array (* extension *)
+structure Char32ArraySlice (* extension *)
+structure Char32Vector (* extension *)
+structure Char32VectorSlice (* extension *)
 structure String16 (* extension *)
+structure String32 (* extension *)
 structure Substring16 (* extension *)
+structure Substring32 (* extension *)
 structure Text16 (* extension *)
+structure Text32 (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO

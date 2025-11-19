@@ -25,8 +25,10 @@ struct
     | SOME_WORD
     | CHAR of char
     | CHAR16 of int
+    | CHAR32 of int
     | SOME_STRING
     | SOME_STRING16
+    | SOME_STRING32
     | RECORD of (Syntax.Label * example) list
     | VALCON of Syntax.VId * example option
     | SOME_EXNCON
@@ -41,8 +43,16 @@ struct
           else if i <= 0xff then "#\"\\u00" ^ Int.fmt StringCvt.HEX i ^ "\""
           else if i <= 0xfff then "#\"\\u0" ^ Int.fmt StringCvt.HEX i ^ "\""
           else "#\"\\u" ^ Int.fmt StringCvt.HEX i ^ "\""
+      | toStringPrec (_, CHAR32 i) =
+          if i <= 127 then "#\"" ^ Char.toString (Char.chr i) ^ "\""
+          else if i <= 0xff then "#\"\\u00" ^ Int.fmt StringCvt.HEX i ^ "\""
+          else if i <= 0xfff then "#\"\\u0" ^ Int.fmt StringCvt.HEX i ^ "\""
+          else if i <= 0xffff then "#\"\\u" ^ Int.fmt StringCvt.HEX i ^ "\""
+          else if i <= 0xfffff then "#\"\\U000" ^ Int.fmt StringCvt.HEX i ^ "\""
+          else "#\"\\U00" ^ Int.fmt StringCvt.HEX i ^ "\""
       | toStringPrec (_, SOME_STRING) = "<some string>"
       | toStringPrec (_, SOME_STRING16) = "<some string>"
+      | toStringPrec (_, SOME_STRING32) = "<some string>"
       | toStringPrec (_, RECORD fields) =
           let
             fun doTuple (_, [], acc) =
@@ -90,8 +100,10 @@ struct
     | WORD of (* seen *) IntInfSet.set
     | CHAR of (* seen *) CharSet.set
     | CHAR16 of (* seen *) IntRedBlackSet.set
+    | CHAR32 of (* seen *) IntRedBlackSet.set
     | STRING
     | STRING16
+    | STRING32
     | RECORD of Syntax.LabelSet.set
     | VECTOR of IntRedBlackSet.set * int option
     | EMPTY
@@ -147,10 +159,16 @@ struct
           CHAR16 (IntRedBlackSet.add (seen, x))
       | addSCon (EMPTY, F.Char16Constant x) =
           CHAR16 (IntRedBlackSet.singleton x)
+      | addSCon (CHAR32 seen, F.Char32Constant x) =
+          CHAR32 (IntRedBlackSet.add (seen, x))
+      | addSCon (EMPTY, F.Char32Constant x) =
+          CHAR32 (IntRedBlackSet.singleton x)
       | addSCon (set as STRING, F.StringConstant _) = set
       | addSCon (EMPTY, F.StringConstant _) = STRING
       | addSCon (set as STRING16, F.String16Constant _) = set
       | addSCon (EMPTY, F.String16Constant _) = STRING16
+      | addSCon (set as STRING32, F.String32Constant _) = set
+      | addSCon (EMPTY, F.String32Constant _) = STRING32
       | addSCon _ = raise Fail "invalid pattern: scon"
     fun addExnCon (set as EXNCON) = set
       | addExnCon EMPTY = EXNCON
@@ -177,8 +195,10 @@ struct
     | isComplete (WORD _) = false (* TODO *)
     | isComplete (CHAR seen) = CharSet.numItems seen = 256
     | isComplete (CHAR16 seen) = IntRedBlackSet.numItems seen = 65536
+    | isComplete (CHAR32 seen) = IntRedBlackSet.numItems seen = 0x10ffff
     | isComplete STRING = false
     | isComplete STRING16 = false
+    | isComplete STRING32 = false
     | isComplete (RECORD _) = true
     | isComplete (VECTOR (_, NONE)) = false
     | isComplete (VECTOR (seen, SOME n)) = let fun loop i = if i >= n then
@@ -457,10 +477,29 @@ struct
           in
             loop 0
           end
+      | isComplete (C.CHAR32 seen) =
+          let
+            fun loop i =
+              if i >= 0x110000 then
+                COMPLETE (List.tabulate (0x110000, fn i =>
+                  ( specializeSCon (F.Char32Constant i)
+                  , 0
+                  , fn [] => Example.CHAR32 i
+                     | _ => raise Fail "invalid payload"
+                  )))
+              else if IntRedBlackSet.member (seen, i) then
+                loop (i + 1)
+              else
+                INCOMPLETE (SOME (Example.CHAR32 i))
+          in
+            loop 0
+          end
       | isComplete C.STRING =
           INCOMPLETE (SOME Example.SOME_STRING)
       | isComplete C.STRING16 =
           INCOMPLETE (SOME Example.SOME_STRING16)
+      | isComplete C.STRING32 =
+          INCOMPLETE (SOME Example.SOME_STRING32)
       | isComplete (C.RECORD labels) =
           let
             fun construct fields =

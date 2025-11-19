@@ -14,6 +14,7 @@ sig
   val encodeAscii: string -> int vector
   val encode8bit: char vector -> string
   val encode16bit: char vector -> int vector
+  val encode32bit: char vector -> int vector
 end =
 struct
   datatype char =
@@ -133,4 +134,10 @@ struct
               in
                 Word.toInt lead :: Word.toInt trail :: xs
               end) [] s)
+  fun encode32bit (s: char vector) : int vector (* may raise Chr *) =
+    Vector.fromList
+      (Vector.foldr
+         (fn (CODEUNIT x, xs) =>
+            if 0 <= x andalso x <= 0x10ffff then x :: xs else raise Chr
+           | (UNICODE_SCALAR x, xs) => x :: xs) [] s)
 end;

@@ -87,6 +87,13 @@ datatype PrimOp = EQUAL (* = *)
                 | Char16_GE (* Char16.>= *)
                 | Char16_ord of int_width (* Char16.ord{.i} *)
                 | Char16_chr_unchecked of int_width (* Char16.chr.unchecked{.i} *)
+                | Char32_EQUAL (* Char32.= *)
+                | Char32_LT (* Char32.< *)
+                | Char32_LE (* Char32.<= *)
+                | Char32_GT (* Char32.> *)
+                | Char32_GE (* Char32.>= *)
+                | Char32_ord of int_width (* Char32.ord{.i} *)
+                | Char32_chr_unchecked of int_width (* Char32.chr.unchecked{.i} *)
                 | String_EQUAL (* String.= *)
                 | String_LT (* String.< *)
                 | String_LE (* String.<= *)
@@ -105,6 +112,16 @@ datatype PrimOp = EQUAL (* = *)
                 | String16_HAT (* String16.^ *)
                 | String16_size of int_width (* String16.size{.i} *)
                 | String16_str (* String16.str *)
+                | String32_EQUAL (* String32.= *)
+                | String32_LT (* String32.< *)
+                | String32_LE (* String32.<= *)
+                | String32_GT (* String32.> *)
+                | String32_GE (* String32.>= *)
+                | String32_HAT (* String32.^ *)
+                | String32_size of int_width (* String32.size{.i} *)
+                | String32_str (* String32.str *)
+                | String32_concat (* String32.concat *)
+                | String32_implode (* String32.implode *)
                 | IntInf_andb (* IntInf.andb *)
                 | IntInf_orb (* IntInf.orb *)
                 | IntInf_xorb (* IntInf.xorb *)
@@ -474,6 +491,21 @@ fun toString EQUAL = "="
   | toString (Char16_chr_unchecked I54) = "Char16.chr.unchecked.i54"
   | toString (Char16_chr_unchecked I64) = "Char16.chr.unchecked.i64"
   | toString (Char16_chr_unchecked INT_INF) = "Char16.chr.unchecked.intInf"
+  | toString Char32_EQUAL = "Char32.="
+  | toString Char32_LT = "Char32.<"
+  | toString Char32_LE = "Char32.<="
+  | toString Char32_GT = "Char32.>"
+  | toString Char32_GE = "Char32.>="
+  | toString (Char32_ord INT) = "Char32.ord"
+  | toString (Char32_ord I32) = "Char32.ord.i32"
+  | toString (Char32_ord I54) = "Char32.ord.i54"
+  | toString (Char32_ord I64) = "Char32.ord.i64"
+  | toString (Char32_ord INT_INF) = "Char32.ord.intInf"
+  | toString (Char32_chr_unchecked INT) = "Char32.chr.unchecked"
+  | toString (Char32_chr_unchecked I32) = "Char32.chr.unchecked.i32"
+  | toString (Char32_chr_unchecked I54) = "Char32.chr.unchecked.i54"
+  | toString (Char32_chr_unchecked I64) = "Char32.chr.unchecked.i64"
+  | toString (Char32_chr_unchecked INT_INF) = "Char32.chr.unchecked.intInf"
   | toString String_EQUAL = "String.="
   | toString String_LT = "String.<"
   | toString String_LE = "String.<="
@@ -500,6 +532,20 @@ fun toString EQUAL = "="
   | toString (String16_size I64) = "String16.size.i64"
   | toString (String16_size INT_INF) = "String16.size.intInf"
   | toString String16_str = "String16.str"
+  | toString String32_EQUAL = "String32.="
+  | toString String32_LT = "String32.<"
+  | toString String32_LE = "String32.<="
+  | toString String32_GT = "String32.>"
+  | toString String32_GE = "String32.>="
+  | toString String32_HAT = "String32.^"
+  | toString (String32_size INT) = "String32.size"
+  | toString (String32_size I32) = "String32.size.i32"
+  | toString (String32_size I54) = "String32.size.i54"
+  | toString (String32_size I64) = "String32.size.i64"
+  | toString (String32_size INT_INF) = "String32.size.intInf"
+  | toString String32_str = "String32.str"
+  | toString String32_concat = "String32.concat"
+  | toString String32_implode = "String32.implode"
   | toString IntInf_andb = "IntInf.andb"
   | toString IntInf_orb = "IntInf.orb"
   | toString IntInf_xorb = "IntInf.xorb"
@@ -897,6 +943,21 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char16.chr.unchecked.i54" = SOME (Char16_chr_unchecked I54)
   | fromString "Char16.chr.unchecked.i64" = SOME (Char16_chr_unchecked I64)
   | fromString "Char16.chr.unchecked.intInf" = SOME (Char16_chr_unchecked INT_INF)
+  | fromString "Char32.=" = SOME Char32_EQUAL
+  | fromString "Char32.<" = SOME Char32_LT
+  | fromString "Char32.<=" = SOME Char32_LE
+  | fromString "Char32.>" = SOME Char32_GT
+  | fromString "Char32.>=" = SOME Char32_GE
+  | fromString "Char32.ord" = SOME (Char32_ord INT)
+  | fromString "Char32.ord.i32" = SOME (Char32_ord I32)
+  | fromString "Char32.ord.i54" = SOME (Char32_ord I54)
+  | fromString "Char32.ord.i64" = SOME (Char32_ord I64)
+  | fromString "Char32.ord.intInf" = SOME (Char32_ord INT_INF)
+  | fromString "Char32.chr.unchecked" = SOME (Char32_chr_unchecked INT)
+  | fromString "Char32.chr.unchecked.i32" = SOME (Char32_chr_unchecked I32)
+  | fromString "Char32.chr.unchecked.i54" = SOME (Char32_chr_unchecked I54)
+  | fromString "Char32.chr.unchecked.i64" = SOME (Char32_chr_unchecked I64)
+  | fromString "Char32.chr.unchecked.intInf" = SOME (Char32_chr_unchecked INT_INF)
   | fromString "String.=" = SOME String_EQUAL
   | fromString "String.<" = SOME String_LT
   | fromString "String.<=" = SOME String_LE
@@ -923,6 +984,20 @@ fun fromString "=" = SOME EQUAL
   | fromString "String16.size.i64" = SOME (String16_size I64)
   | fromString "String16.size.intInf" = SOME (String16_size INT_INF)
   | fromString "String16.str" = SOME String16_str
+  | fromString "String32.=" = SOME String32_EQUAL
+  | fromString "String32.<" = SOME String32_LT
+  | fromString "String32.<=" = SOME String32_LE
+  | fromString "String32.>" = SOME String32_GT
+  | fromString "String32.>=" = SOME String32_GE
+  | fromString "String32.^" = SOME String32_HAT
+  | fromString "String32.size" = SOME (String32_size INT)
+  | fromString "String32.size.i32" = SOME (String32_size I32)
+  | fromString "String32.size.i54" = SOME (String32_size I54)
+  | fromString "String32.size.i64" = SOME (String32_size I64)
+  | fromString "String32.size.intInf" = SOME (String32_size INT_INF)
+  | fromString "String32.str" = SOME String32_str
+  | fromString "String32.concat" = SOME String32_concat
+  | fromString "String32.implode" = SOME String32_implode
   | fromString "IntInf.andb" = SOME IntInf_andb
   | fromString "IntInf.orb" = SOME IntInf_orb
   | fromString "IntInf.xorb" = SOME IntInf_xorb
@@ -1144,6 +1219,13 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Char16_GE = false
   | mayRaise (Char16_ord _) = false
   | mayRaise (Char16_chr_unchecked _) = false
+  | mayRaise Char32_EQUAL = false
+  | mayRaise Char32_LT = false
+  | mayRaise Char32_LE = false
+  | mayRaise Char32_GT = false
+  | mayRaise Char32_GE = false
+  | mayRaise (Char32_ord _) = false
+  | mayRaise (Char32_chr_unchecked _) = false
   | mayRaise String_EQUAL = false
   | mayRaise String_LT = false
   | mayRaise String_LE = false
@@ -1162,6 +1244,16 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String16_HAT = false
   | mayRaise (String16_size _) = false
   | mayRaise String16_str = false
+  | mayRaise String32_EQUAL = false
+  | mayRaise String32_LT = false
+  | mayRaise String32_LE = false
+  | mayRaise String32_GT = false
+  | mayRaise String32_GE = false
+  | mayRaise String32_HAT = false
+  | mayRaise (String32_size _) = false
+  | mayRaise String32_str = false
+  | mayRaise String32_concat = false
+  | mayRaise String32_implode = false
   | mayRaise IntInf_andb = false
   | mayRaise IntInf_orb = false
   | mayRaise IntInf_xorb = false
@@ -1354,6 +1446,13 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Char16_GE = true
   | isDiscardable (Char16_ord _) = true
   | isDiscardable (Char16_chr_unchecked _) = true
+  | isDiscardable Char32_EQUAL = true
+  | isDiscardable Char32_LT = true
+  | isDiscardable Char32_LE = true
+  | isDiscardable Char32_GT = true
+  | isDiscardable Char32_GE = true
+  | isDiscardable (Char32_ord _) = true
+  | isDiscardable (Char32_chr_unchecked _) = true
   | isDiscardable String_EQUAL = true
   | isDiscardable String_LT = true
   | isDiscardable String_LE = true
@@ -1372,6 +1471,16 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String16_HAT = true
   | isDiscardable (String16_size _) = true
   | isDiscardable String16_str = true
+  | isDiscardable String32_EQUAL = true
+  | isDiscardable String32_LT = true
+  | isDiscardable String32_LE = true
+  | isDiscardable String32_GT = true
+  | isDiscardable String32_GE = true
+  | isDiscardable String32_HAT = true
+  | isDiscardable (String32_size _) = true
+  | isDiscardable String32_str = true
+  | isDiscardable String32_concat = true
+  | isDiscardable String32_implode = true
   | isDiscardable IntInf_andb = true
   | isDiscardable IntInf_orb = true
   | isDiscardable IntInf_xorb = true
@@ -1567,6 +1676,13 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Char16_GE, [_, _]) = true
   | isDiscardableWithArgs (Char16_ord _, [_]) = true
   | isDiscardableWithArgs (Char16_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Char32_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (Char32_LT, [_, _]) = true
+  | isDiscardableWithArgs (Char32_LE, [_, _]) = true
+  | isDiscardableWithArgs (Char32_GT, [_, _]) = true
+  | isDiscardableWithArgs (Char32_GE, [_, _]) = true
+  | isDiscardableWithArgs (Char32_ord _, [_]) = true
+  | isDiscardableWithArgs (Char32_chr_unchecked _, [_]) = true
   | isDiscardableWithArgs (String_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (String_LT, [_, _]) = true
   | isDiscardableWithArgs (String_LE, [_, _]) = true
@@ -1585,6 +1701,16 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (String16_HAT, [_, _]) = true
   | isDiscardableWithArgs (String16_size _, [_]) = true
   | isDiscardableWithArgs (String16_str, [_]) = true
+  | isDiscardableWithArgs (String32_EQUAL, [_, _]) = true
+  | isDiscardableWithArgs (String32_LT, [_, _]) = true
+  | isDiscardableWithArgs (String32_LE, [_, _]) = true
+  | isDiscardableWithArgs (String32_GT, [_, _]) = true
+  | isDiscardableWithArgs (String32_GE, [_, _]) = true
+  | isDiscardableWithArgs (String32_HAT, [_, _]) = true
+  | isDiscardableWithArgs (String32_size _, [_]) = true
+  | isDiscardableWithArgs (String32_str, [_]) = true
+  | isDiscardableWithArgs (String32_concat, [_]) = true
+  | isDiscardableWithArgs (String32_implode, [_]) = true
   | isDiscardableWithArgs (IntInf_andb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_orb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_xorb, [_, _]) = true
@@ -1742,8 +1868,11 @@ fun fixIntWord { int, word }
         | Char_chr_unchecked a1 => Char_chr_unchecked (fixInt a1)
         | Char16_ord a1 => Char16_ord (fixInt a1)
         | Char16_chr_unchecked a1 => Char16_chr_unchecked (fixInt a1)
+        | Char32_ord a1 => Char32_ord (fixInt a1)
+        | Char32_chr_unchecked a1 => Char32_chr_unchecked (fixInt a1)
         | String_size a1 => String_size (fixInt a1)
         | String16_size a1 => String16_size (fixInt a1)
+        | String32_size a1 => String32_size (fixInt a1)
         | Vector_length a1 => Vector_length (fixInt a1)
         | Vector_unsafeFromListRevN a1 => Vector_unsafeFromListRevN (fixInt a1)
         | Array_length a1 => Array_length (fixInt a1)
@@ -1836,6 +1965,13 @@ fun returnArity EQUAL = 1
   | returnArity Char16_GE = 1
   | returnArity (Char16_ord _) = 1
   | returnArity (Char16_chr_unchecked _) = 1
+  | returnArity Char32_EQUAL = 1
+  | returnArity Char32_LT = 1
+  | returnArity Char32_LE = 1
+  | returnArity Char32_GT = 1
+  | returnArity Char32_GE = 1
+  | returnArity (Char32_ord _) = 1
+  | returnArity (Char32_chr_unchecked _) = 1
   | returnArity String_EQUAL = 1
   | returnArity String_LT = 1
   | returnArity String_LE = 1
@@ -1854,6 +1990,16 @@ fun returnArity EQUAL = 1
   | returnArity String16_HAT = 1
   | returnArity (String16_size _) = 1
   | returnArity String16_str = 1
+  | returnArity String32_EQUAL = 1
+  | returnArity String32_LT = 1
+  | returnArity String32_LE = 1
+  | returnArity String32_GT = 1
+  | returnArity String32_GE = 1
+  | returnArity String32_HAT = 1
+  | returnArity (String32_size _) = 1
+  | returnArity String32_str = 1
+  | returnArity String32_concat = 1
+  | returnArity String32_implode = 1
   | returnArity IntInf_andb = 1
   | returnArity IntInf_orb = 1
   | returnArity IntInf_xorb = 1
@@ -1986,8 +2132,10 @@ functor TypeOfPrimitives (type ty
                           val real : ty
                           val char : ty
                           val char16 : ty
+                          val char32 : ty
                           val string : ty
                           val string16 : ty
+                          val string32 : ty
                           val exn : ty
                           val exntag : ty
                           val LuaValue : ty
@@ -2274,6 +2422,21 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Char16_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char16] }
   | typeOf (Primitives.Char16_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char16] }
   | typeOf (Primitives.Char16_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char16] }
+  | typeOf Primitives.Char32_EQUAL = { vars = [], args = vector [char32, char32], results = [bool] }
+  | typeOf Primitives.Char32_LT = { vars = [], args = vector [char32, char32], results = [bool] }
+  | typeOf Primitives.Char32_LE = { vars = [], args = vector [char32, char32], results = [bool] }
+  | typeOf Primitives.Char32_GT = { vars = [], args = vector [char32, char32], results = [bool] }
+  | typeOf Primitives.Char32_GE = { vars = [], args = vector [char32, char32], results = [bool] }
+  | typeOf (Primitives.Char32_ord Primitives.INT) = { vars = [], args = vector [char32], results = [int] }
+  | typeOf (Primitives.Char32_ord Primitives.I32) = { vars = [], args = vector [char32], results = [int32] }
+  | typeOf (Primitives.Char32_ord Primitives.I54) = { vars = [], args = vector [char32], results = [int54] }
+  | typeOf (Primitives.Char32_ord Primitives.I64) = { vars = [], args = vector [char32], results = [int64] }
+  | typeOf (Primitives.Char32_ord Primitives.INT_INF) = { vars = [], args = vector [char32], results = [intInf] }
+  | typeOf (Primitives.Char32_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], results = [char32] }
+  | typeOf (Primitives.Char32_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], results = [char32] }
+  | typeOf (Primitives.Char32_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char32] }
+  | typeOf (Primitives.Char32_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char32] }
+  | typeOf (Primitives.Char32_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char32] }
   | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], results = [bool] }
   | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], results = [bool] }
   | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], results = [bool] }
@@ -2300,6 +2463,20 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.String16_size Primitives.I64) = { vars = [], args = vector [string16], results = [int64] }
   | typeOf (Primitives.String16_size Primitives.INT_INF) = { vars = [], args = vector [string16], results = [intInf] }
   | typeOf Primitives.String16_str = { vars = [], args = vector [char16], results = [string16] }
+  | typeOf Primitives.String32_EQUAL = { vars = [], args = vector [string32, string32], results = [bool] }
+  | typeOf Primitives.String32_LT = { vars = [], args = vector [string32, string32], results = [bool] }
+  | typeOf Primitives.String32_LE = { vars = [], args = vector [string32, string32], results = [bool] }
+  | typeOf Primitives.String32_GT = { vars = [], args = vector [string32, string32], results = [bool] }
+  | typeOf Primitives.String32_GE = { vars = [], args = vector [string32, string32], results = [bool] }
+  | typeOf Primitives.String32_HAT = { vars = [], args = vector [string32, string32], results = [string32] }
+  | typeOf (Primitives.String32_size Primitives.INT) = { vars = [], args = vector [string32], results = [int] }
+  | typeOf (Primitives.String32_size Primitives.I32) = { vars = [], args = vector [string32], results = [int32] }
+  | typeOf (Primitives.String32_size Primitives.I54) = { vars = [], args = vector [string32], results = [int54] }
+  | typeOf (Primitives.String32_size Primitives.I64) = { vars = [], args = vector [string32], results = [int64] }
+  | typeOf (Primitives.String32_size Primitives.INT_INF) = { vars = [], args = vector [string32], results = [intInf] }
+  | typeOf Primitives.String32_str = { vars = [], args = vector [char32], results = [string32] }
+  | typeOf Primitives.String32_concat = { vars = [], args = vector [listOf (string32)], results = [string32] }
+  | typeOf Primitives.String32_implode = { vars = [], args = vector [listOf (char32)], results = [string32] }
   | typeOf Primitives.IntInf_andb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], results = [intInf] }

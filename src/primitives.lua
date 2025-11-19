@@ -24,8 +24,10 @@ do
   local real = {"real"}
   local char = {"char"}
   local char16 = {"char16"}
+  local char32 = {"char32"}
   local string = {"string"}
   local string16 = {"string16"}
+  local string32 = {"string32"}
   local intInf = {"intInf"}
   local exn = {"exn"}
   local exntag = {"exntag"}
@@ -656,6 +658,55 @@ do
       discardable = true,
     },
     {
+      name = "Char32.=",
+      srcname = "Char32_EQUAL",
+      type = Compare(char32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.<",
+      srcname = "Char32_LT",
+      type = Compare(char32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.<=",
+      srcname = "Char32_LE",
+      type = Compare(char32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.>",
+      srcname = "Char32_GT",
+      type = Compare(char32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.>=",
+      srcname = "Char32_GE",
+      type = Compare(char32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.ord{.i}",
+      srcname = "Char32_ord",
+      type = { vars = {}, args = {char32}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char32.chr.unchecked{.i}",
+      srcname = "Char32_chr_unchecked",
+      type = { vars = {}, args = {intA}, results = {char32} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "String.=",
       srcname = "String_EQUAL",
       type = Compare(string),
@@ -778,6 +829,76 @@ do
       name = "String16.str",
       srcname = "String16_str",
       type = { vars = {}, args = {char16}, results = {string16} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.=",
+      srcname = "String32_EQUAL",
+      type = Compare(string32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.<",
+      srcname = "String32_LT",
+      type = Compare(string32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.<=",
+      srcname = "String32_LE",
+      type = Compare(string32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.>",
+      srcname = "String32_GT",
+      type = Compare(string32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.>=",
+      srcname = "String32_GE",
+      type = Compare(string32),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.^",
+      srcname = "String32_HAT",
+      type = HomoBinary(string32),
+      mayraise = false, -- ignore Size
+      discardable = true, -- ignore Size
+    },
+    {
+      name = "String32.size{.i}",
+      srcname = "String32_size",
+      type = { vars = {}, args = {string32}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.str",
+      srcname = "String32_str",
+      type = { vars = {}, args = {char32}, results = {string32} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.concat",
+      srcname = "String32_concat",
+      type = { vars = {}, args = {list(string32)}, results = {string32} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String32.implode",
+      srcname = "String32_implode",
+      type = { vars = {}, args = {list(char32)}, results = {string32} },
       mayraise = false,
       discardable = true,
     },
@@ -1864,8 +1985,10 @@ functor TypeOfPrimitives (type ty
                           val real : ty
                           val char : ty
                           val char16 : ty
+                          val char32 : ty
                           val string : ty
                           val string16 : ty
+                          val string32 : ty
                           val exn : ty
                           val exntag : ty
                           val LuaValue : ty

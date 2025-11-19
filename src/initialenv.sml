@@ -97,6 +97,7 @@ sig
   val VId_String_concatWith: TypedSyntax.VId
   val VId_String_implode: TypedSyntax.VId
   val VId_String_translate: TypedSyntax.VId
+  val VId_String32_concatWith: TypedSyntax.VId
   val VId_DelimCont_pushPrompt: TypedSyntax.VId
   val VId_DelimCont_withSubCont: TypedSyntax.VId
   val VId_DelimCont_pushSubCont: TypedSyntax.VId
@@ -287,6 +288,7 @@ struct
   val VId_String_concatWith = newVId "_Prim.String.concatWith"
   val VId_String_implode = newVId "_Prim.String.implode"
   val VId_String_translate = newVId "_Prim.String.translate"
+  val VId_String32_concatWith = newVId "_Prim.String32.concatWith"
 
   val VId_DelimCont_pushPrompt = newVId "_Prim.DelimCont.pushPrompt"
   val VId_DelimCont_withSubCont = newVId "_Prim.DelimCont.withSubCont"
@@ -521,6 +523,13 @@ struct
               , TypeScheme
                   ( []
                   , PT.function2 (PT.char --> PT.string, PT.string) PT.string
+                  )
+              )
+            , ( "_Prim.String32.concatWith"
+              , VId_String32_concatWith
+              , TypeScheme
+                  ( []
+                  , PT.function2 (PT.string32, PT.list PT.string32) PT.string32
                   )
               )
             , ( "_Prim.Vector.tabulate"
@@ -805,8 +814,16 @@ struct
         , ( "_Prim.Char16.char"
           , {typeFunction = TypeFunction ([], PT.char16), valEnv = emptyValEnv}
           )
+        , ( "_Prim.Char32.char"
+          , {typeFunction = TypeFunction ([], PT.char32), valEnv = emptyValEnv}
+          )
         , ( "_Prim.String16.string"
           , { typeFunction = TypeFunction ([], PT.string16)
+            , valEnv = emptyValEnv
+            }
+          )
+        , ( "_Prim.String32.string"
+          , { typeFunction = TypeFunction ([], PT.string32)
             , valEnv = emptyValEnv
             }
           )
@@ -940,6 +957,12 @@ struct
             , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
             }
           )
+        , ( PT.Names.char32
+          , { arity = 0
+            , admitsEquality = false (* true *)
+            , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
+            }
+          )
         , ( PT.Names.string
           , { arity = 0
             , admitsEquality = false (* true *)
@@ -947,6 +970,12 @@ struct
             }
           )
         , ( PT.Names.string16
+          , { arity = 0
+            , admitsEquality = false (* true *)
+            , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
+            }
+          )
+        , ( PT.Names.string32
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
@@ -1135,8 +1164,10 @@ struct
         , PT.Names.real
         , PT.Names.char
         , PT.Names.char16
+        , PT.Names.char32
         , PT.Names.string
         , PT.Names.string16
+        , PT.Names.string32
         , PT.Names.exn
         , PT.Names.bool
         , PT.Names.ref_

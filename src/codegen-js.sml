@@ -95,6 +95,7 @@ struct
         , (VId_String_concatWith, "_String_concatWith")
         , (VId_String_implode, "_String_implode")
         , (VId_String_translate, "_String_translate")
+        , (VId_String32_concatWith, "_String32_concatWith")
         (* real *)
         , (VId_Real_abs, "Math_abs") (* JS Math.abs *)
         (* Vector and Array *)
@@ -147,6 +148,7 @@ struct
         , (VId_Fail_payload, "_Fail_payload")
         (* string *)
         , (VId_String_concatWith, "_String_concatWith")
+        , (VId_String32_concatWith, "_String32_concatWith")
         (* JS interface *)
         , (VId_JavaScript_undefined, "undefined")
         , (VId_JavaScript_null, "null")
@@ -257,6 +259,8 @@ struct
         J.ConstExp (J.Numeral (Int.toString (ord x)))
     | doValue _ (C.Char16Const x) =
         J.ConstExp (J.Numeral (Int.toString x))
+    | doValue _ (C.Char32Const x) =
+        J.ConstExp (J.Numeral (Int.toString x))
     | doValue _ (C.StringConst x) =
         J.MethodExp
           ( J.VarExp (J.PredefinedId "Uint8Array")
@@ -266,6 +270,12 @@ struct
           )
     | doValue _ (C.String16Const x) =
         J.ConstExp (J.WideString x)
+    | doValue _ (C.String32Const x) =
+        J.MethodExp
+          ( J.VarExp (J.PredefinedId "Int32Array")
+          , "of"
+          , Vector.map (J.ConstExp o J.Numeral o Int.toString) x
+          )
     | doValue _ (C.PrimEffect _) = J.ConstExp J.Null
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
@@ -932,6 +942,19 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char16_chr_unchecked Primitives.I32 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Char32_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.Char32_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.Char32_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.Char32_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.Char32_ord Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_ord Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_chr_unchecked Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String_EQUAL =>
                    doBinaryExp
                      ( fn (a, b) =>
@@ -1013,6 +1036,68 @@ struct
                          J.MethodExp
                            ( J.VarExp (J.PredefinedId "String")
                            , "fromCharCode"
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_EQUAL =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_EQUAL")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_LT =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String_LT")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_HAT =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String32_append")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_size Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.String32_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.MethodExp
+                           ( J.VarExp (J.PredefinedId "Int32Array")
+                           , "of"
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_concat =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String32_concat")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String32_implode =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_String32_implode")
                            , vector [a]
                            )
                      , PURE

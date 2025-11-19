@@ -8,7 +8,9 @@ ann "nonexhaustiveRaise ignore"
     "allowHexFloatConsts true"
     "allowInfixingDot true"
     "allowPrim true"
-    "allowOverload true" in
+    "allowOverload true"
+    "allowExtendedTextConsts true"
+in
 $(TARGET_LANG)/general-prim.sml
 general.sml
 option.sml (* depends on unit (general.sml) *)
@@ -19,6 +21,7 @@ $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript, List.tabula
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 text16-prim.sml
+text32-prim.sml
 lunarml.sml
 $(TARGET_LANG)/javascript-util.sml
 js-common/javascript.sml
@@ -63,6 +66,7 @@ scan-text.sml
 string.sml
 text.sml
 js-common/text16.sml
+js-common/text32.sml
 widetext-16.sml
 js-common/time.sml
 io.sml
@@ -109,9 +113,17 @@ structure Char16Array (* extension *)
 structure Char16ArraySlice (* extension *)
 structure Char16Vector (* extension *)
 structure Char16VectorSlice (* extension *)
+structure Char32 (* extension *)
+structure Char32Array (* extension *)
+structure Char32ArraySlice (* extension *)
+structure Char32Vector (* extension *)
+structure Char32VectorSlice (* extension *)
 structure String16 (* extension *)
+structure String32 (* extension *)
 structure Substring16 (* extension *)
+structure Substring32 (* extension *)
 structure Text16 (* extension *)
+structure Text32 (* extension *)
 structure Array
 structure ArraySlice
 structure Bool
