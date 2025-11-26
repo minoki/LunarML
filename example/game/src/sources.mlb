@@ -1,0 +1,5 @@
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/lua.mlb
+lib/elmish.sml
+lib/love.sml
+main.sml
