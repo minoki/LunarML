@@ -497,10 +497,12 @@ struct
        val char7 = PrimTypes.char7
        val char16 = PrimTypes.char16
        val char32 = PrimTypes.char32
+       val uchar = PrimTypes.uchar
        val string = PrimTypes.string
        val string7 = PrimTypes.string7
        val string16 = PrimTypes.string16
        val string32 = PrimTypes.string32
+       val ustring = PrimTypes.ustring
        val intInf = PrimTypes.intInf
        val int32 = PrimTypes.int32
        val int54 = PrimTypes.int54

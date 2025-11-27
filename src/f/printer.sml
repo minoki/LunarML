@@ -89,6 +89,10 @@ struct
         [P.Fragment
            ("char32 \"" ^ StringElement.charToString (StringElement.CODEUNIT x)
             ^ "\"")]
+    | doPrimOp (F.UCharConstOp x) =
+        [P.Fragment
+           ("uchar \"" ^ StringElement.charToString (StringElement.CODEUNIT x)
+            ^ "\"")]
     | doPrimOp (F.String7ConstOp x) =
         [P.Fragment ("string7 \"" ^ String.toString x ^ "\"")]
     | doPrimOp (F.String8ConstOp x) =
@@ -104,6 +108,14 @@ struct
     | doPrimOp (F.String32ConstOp x) =
         [P.Fragment
            ("string32 \""
+            ^
+            Vector.foldr
+              (fn (c, acc) =>
+                 StringElement.charToString (StringElement.CODEUNIT c) ^ acc)
+              "\"" x)]
+    | doPrimOp (F.UStringConstOp x) =
+        [P.Fragment
+           ("ustring \""
             ^
             Vector.foldr
               (fn (c, acc) =>
@@ -146,6 +158,8 @@ struct
         [P.Fragment (Int.toString x)]
     | doPat _ (F.SConPat {scon = F.Char32Constant x, ...}) =
         [P.Fragment (Int.toString x)]
+    | doPat _ (F.SConPat {scon = F.UCharConstant x, ...}) =
+        [P.Fragment (Int.toString x)]
     | doPat _ (F.SConPat {scon = F.StringConstant x, ...}) =
         [P.Fragment (String.toString x)]
     | doPat _ (F.SConPat {scon = F.String7Constant x, ...}) =
@@ -154,6 +168,8 @@ struct
         [P.Fragment "<string16>"]
     | doPat _ (F.SConPat {scon = F.String32Constant _, ...}) =
         [P.Fragment "<string32>"]
+    | doPat _ (F.SConPat {scon = F.UStringConstant _, ...}) =
+        [P.Fragment "<ustring>"]
     | doPat prec (F.VarPat (_, vid, ty)) =
         showParen (prec >= 1)
           (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : "

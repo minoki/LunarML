@@ -820,6 +820,9 @@ struct
         , ( "_Prim.Char32.char"
           , {typeFunction = TypeFunction ([], PT.char32), valEnv = emptyValEnv}
           )
+        , ( "_Prim.UChar.char"
+          , {typeFunction = TypeFunction ([], PT.uchar), valEnv = emptyValEnv}
+          )
         , ( "_Prim.String7.string"
           , {typeFunction = TypeFunction ([], PT.string7), valEnv = emptyValEnv}
           )
@@ -832,6 +835,9 @@ struct
           , { typeFunction = TypeFunction ([], PT.string32)
             , valEnv = emptyValEnv
             }
+          )
+        , ( "_Prim.UString.string"
+          , {typeFunction = TypeFunction ([], PT.ustring), valEnv = emptyValEnv}
           )
         , ( "_Prim.Int32.int"
           , {typeFunction = TypeFunction ([], PT.int32), valEnv = emptyValEnv}
@@ -975,6 +981,12 @@ struct
             , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
             }
           )
+        , ( PT.Names.uchar
+          , { arity = 0
+            , admitsEquality = false (* true *)
+            , overloadClass = NONE (* SOME Syntax.CLASS_CHAR *)
+            }
+          )
         , ( PT.Names.string
           , { arity = 0
             , admitsEquality = false (* true *)
@@ -994,6 +1006,12 @@ struct
             }
           )
         , ( PT.Names.string32
+          , { arity = 0
+            , admitsEquality = false (* true *)
+            , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
+            }
+          )
+        , ( PT.Names.ustring
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
@@ -1184,10 +1202,12 @@ struct
         , PT.Names.char7
         , PT.Names.char16
         , PT.Names.char32
+        , PT.Names.uchar
         , PT.Names.string
         , PT.Names.string7
         , PT.Names.string16
         , PT.Names.string32
+        , PT.Names.ustring
         , PT.Names.exn
         , PT.Names.bool
         , PT.Names.ref_

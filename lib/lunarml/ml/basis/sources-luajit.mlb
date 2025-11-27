@@ -19,6 +19,7 @@ string-prim.sml
 text7-prim.sml
 text16-prim.sml
 text32-prim.sml
+unicode-prim.sml
 bool.sml
 luajit/lua.sml
 lua/bool-tostring.sml
@@ -149,6 +150,8 @@ structure Substring16 (* extension *)
 structure Substring32 (* extension *)
 structure Text16 (* extension *)
 structure Text32 (* extension *)
+structure UChar (* extension *)
+structure UString (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO

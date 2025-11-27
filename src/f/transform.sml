@@ -690,10 +690,12 @@ struct
     | isDiscardablePrimOp (F.Char8ConstOp _) = true
     | isDiscardablePrimOp (F.Char16ConstOp _) = true
     | isDiscardablePrimOp (F.Char32ConstOp _) = true
+    | isDiscardablePrimOp (F.UCharConstOp _) = true
     | isDiscardablePrimOp (F.String7ConstOp _) = true
     | isDiscardablePrimOp (F.String8ConstOp _) = true
     | isDiscardablePrimOp (F.String16ConstOp _) = true
     | isDiscardablePrimOp (F.String32ConstOp _) = true
+    | isDiscardablePrimOp (F.UStringConstOp _) = true
     | isDiscardablePrimOp (F.RaiseOp _) = false
     | isDiscardablePrimOp F.ListOp = true
     | isDiscardablePrimOp F.VectorOp = true

@@ -32,10 +32,12 @@ sig
   | Char7Const of char
   | Char16Const of int
   | Char32Const of int
+  | UCharConst of int
   | StringConst of string
   | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
+  | UStringConst of int vector
   | PrimEffect of Primitives.prim_effect
   | Cast of {value: Value, from: Ty, to: Ty}
   | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
@@ -156,10 +158,12 @@ struct
   | Char7Const of char
   | Char16Const of int
   | Char32Const of int
+  | UCharConst of int
   | StringConst of string
   | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
+  | UStringConst of int vector
   (*
   | RealConst of Numeric.float_notation
   *)
@@ -241,10 +245,12 @@ struct
     | extractVarFromValue (Char7Const _) = NONE
     | extractVarFromValue (Char16Const _) = NONE
     | extractVarFromValue (Char32Const _) = NONE
+    | extractVarFromValue (UCharConst _) = NONE
     | extractVarFromValue (StringConst _) = NONE
     | extractVarFromValue (String7Const _) = NONE
     | extractVarFromValue (String16Const _) = NONE
     | extractVarFromValue (String32Const _) = NONE
+    | extractVarFromValue (UStringConst _) = NONE
     | extractVarFromValue (PrimEffect _) = NONE
     | extractVarFromValue (Cast {value, ...}) = extractVarFromValue value
     | extractVarFromValue (Pack {value, ...}) = extractVarFromValue value
@@ -265,10 +271,12 @@ struct
       | isDiscardable (PrimOp {primOp = F.Char8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char16ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char32ConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.UCharConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String7ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String16ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String32ConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.UStringConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.RaiseOp _, ...}) = false
       | isDiscardable (PrimOp {primOp = F.ListOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.VectorOp, ...}) = true
@@ -608,6 +616,8 @@ struct
           "Char16(" ^ Int.toString x ^ ")"
       | valueToString (Char32Const x) =
           "Char32(" ^ Int.toString x ^ ")"
+      | valueToString (UCharConst x) =
+          "UChar(" ^ Int.toString x ^ ")"
       | valueToString (StringConst x) =
           "String(\"" ^ String.toString x ^ "\")"
       | valueToString (String7Const x) =
@@ -619,6 +629,11 @@ struct
             (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
       | valueToString (String32Const x) =
           "String32(["
+          ^
+          String.concatWith ","
+            (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
+      | valueToString (UStringConst x) =
+          "UString(["
           ^
           String.concatWith ","
             (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
@@ -640,10 +655,12 @@ struct
            | F.Char8ConstOp _ => "PrimOp(Char8ConstOp)"
            | F.Char16ConstOp _ => "PrimOp(Char16ConstOp)"
            | F.Char32ConstOp _ => "PrimOp(Char32ConstOp)"
+           | F.UCharConstOp _ => "PrimOp(UCharConstOp)"
            | F.String7ConstOp _ => "PrimOp(String7ConstOp)"
            | F.String8ConstOp _ => "PrimOp(String8ConstOp)"
            | F.String16ConstOp _ => "PrimOp(String16ConstOp)"
            | F.String32ConstOp _ => "PrimOp(String32ConstOp)"
+           | F.UStringConstOp _ => "PrimOp(UStringConstOp)"
            | F.RaiseOp _ => "PrimOp(RaiseOp)"
            | F.ListOp => "PrimOp(ListOp)"
            | F.VectorOp => "PrimOp(VectorOp)"
@@ -967,10 +984,12 @@ struct
               | (F.Char8ConstOp _, [ty]) => ([], [ty])
               | (F.Char16ConstOp _, [ty]) => ([], [ty])
               | (F.Char32ConstOp _, [ty]) => ([], [ty])
+              | (F.UCharConstOp _, [ty]) => ([], [ty])
               | (F.String7ConstOp _, [ty]) => ([], [ty])
               | (F.String8ConstOp _, [ty]) => ([], [ty])
               | (F.String16ConstOp _, [ty]) => ([], [ty])
               | (F.String32ConstOp _, [ty]) => ([], [ty])
+              | (F.UStringConstOp _, [ty]) => ([], [ty])
               | (F.RaiseOp _, [ty]) => ([FSyntax.Types.exn], [ty])
               | (F.ListOp, [elemTy]) =>
                   (List.map (fn _ => elemTy) args, [FSyntax.Types.list elemTy])
@@ -1151,6 +1170,11 @@ struct
                            ( C.Char32Const x
                            , FSyntax.Types.char32
                            ) (* assume the type is correct *)
+                     | F.UCharConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.UCharConst x
+                           , FSyntax.Types.uchar
+                           ) (* assume the type is correct *)
                      | F.String7ConstOp x =>
                          apply revDecs k valueTransforms
                            ( C.String7Const x
@@ -1185,6 +1209,11 @@ struct
                          apply revDecs k valueTransforms
                            ( C.String32Const x
                            , FSyntax.Types.string32
+                           ) (* assume the type is correct *)
+                     | F.UStringConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.UStringConst x
+                           , FSyntax.Types.ustring
                            ) (* assume the type is correct *)
                      | _ =>
                          let
@@ -1851,10 +1880,12 @@ struct
           | goVal (v as C.Char7Const _) = v
           | goVal (v as C.Char16Const _) = v
           | goVal (v as C.Char32Const _) = v
+          | goVal (v as C.UCharConst _) = v
           | goVal (v as C.StringConst _) = v
           | goVal (v as C.String7Const _) = v
           | goVal (v as C.String16Const _) = v
           | goVal (v as C.String32Const _) = v
+          | goVal (v as C.UStringConst _) = v
           | goVal (v as C.PrimEffect _) = v
       in
         goVal

@@ -41,7 +41,7 @@ struct
    * string -> immutable Uint8Array
    * char -> 8-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
    * Char7.char -> 7-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
-   * String7.string, String16.string -> 16-bit string
+   * String7.string, String16.string, ustring -> 16-bit string
    * Char16.char -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
    * exn -> object
    * bool -> boolean
@@ -264,6 +264,8 @@ struct
         J.ConstExp (J.Numeral (Int.toString x))
     | doValue _ (C.Char32Const x) =
         J.ConstExp (J.Numeral (Int.toString x))
+    | doValue _ (C.UCharConst x) =
+        J.ConstExp (J.Numeral (Int.toString x))
     | doValue _ (C.StringConst x) =
         J.MethodExp
           ( J.VarExp (J.PredefinedId "Uint8Array")
@@ -282,6 +284,9 @@ struct
           , "of"
           , Vector.map (J.ConstExp o J.Numeral o Int.toString) x
           )
+    | doValue _ (C.UStringConst x) =
+        J.ConstExp (J.WideString (StringElement.encode16bit
+          (Vector.map StringElement.UNICODE_SCALAR x)))
     | doValue _ (C.PrimEffect _) = J.ConstExp J.Null
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
@@ -974,6 +979,19 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char32_chr_unchecked Primitives.I32 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UChar_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.UChar_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.UChar_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.UChar_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.UChar_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.UChar_ord Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UChar_ord Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UChar_chr_unchecked Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UChar_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String_EQUAL =>
                    doBinaryExp
                      ( fn (a, b) =>
@@ -1140,6 +1158,18 @@ struct
                      ( fn a =>
                          J.CallExp
                            ( J.VarExp (J.PredefinedId "_String32_implode")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.UString_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.UString_HAT => doBinaryOp (J.PLUS, PURE)
+               | Primitives.UString_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.MethodExp
+                           ( J.VarExp (J.PredefinedId "String")
+                           , "fromCodePoint"
                            , vector [a]
                            )
                      , PURE

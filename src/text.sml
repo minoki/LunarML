@@ -16,6 +16,7 @@ sig
   val encode8bit: char vector -> string
   val encode16bit: char vector -> int vector
   val encode32bit: char vector -> int vector
+  val encodeUString: char vector -> int vector
 end =
 struct
   datatype char =
@@ -147,5 +148,15 @@ struct
       (Vector.foldr
          (fn (CODEUNIT x, xs) =>
             if 0 <= x andalso x <= 0x10ffff then x :: xs else raise Chr
+           | (UNICODE_SCALAR x, xs) => x :: xs) [] s)
+  fun encodeUString (s: char vector) : int vector (* may raise Chr *) =
+    Vector.fromList
+      (Vector.foldr
+         (fn (CODEUNIT x, xs) =>
+            if
+              (0 <= x andalso x <= 0xd7ff)
+              orelse (0xe000 <= x andalso x <= 0x10ffff)
+            then x :: xs
+            else raise Chr
            | (UNICODE_SCALAR x, xs) => x :: xs) [] s)
 end;

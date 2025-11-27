@@ -82,6 +82,8 @@ structure Substring16 (* extension *)
 structure Substring32 (* extension *)
 structure Text16 (* extension *)
 structure Text32 (* extension *)
+structure UChar (* extension *)
+structure UString (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO

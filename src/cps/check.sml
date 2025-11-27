@@ -54,10 +54,12 @@ struct
      | C.Char7Const _ => FSyntax.Types.char7
      | C.Char16Const _ => FSyntax.Types.char16
      | C.Char32Const _ => FSyntax.Types.char32
+     | C.UCharConst _ => FSyntax.Types.uchar
      | C.StringConst _ => FSyntax.Types.string
      | C.String7Const _ => FSyntax.Types.string7
      | C.String16Const _ => FSyntax.Types.string16
      | C.String32Const _ => FSyntax.Types.string32
+     | C.UStringConst _ => FSyntax.Types.ustring
      | C.PrimEffect _ => FSyntax.Types.prim_effect
      | C.Cast {value, from, to} =>
       (checkValue (env, fn () => "Cast", from) value; to)
@@ -121,10 +123,12 @@ struct
          | F.Char8ConstOp _ => raise TypeError "unexpected Char8ConstOp"
          | F.Char16ConstOp _ => raise TypeError "unexpected Char16ConstOp"
          | F.Char32ConstOp _ => raise TypeError "unexpected Char32ConstOp"
+         | F.UCharConstOp _ => raise TypeError "unexpected UCharConstOp"
          | F.String7ConstOp _ => raise TypeError "unexpected String7ConstOp"
          | F.String8ConstOp _ => raise TypeError "unexpected String8ConstOp"
          | F.String16ConstOp _ => raise TypeError "unexpected String16ConstOp"
          | F.String32ConstOp _ => raise TypeError "unexpected String32ConstOp"
+         | F.UStringConstOp _ => raise TypeError "unexpected UStringConstOp"
          | F.RealConstOp _ => [F.Types.real]
          | F.RaiseOp _ => raise TypeError "unexpected RaiseOp"
          | F.ListOp =>

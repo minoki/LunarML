@@ -396,6 +396,8 @@ struct
         L.ConstExp (L.Numeral (Int.toString i))
     | doValue _ (C.Char32Const i) =
         L.ConstExp (L.Numeral (Int.toString i))
+    | doValue _ (C.UCharConst i) =
+        L.ConstExp (L.Numeral (Int.toString i))
     | doValue _ (C.StringConst s) =
         L.ConstExp (L.LiteralString s)
     | doValue _ (C.String7Const s) =
@@ -417,6 +419,9 @@ struct
                   Char.chr i3 :: Char.chr i2 :: Char.chr i1 :: Char.chr i0
                   :: acc
                 end) [] s))) (* big endian *)
+    | doValue _ (C.UStringConst s) =
+        L.ConstExp (L.LiteralString (StringElement.encode8bit
+          (Vector.map StringElement.UNICODE_SCALAR s)))
     | doValue _ (C.PrimEffect _) = L.ConstExp L.Nil
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
@@ -1654,6 +1659,35 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.UChar_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.UChar_LT => doBinaryOp (L.LT, PURE)
+               | Primitives.UChar_GT => doBinaryOp (L.GT, PURE)
+               | Primitives.UChar_LE => doBinaryOp (L.LE, PURE)
+               | Primitives.UChar_GE => doBinaryOp (L.GE, PURE)
+               | Primitives.UChar_ord w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
+               | Primitives.UChar_chr_unchecked w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
                | Primitives.String7_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.String7_LT => doBinaryOp (L.LT, PURE)
                | Primitives.String7_GT => doBinaryOp (L.GT, PURE)
@@ -1733,6 +1767,12 @@ struct
                                 )
                           , PURE
                           ))
+               | Primitives.UString_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.UString_LT => doBinaryOp (L.LT, PURE)
+               | Primitives.UString_GT => doBinaryOp (L.GT, PURE)
+               | Primitives.UString_LE => doBinaryOp (L.LE, PURE)
+               | Primitives.UString_GE => doBinaryOp (L.GE, PURE)
+               | Primitives.UString_HAT => doBinaryOp (L.CONCAT, PURE)
                | Primitives.Vector_length _ =>
                    doUnaryExp
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))

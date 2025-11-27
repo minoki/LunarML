@@ -26,10 +26,12 @@ do
   local char7 = {"char7"}
   local char16 = {"char16"}
   local char32 = {"char32"}
+  local uchar = {"uchar"}
   local string = {"string"}
   local string7 = {"string7"}
   local string16 = {"string16"}
   local string32 = {"string32"}
+  local ustring = {"ustring"}
   local intInf = {"intInf"}
   local exn = {"exn"}
   local exntag = {"exntag"}
@@ -758,6 +760,55 @@ do
       discardable = true,
     },
     {
+      name = "UChar.=",
+      srcname = "UChar_EQUAL",
+      type = Compare(uchar),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.<",
+      srcname = "UChar_LT",
+      type = Compare(uchar),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.<=",
+      srcname = "UChar_LE",
+      type = Compare(uchar),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.>",
+      srcname = "UChar_GT",
+      type = Compare(uchar),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.>=",
+      srcname = "UChar_GE",
+      type = Compare(uchar),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.ord{.i}",
+      srcname = "UChar_ord",
+      type = { vars = {}, args = {uchar}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UChar.chr.unchecked{.i}",
+      srcname = "UChar_chr_unchecked",
+      type = { vars = {}, args = {intA}, results = {uchar} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "String.=",
       srcname = "String_EQUAL",
       type = Compare(string),
@@ -1006,6 +1057,62 @@ do
       name = "String32.implode",
       srcname = "String32_implode",
       type = { vars = {}, args = {list(char32)}, results = {string32} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.=",
+      srcname = "UString_EQUAL",
+      type = Compare(ustring),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.<",
+      srcname = "UString_LT",
+      type = Compare(ustring),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.<=",
+      srcname = "UString_LE",
+      type = Compare(ustring),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.>",
+      srcname = "UString_GT",
+      type = Compare(ustring),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.>=",
+      srcname = "UString_GE",
+      type = Compare(ustring),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.^",
+      srcname = "UString_HAT",
+      type = HomoBinary(ustring),
+      mayraise = false, -- ignore Size
+      discardable = true, -- ignore Size
+    },
+    {
+      name = "UString.size{.i}",
+      srcname = "UString_size",
+      type = { vars = {}, args = {ustring}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UString.str",
+      srcname = "UString_str",
+      type = { vars = {}, args = {uchar}, results = {ustring} },
       mayraise = false,
       discardable = true,
     },
@@ -2094,10 +2201,12 @@ functor TypeOfPrimitives (type ty
                           val char7 : ty
                           val char16 : ty
                           val char32 : ty
+                          val uchar : ty
                           val string : ty
                           val string7 : ty
                           val string16 : ty
                           val string32 : ty
+                          val ustring : ty
                           val exn : ty
                           val exntag : ty
                           val LuaValue : ty
