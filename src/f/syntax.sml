@@ -25,9 +25,11 @@ sig
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
   | RealConstOp of Numeric.float_notation (* 1 type argument *)
+  | Char7ConstOp of char (* 1 type argument *)
   | Char8ConstOp of char (* 1 type argument *)
   | Char16ConstOp of int (* 1 type argument *)
   | Char32ConstOp of int (* 1 type argument *)
+  | String7ConstOp of string (* 1 type argument *)
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
   | String32ConstOp of int vector (* 1 type argument *)
@@ -64,9 +66,11 @@ sig
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
   | CharConstant of char
+  | Char7Constant of char
   | Char16Constant of int
   | Char32Constant of int
   | StringConstant of string
+  | String7Constant of string
   | String16Constant of int vector
   | String32Constant of int vector
   datatype Pat =
@@ -182,9 +186,11 @@ sig
     val word64: Ty
     val real: Ty
     val char: Ty
+    val char7: Ty
     val char16: Ty
     val char32: Ty
     val string: Ty
+    val string7: Ty
     val string16: Ty
     val string32: Ty
     val exn: Ty
@@ -258,9 +264,11 @@ struct
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
   | RealConstOp of Numeric.float_notation (* 1 type argument *)
+  | Char7ConstOp of char (* 1 type argument *)
   | Char8ConstOp of char (* 1 type argument *)
   | Char16ConstOp of int (* 1 type argument *)
   | Char32ConstOp of int (* 1 type argument *)
+  | String7ConstOp of string (* 1 type argument *)
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
   | String32ConstOp of int vector (* 1 type argument *)
@@ -297,9 +305,11 @@ struct
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
   | CharConstant of char
+  | Char7Constant of char
   | Char16Constant of int
   | Char32Constant of int
   | StringConstant of string
+  | String7Constant of string
   | String16Constant of int vector
   | String32Constant of int vector
   datatype Pat =
@@ -419,9 +429,11 @@ struct
     val word64 = TyVar PrimTypes.Names.word64
     val real = TyVar PrimTypes.Names.real
     val char = TyVar PrimTypes.Names.char
+    val char7 = TyVar PrimTypes.Names.char7
     val char16 = TyVar PrimTypes.Names.char16
     val char32 = TyVar PrimTypes.Names.char32
     val string = TyVar PrimTypes.Names.string
+    val string7 = TyVar PrimTypes.Names.string7
     val string16 = TyVar PrimTypes.Names.string16
     val string32 = TyVar PrimTypes.Names.string32
     val exn = TyVar PrimTypes.Names.exn
@@ -1604,6 +1616,8 @@ struct
       | print_PrimOp (WordConstOp x) = "WordConstOp " ^ IntInf.toString x
       | print_PrimOp (RealConstOp x) =
           "RealConstOp " ^ Numeric.Notation.toString "~" x
+      | print_PrimOp (Char7ConstOp x) =
+          "Char7ConstOp \"" ^ Char.toString x ^ "\""
       | print_PrimOp (Char8ConstOp x) =
           "Char8ConstOp \"" ^ Char.toString x ^ "\""
       | print_PrimOp (Char16ConstOp x) =
@@ -1612,6 +1626,8 @@ struct
       | print_PrimOp (Char32ConstOp x) =
           "Char32ConstOp \""
           ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
+      | print_PrimOp (String7ConstOp x) =
+          "String7ConstOp \"" ^ String.toString x ^ "\""
       | print_PrimOp (String8ConstOp x) =
           "String8ConstOp \"" ^ String.toString x ^ "\""
       | print_PrimOp (String16ConstOp x) =
@@ -1677,6 +1693,14 @@ struct
       | print_Pat
           (SConPat
              { sourceSpan = _
+             , scon = Char7Constant x
+             , equality = _
+             , cookedValue = _
+             }) =
+          "SConPat(Char7Constant #\"" ^ Char.toString x ^ "\")"
+      | print_Pat
+          (SConPat
+             { sourceSpan = _
              , scon = Char16Constant x
              , equality = _
              , cookedValue = _
@@ -1698,6 +1722,14 @@ struct
              , cookedValue = _
              }) =
           "SConPat(StringConstant \"" ^ String.toString x ^ "\")"
+      | print_Pat
+          (SConPat
+             { sourceSpan = _
+             , scon = String7Constant x
+             , equality = _
+             , cookedValue = _
+             }) =
+          "SConPat(String7Constant \"" ^ String.toString x ^ "\")"
       | print_Pat
           (SConPat
              { sourceSpan = _
@@ -2567,7 +2599,7 @@ struct
            else
              emitFatalError (ctx, [span], "invalid real constant: type")
        | _ => emitFatalError (ctx, [span], "invalid real constant: type"))
-    datatype char_width = C8 | C16 | C32
+    datatype char_width = C7 | C8 | C16 | C32
     fun cookCharacterConstant
       (ctx: Context, env: Env, span, value: StringElement.char, ty) =
       (case ty of
@@ -2576,6 +2608,8 @@ struct
              val w =
                if T.eqTyName (tycon, PrimTypes.Names.char) then
                  C8
+               else if T.eqTyName (tycon, PrimTypes.Names.char7) then
+                 C7
                else if T.eqTyName (tycon, PrimTypes.Names.char16) then
                  C16
                else if T.eqTyName (tycon, PrimTypes.Names.char32) then
@@ -2601,7 +2635,8 @@ struct
                          )
                  in
                    case maxOrd of
-                     255 => C8
+                     127 => C7
+                   | 255 => C8
                    | 65535 => C16
                    | 0x10FFFF => C32
                    | _ =>
@@ -2612,7 +2647,39 @@ struct
                  end
            in
              case w of
-               C8 =>
+               C7 =>
+                 let
+                   val x =
+                     case value of
+                       StringElement.CODEUNIT x =>
+                         if 0 <= x andalso x <= 127 then
+                           x
+                         else
+                           ( emitError
+                               ( ctx
+                               , [span]
+                               , "invalid character constant: out of range"
+                               )
+                           ; 0
+                           )
+                     | StringElement.UNICODE_SCALAR x =>
+                         if 0 <= x andalso x <= 127 then
+                           x
+                         else
+                           ( emitError
+                               ( ctx
+                               , [span]
+                               , "invalid character constant: out of range"
+                               )
+                           ; 0
+                           )
+                   val c = Char.chr x
+                 in
+                   ( F.CharConstant c
+                   , F.PrimExp (F.Char7ConstOp c, [toFTy (ctx, env, ty)], [])
+                   )
+                 end
+             | C8 =>
                  let
                    val x =
                      case value of
@@ -2715,6 +2782,8 @@ struct
              val w =
                if T.eqTyName (tycon, PrimTypes.Names.string) then
                  C8
+               else if T.eqTyName (tycon, PrimTypes.Names.string7) then
+                 C7
                else if T.eqTyName (tycon, PrimTypes.Names.string16) then
                  C16
                else if T.eqTyName (tycon, PrimTypes.Names.string32) then
@@ -2740,7 +2809,8 @@ struct
                          )
                  in
                    case maxOrd of
-                     255 => C8
+                     127 => C7
+                   | 255 => C8
                    | 65535 => C16
                    | 0x10FFFF => C32
                    | _ =>
@@ -2751,7 +2821,25 @@ struct
                  end
            in
              case w of
-               C8 =>
+               C7 =>
+                 let
+                   val cooked =
+                     StringElement.encode7bit value
+                     handle Chr =>
+                       ( emitError
+                           ( ctx
+                           , [span]
+                           , "invalid string constant: out of range"
+                           )
+                       ; ""
+                       )
+                 in
+                   ( F.String7Constant cooked
+                   , F.PrimExp
+                       (F.String7ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                   )
+                 end
+             | C8 =>
                  let
                    val cooked =
                      StringElement.encode8bit value

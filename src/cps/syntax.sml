@@ -29,9 +29,11 @@ sig
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
   | CharConst of char
+  | Char7Const of char
   | Char16Const of int
   | Char32Const of int
   | StringConst of string
+  | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
   | PrimEffect of Primitives.prim_effect
@@ -151,9 +153,11 @@ struct
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
   | CharConst of char
+  | Char7Const of char
   | Char16Const of int
   | Char32Const of int
   | StringConst of string
+  | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
   (*
@@ -234,9 +238,11 @@ struct
     | extractVarFromValue (IntConst _) = NONE
     | extractVarFromValue (WordConst _) = NONE
     | extractVarFromValue (CharConst _) = NONE
+    | extractVarFromValue (Char7Const _) = NONE
     | extractVarFromValue (Char16Const _) = NONE
     | extractVarFromValue (Char32Const _) = NONE
     | extractVarFromValue (StringConst _) = NONE
+    | extractVarFromValue (String7Const _) = NONE
     | extractVarFromValue (String16Const _) = NONE
     | extractVarFromValue (String32Const _) = NONE
     | extractVarFromValue (PrimEffect _) = NONE
@@ -255,9 +261,11 @@ struct
     fun isDiscardable (PrimOp {primOp = F.IntConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.WordConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.RealConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.Char7ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char16ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.Char32ConstOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.String7ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String16ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String32ConstOp _, ...}) = true
@@ -594,12 +602,16 @@ struct
           "Word64(" ^ IntInf.toString x ^ ")"
       | valueToString (CharConst x) =
           "Char(" ^ Char.toString x ^ ")"
+      | valueToString (Char7Const x) =
+          "Char7(" ^ Char.toString x ^ ")"
       | valueToString (Char16Const x) =
           "Char16(" ^ Int.toString x ^ ")"
       | valueToString (Char32Const x) =
           "Char32(" ^ Int.toString x ^ ")"
       | valueToString (StringConst x) =
           "String(\"" ^ String.toString x ^ "\")"
+      | valueToString (String7Const x) =
+          "String7(\"" ^ String.toString x ^ "\")"
       | valueToString (String16Const x) =
           "String16(["
           ^
@@ -624,9 +636,11 @@ struct
            | F.IntConstOp _ => "PrimOp(IntConstOp)"
            | F.WordConstOp _ => "PrimOp(WordConstOp)"
            | F.RealConstOp _ => "PrimOp(RealConstOp)"
+           | F.Char7ConstOp _ => "PrimOp(Char7ConstOp)"
            | F.Char8ConstOp _ => "PrimOp(Char8ConstOp)"
            | F.Char16ConstOp _ => "PrimOp(Char16ConstOp)"
            | F.Char32ConstOp _ => "PrimOp(Char32ConstOp)"
+           | F.String7ConstOp _ => "PrimOp(String7ConstOp)"
            | F.String8ConstOp _ => "PrimOp(String8ConstOp)"
            | F.String16ConstOp _ => "PrimOp(String16ConstOp)"
            | F.String32ConstOp _ => "PrimOp(String32ConstOp)"
@@ -949,9 +963,11 @@ struct
               | (F.IntConstOp _, [ty]) => ([], [ty])
               | (F.WordConstOp _, [ty]) => ([], [ty])
               | (F.RealConstOp _, [ty]) => ([], [ty])
+              | (F.Char7ConstOp _, [ty]) => ([], [ty])
               | (F.Char8ConstOp _, [ty]) => ([], [ty])
               | (F.Char16ConstOp _, [ty]) => ([], [ty])
               | (F.Char32ConstOp _, [ty]) => ([], [ty])
+              | (F.String7ConstOp _, [ty]) => ([], [ty])
               | (F.String8ConstOp _, [ty]) => ([], [ty])
               | (F.String16ConstOp _, [ty]) => ([], [ty])
               | (F.String32ConstOp _, [ty]) => ([], [ty])
@@ -1101,6 +1117,11 @@ struct
                                 apply revDecs k valueTransforms (v, ty)
                               end
                           | _ => raise Fail "WordConstOp: invalid type")
+                     | F.Char7ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.Char7Const x
+                           , FSyntax.Types.char7
+                           ) (* assume the type is correct *)
                      | F.Char8ConstOp x =>
                          (case tyargs of
                             [ty as F.TyVar tv] =>
@@ -1129,6 +1150,11 @@ struct
                          apply revDecs k valueTransforms
                            ( C.Char32Const x
                            , FSyntax.Types.char32
+                           ) (* assume the type is correct *)
+                     | F.String7ConstOp x =>
+                         apply revDecs k valueTransforms
+                           ( C.String7Const x
+                           , FSyntax.Types.string7
                            ) (* assume the type is correct *)
                      | F.String8ConstOp x =>
                          (case tyargs of
@@ -1822,9 +1848,11 @@ struct
           | goVal (v as C.IntConst _) = v
           | goVal (v as C.WordConst _) = v
           | goVal (v as C.CharConst _) = v
+          | goVal (v as C.Char7Const _) = v
           | goVal (v as C.Char16Const _) = v
           | goVal (v as C.Char32Const _) = v
           | goVal (v as C.StringConst _) = v
+          | goVal (v as C.String7Const _) = v
           | goVal (v as C.String16Const _) = v
           | goVal (v as C.String32Const _) = v
           | goVal (v as C.PrimEffect _) = v

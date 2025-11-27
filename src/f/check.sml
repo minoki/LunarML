@@ -261,9 +261,11 @@ struct
          val word = F.TyVar PrimTypes.Names.word
          val real = F.TyVar PrimTypes.Names.real
          val char = F.TyVar PrimTypes.Names.char
+         val char7 = F.TyVar PrimTypes.Names.char7
          val char16 = F.TyVar PrimTypes.Names.char16
          val char32 = F.TyVar PrimTypes.Names.char32
          val string = F.TyVar PrimTypes.Names.string
+         val string7 = F.TyVar PrimTypes.Names.string7
          val string16 = F.TyVar PrimTypes.Names.string16
          val string32 = F.TyVar PrimTypes.Names.string32
          val intInf = F.TyVar PrimTypes.Names.intInf

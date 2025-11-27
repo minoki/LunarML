@@ -28,6 +28,7 @@ lua/word-prim.sml
 lua/real-prim.sml
 char-prim.sml
 string-prim.sml
+text7-prim.sml
 text16-prim.sml
 text32-prim.sml
 lunarml.sml
@@ -131,6 +132,7 @@ signature WORD
 structure Unsafe (* extension *)
 structure Lua (* extension *)
 structure LunarML (* extension *)
+structure Char7 (* extension *)
 structure Char16 (* extension *)
 structure Char16Array (* extension *)
 structure Char16ArraySlice (* extension *)
@@ -141,6 +143,7 @@ structure Char32Array (* extension *)
 structure Char32ArraySlice (* extension *)
 structure Char32Vector (* extension *)
 structure Char32VectorSlice (* extension *)
+structure String7 (* extension *)
 structure String16 (* extension *)
 structure String32 (* extension *)
 structure Substring16 (* extension *)

@@ -53,9 +53,11 @@ struct
       | goValue _ (v as C.IntConst _) = v
       | goValue _ (v as C.WordConst _) = v
       | goValue _ (v as C.CharConst _) = v
+      | goValue _ (v as C.Char7Const _) = v
       | goValue _ (v as C.Char16Const _) = v
       | goValue _ (v as C.Char32Const _) = v
       | goValue _ (v as C.StringConst _) = v
+      | goValue _ (v as C.String7Const _) = v
       | goValue _ (v as C.String16Const _) = v
       | goValue _ (v as C.String32Const _) = v
       | goValue _ (v as C.PrimEffect _) = v

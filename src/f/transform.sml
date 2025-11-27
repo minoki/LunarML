@@ -686,9 +686,11 @@ struct
   fun isDiscardablePrimOp (F.IntConstOp _) = true
     | isDiscardablePrimOp (F.WordConstOp _) = true
     | isDiscardablePrimOp (F.RealConstOp _) = true
+    | isDiscardablePrimOp (F.Char7ConstOp _) = true
     | isDiscardablePrimOp (F.Char8ConstOp _) = true
     | isDiscardablePrimOp (F.Char16ConstOp _) = true
     | isDiscardablePrimOp (F.Char32ConstOp _) = true
+    | isDiscardablePrimOp (F.String7ConstOp _) = true
     | isDiscardablePrimOp (F.String8ConstOp _) = true
     | isDiscardablePrimOp (F.String16ConstOp _) = true
     | isDiscardablePrimOp (F.String32ConstOp _) = true

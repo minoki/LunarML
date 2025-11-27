@@ -51,9 +51,11 @@ struct
      | C.WordConst (Primitives.W32, _) => FSyntax.Types.word32
      | C.WordConst (Primitives.W64, _) => FSyntax.Types.word64
      | C.CharConst _ => FSyntax.Types.char
+     | C.Char7Const _ => FSyntax.Types.char7
      | C.Char16Const _ => FSyntax.Types.char16
      | C.Char32Const _ => FSyntax.Types.char32
      | C.StringConst _ => FSyntax.Types.string
+     | C.String7Const _ => FSyntax.Types.string7
      | C.String16Const _ => FSyntax.Types.string16
      | C.String32Const _ => FSyntax.Types.string32
      | C.PrimEffect _ => FSyntax.Types.prim_effect
@@ -115,9 +117,11 @@ struct
              end
          | F.IntConstOp _ => raise TypeError "unexpected IntConstOp"
          | F.WordConstOp _ => raise TypeError "unexpected WordConstOp"
+         | F.Char7ConstOp _ => raise TypeError "unexpected Char7ConstOp"
          | F.Char8ConstOp _ => raise TypeError "unexpected Char8ConstOp"
          | F.Char16ConstOp _ => raise TypeError "unexpected Char16ConstOp"
          | F.Char32ConstOp _ => raise TypeError "unexpected Char32ConstOp"
+         | F.String7ConstOp _ => raise TypeError "unexpected String7ConstOp"
          | F.String8ConstOp _ => raise TypeError "unexpected String8ConstOp"
          | F.String16ConstOp _ => raise TypeError "unexpected String16ConstOp"
          | F.String32ConstOp _ => raise TypeError "unexpected String32ConstOp"

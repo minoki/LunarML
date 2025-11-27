@@ -77,6 +77,8 @@ struct
         [P.Fragment ("word " ^ IntInf.toString x)]
     | doPrimOp (F.RealConstOp x) =
         [P.Fragment ("real " ^ Numeric.Notation.toString "~" x)]
+    | doPrimOp (F.Char7ConstOp x) =
+        [P.Fragment ("char7 \"" ^ Char.toString x ^ "\"")]
     | doPrimOp (F.Char8ConstOp x) =
         [P.Fragment ("char8 \"" ^ Char.toString x ^ "\"")]
     | doPrimOp (F.Char16ConstOp x) =
@@ -87,6 +89,8 @@ struct
         [P.Fragment
            ("char32 \"" ^ StringElement.charToString (StringElement.CODEUNIT x)
             ^ "\"")]
+    | doPrimOp (F.String7ConstOp x) =
+        [P.Fragment ("string7 \"" ^ String.toString x ^ "\"")]
     | doPrimOp (F.String8ConstOp x) =
         [P.Fragment ("string8 \"" ^ String.toString x ^ "\"")]
     | doPrimOp (F.String16ConstOp x) =
@@ -136,11 +140,15 @@ struct
         [P.Fragment (IntInf.toString x)]
     | doPat _ (F.SConPat {scon = F.CharConstant x, ...}) =
         [P.Fragment (Char.toString x)]
+    | doPat _ (F.SConPat {scon = F.Char7Constant x, ...}) =
+        [P.Fragment (Char.toString x)]
     | doPat _ (F.SConPat {scon = F.Char16Constant x, ...}) =
         [P.Fragment (Int.toString x)]
     | doPat _ (F.SConPat {scon = F.Char32Constant x, ...}) =
         [P.Fragment (Int.toString x)]
     | doPat _ (F.SConPat {scon = F.StringConstant x, ...}) =
+        [P.Fragment (String.toString x)]
+    | doPat _ (F.SConPat {scon = F.String7Constant x, ...}) =
         [P.Fragment (String.toString x)]
     | doPat _ (F.SConPat {scon = F.String16Constant _, ...}) =
         [P.Fragment "<string16>"]

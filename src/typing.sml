@@ -494,9 +494,11 @@ struct
        val word = PrimTypes.word
        val real = PrimTypes.real
        val char = PrimTypes.char
+       val char7 = PrimTypes.char7
        val char16 = PrimTypes.char16
        val char32 = PrimTypes.char32
        val string = PrimTypes.string
+       val string7 = PrimTypes.string7
        val string16 = PrimTypes.string16
        val string32 = PrimTypes.string32
        val intInf = PrimTypes.intInf

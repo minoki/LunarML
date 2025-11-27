@@ -390,11 +390,15 @@ struct
         end
     | doValue _ (C.CharConst c) =
         L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
+    | doValue _ (C.Char7Const c) =
+        L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
     | doValue _ (C.Char16Const i) =
         L.ConstExp (L.Numeral (Int.toString i))
     | doValue _ (C.Char32Const i) =
         L.ConstExp (L.Numeral (Int.toString i))
     | doValue _ (C.StringConst s) =
+        L.ConstExp (L.LiteralString s)
+    | doValue _ (C.String7Const s) =
         L.ConstExp (L.LiteralString s)
     | doValue _ (C.String16Const s) =
         L.ConstExp (L.LiteralString (String.implode
@@ -1563,6 +1567,35 @@ struct
                            (L.VarExp (L.PredefinedId "string_char"), vector [a])
                      , PURE
                      )
+               | Primitives.Char7_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.Char7_LT => doBinaryOp (L.LT, PURE)
+               | Primitives.Char7_GT => doBinaryOp (L.GT, PURE)
+               | Primitives.Char7_LE => doBinaryOp (L.LE, PURE)
+               | Primitives.Char7_GE => doBinaryOp (L.GE, PURE)
+               | Primitives.Char7_ord w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
+               | Primitives.Char7_chr_unchecked w =>
+                   (case (#targetLuaVersion ctx, w) of
+                      (LUA5_3, Primitives.INT) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I32) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | (LUAJIT, Primitives.I54) =>
+                        doUnaryExp (fn a => a, PURE) (* no-op *)
+                    | _ =>
+                        raise CodeGenError
+                          ("primop " ^ Primitives.toString prim
+                           ^ " is not supported on this target"))
                | Primitives.Char16_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.Char16_LT => doBinaryOp (L.LT, PURE)
                | Primitives.Char16_GT => doBinaryOp (L.GT, PURE)
@@ -1621,6 +1654,21 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.String7_EQUAL => doBinaryOp (L.EQUAL, PURE)
+               | Primitives.String7_LT => doBinaryOp (L.LT, PURE)
+               | Primitives.String7_GT => doBinaryOp (L.GT, PURE)
+               | Primitives.String7_LE => doBinaryOp (L.LE, PURE)
+               | Primitives.String7_GE => doBinaryOp (L.GE, PURE)
+               | Primitives.String7_HAT => doBinaryOp (L.CONCAT, PURE)
+               | Primitives.String7_size _ =>
+                   doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), PURE)
+               | Primitives.String7_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         L.CallExp
+                           (L.VarExp (L.PredefinedId "string_char"), vector [a])
+                     , PURE
+                     )
                | Primitives.String16_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.String16_LT =>
                    doBinaryOp (L.LT, PURE) (* big endian *)

@@ -23,9 +23,11 @@ do
   local word64 = {"word64"}
   local real = {"real"}
   local char = {"char"}
+  local char7 = {"char7"}
   local char16 = {"char16"}
   local char32 = {"char32"}
   local string = {"string"}
+  local string7 = {"string7"}
   local string16 = {"string16"}
   local string32 = {"string32"}
   local intInf = {"intInf"}
@@ -609,6 +611,55 @@ do
       discardable = true,
     },
     {
+      name = "Char7.=",
+      srcname = "Char7_EQUAL",
+      type = Compare(char7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.<",
+      srcname = "Char7_LT",
+      type = Compare(char7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.<=",
+      srcname = "Char7_LE",
+      type = Compare(char7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.>",
+      srcname = "Char7_GT",
+      type = Compare(char7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.>=",
+      srcname = "Char7_GE",
+      type = Compare(char7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.ord{.i}",
+      srcname = "Char7_ord",
+      type = { vars = {}, args = {char7}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Char7.chr.unchecked{.i}",
+      srcname = "Char7_chr_unchecked",
+      type = { vars = {}, args = {intA}, results = {char7} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Char16.=",
       srcname = "Char16_EQUAL",
       type = Compare(char16),
@@ -773,6 +824,62 @@ do
       name = "String.implode",
       srcname = "String_implode",
       type = { vars = {}, args = {list(char)}, results = {string} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.=",
+      srcname = "String7_EQUAL",
+      type = Compare(string7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.<",
+      srcname = "String7_LT",
+      type = Compare(string7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.<=",
+      srcname = "String7_LE",
+      type = Compare(string7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.>",
+      srcname = "String7_GT",
+      type = Compare(string7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.>=",
+      srcname = "String7_GE",
+      type = Compare(string7),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.^",
+      srcname = "String7_HAT",
+      type = HomoBinary(string7),
+      mayraise = false, -- ignore Size
+      discardable = true, -- ignore Size
+    },
+    {
+      name = "String7.size{.i}",
+      srcname = "String7_size",
+      type = { vars = {}, args = {string7}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "String7.str",
+      srcname = "String7_str",
+      type = { vars = {}, args = {char7}, results = {string7} },
       mayraise = false,
       discardable = true,
     },
@@ -1984,9 +2091,11 @@ functor TypeOfPrimitives (type ty
                           val word64 : ty
                           val real : ty
                           val char : ty
+                          val char7 : ty
                           val char16 : ty
                           val char32 : ty
                           val string : ty
+                          val string7 : ty
                           val string16 : ty
                           val string32 : ty
                           val exn : ty

@@ -40,8 +40,9 @@ struct
    * real -> number (64-bit floating-point number)
    * string -> immutable Uint8Array
    * char -> 8-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
-   * String16.string (WideString.string) -> 16-bit string
-   * Char16.char (WideChar.char) -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
+   * Char7.char -> 7-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
+   * String7.string, String16.string -> 16-bit string
+   * Char16.char -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
    * exn -> object
    * bool -> boolean
    * ref -> [ <mutable> ]
@@ -257,6 +258,8 @@ struct
         J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ "n"))
     | doValue _ (C.CharConst x) =
         J.ConstExp (J.Numeral (Int.toString (ord x)))
+    | doValue _ (C.Char7Const x) =
+        J.ConstExp (J.Numeral (Int.toString (ord x)))
     | doValue _ (C.Char16Const x) =
         J.ConstExp (J.Numeral (Int.toString x))
     | doValue _ (C.Char32Const x) =
@@ -268,6 +271,9 @@ struct
           , Vector.map (J.ConstExp o J.Numeral o Int.toString o Char.ord)
               (Vector.fromList (String.explode x))
           )
+    | doValue _ (C.String7Const x) =
+        J.ConstExp (J.WideString (Vector.tabulate (String.size x, fn i =>
+          Char.ord (String.sub (x, i)))))
     | doValue _ (C.String16Const x) =
         J.ConstExp (J.WideString x)
     | doValue _ (C.String32Const x) =
@@ -929,6 +935,19 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char_chr_unchecked Primitives.I54 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char7_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.Char7_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.Char7_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.Char7_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.Char7_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.Char7_ord Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char7_ord Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char7_chr_unchecked Primitives.I54 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char7_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char16_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.Char16_LT => doBinaryOp (J.LT, PURE)
                | Primitives.Char16_GT => doBinaryOp (J.GT, PURE)
@@ -1013,6 +1032,29 @@ struct
                      ( fn a =>
                          J.CallExp
                            ( J.VarExp (J.PredefinedId "_String_implode")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.String7_EQUAL => doBinaryOp (J.EQUAL, PURE)
+               | Primitives.String7_LT => doBinaryOp (J.LT, PURE)
+               | Primitives.String7_GT => doBinaryOp (J.GT, PURE)
+               | Primitives.String7_LE => doBinaryOp (J.LE, PURE)
+               | Primitives.String7_GE => doBinaryOp (J.GE, PURE)
+               | Primitives.String7_HAT => doBinaryOp (J.PLUS, PURE)
+               | Primitives.String7_size Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.IndexExp
+                           (a, J.ConstExp (J.asciiStringAsWide "length"))
+                     , PURE
+                     )
+               | Primitives.String7_str =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.MethodExp
+                           ( J.VarExp (J.PredefinedId "String")
+                           , "fromCharCode"
                            , vector [a]
                            )
                      , PURE

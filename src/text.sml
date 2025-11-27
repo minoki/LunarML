@@ -12,6 +12,7 @@ sig
   val toAsciiString: char vector -> string option
   val fromAsciiString: string -> char vector
   val encodeAscii: string -> int vector
+  val encode7bit: char vector -> string
   val encode8bit: char vector -> string
   val encode16bit: char vector -> int vector
   val encode32bit: char vector -> int vector
@@ -81,6 +82,13 @@ struct
       CODEUNIT (Char.ord (String.sub (s, i))))
   fun encodeAscii (s: string) : int vector =
     Vector.tabulate (String.size s, fn i => Char.ord (String.sub (s, i)))
+  fun encode7bit (s: char vector) : string (* may raise Chr *) =
+    String.implode
+      (Vector.foldr
+         (fn (CODEUNIT x, xs) =>
+            if 0 <= x andalso x <= 127 then Char.chr x :: xs else raise Chr
+           | (UNICODE_SCALAR x, xs) =>
+            if x < 128 then Char.chr x :: xs else raise Chr) [] s)
   fun encode8bit (s: char vector) : string (* may raise Chr *) =
     String.implode
       (Vector.foldr
