@@ -16,13 +16,13 @@ general.sml
 option.sml (* depends on unit (general.sml) *)
 lua/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
-unsafe.sml
+unsafe-basic.sml
 lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 lua/array-prim.sml
-math-sig.sml
-string-cvt-sig.sml
+math.sig
+string-cvt.sig
 ieee-real-0.sml
 lua/word-prim.sml
 lua/real-prim.sml
@@ -65,7 +65,6 @@ lua/int.sml
 real.sml
 lua/word-sequence.sml
 generic-mono-sequence.sml
-unsafe-mono-sequence.sml
 byte.sml
 pack-word.sml
 string.sml
@@ -73,10 +72,11 @@ text.sml
 lua/text16.sml
 lua/text32.sml
 widetext-8.sml
+unsafe-mono-sequence.sml
 lua/time.sml
 timer.sig
 lua/timer.sml
-os-path-sig.sml
+os-path.sig
 os-path-unix.sml
 os-path-windows.sml
 lua/iodesc.sml
@@ -84,9 +84,9 @@ lua/os.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
-text-io.sml
+text-io.sig
 lua/text-io.sml
-bin-io.sml
+bin-io.sig
 lua/bin-io.sml
 lua/command-line.sml
 delim-cont-$(DELIMITED_CONTINUATIONS).sml

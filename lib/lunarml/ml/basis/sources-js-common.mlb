@@ -16,7 +16,7 @@ general.sml
 option.sml (* depends on unit (general.sml) *)
 js-common/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
-unsafe.sml
+unsafe-basic.sml
 $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
@@ -29,8 +29,8 @@ $(TARGET_LANG)/javascript-util.sml
 js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
-math-sig.sml
-string-cvt-sig.sml
+math.sig
+string-cvt.sig
 ieee-real-0.sml
 js-common/word-prim.sml
 $(TARGET_LANG)/real-abs.sml
@@ -59,7 +59,6 @@ js-common/scan-num.sml (* depends on Word8, Substring *)
 large-int-is-int-inf.sml
 js-common/int.sml
 js-common/mono-sequence.sml
-unsafe-mono-sequence.sml
 real.sml
 byte.sml
 pack-word.sml
@@ -70,6 +69,7 @@ text.sml
 js-common/text16.sml
 js-common/text32.sml
 widetext-16.sml
+unsafe-mono-sequence.sml
 js-common/time.sml
 io.sml
 vector-slice.sml

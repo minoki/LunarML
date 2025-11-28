@@ -10,14 +10,14 @@ timer.sig
 nodejs/timer.sml
 nodejs/text-io.sml
 nodejs/bin-io-dummy.sml
-os-path-sig.sml
+os-path.sig
 os-path-unix.sml
 os-path-windows.sml
 nodejs/os.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
-text-io.sml
+text-io.sig
 nodejs/command-line.sml
 end
 in

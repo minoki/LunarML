@@ -48,7 +48,7 @@ fun isSubstring needle haystack (* naive algorithm *)
                                                true
                                            else
                                                (* 0 <= j < m, 0 <= i + j <= size haystack - m + j < size haystack *)
-                                               Unsafe.CharVector.sub (needle, j) = Unsafe.CharVector.sub (haystack, i + j) andalso check (j + 1)
+                                               UnsafeCharVector.sub (needle, j) = UnsafeCharVector.sub (haystack, i + j) andalso check (j + 1)
                          in check 0 orelse go (i + 1)
                          end
       in go 0

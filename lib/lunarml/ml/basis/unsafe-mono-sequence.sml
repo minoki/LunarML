@@ -10,6 +10,12 @@ structure Unsafe : sig
               structure BoolArray : UNSAFE_MONO_ARRAY where type elem = bool where type array = BoolArray.array
               structure CharVector : UNSAFE_MONO_VECTOR where type elem = Char.char where type vector = CharVector.vector
               structure CharArray : UNSAFE_MONO_ARRAY where type elem = Char.char where type array = CharArray.array
+              structure Char16Vector : UNSAFE_MONO_VECTOR where type elem = Char16.char where type vector = Char16Vector.vector
+              structure Char16Array : UNSAFE_MONO_ARRAY where type elem = Char16.char where type array = Char16Array.array
+              structure Char32Vector : UNSAFE_MONO_VECTOR where type elem = Char32.char where type vector = Char32Vector.vector
+              structure Char32Array : UNSAFE_MONO_ARRAY where type elem = Char32.char where type array = Char32Array.array
+              structure WideCharVector : UNSAFE_MONO_VECTOR where type elem = WideChar.char where type vector = WideCharVector.vector
+              structure WideCharArray : UNSAFE_MONO_ARRAY where type elem = WideChar.char where type array = WideCharArray.array
               structure IntVector : UNSAFE_MONO_VECTOR where type elem = Int.int where type vector = IntVector.vector
               structure IntArray : UNSAFE_MONO_ARRAY where type elem = Int.int where type array = IntArray.array
               structure Int8Vector : UNSAFE_MONO_VECTOR where type elem = Int8.int where type vector = Int8Vector.vector
@@ -38,6 +44,12 @@ structure BoolVector = UnsafeBoolVector
 structure BoolArray = UnsafeBoolArray
 structure CharVector = UnsafeCharVector
 structure CharArray = UnsafeCharArray
+structure Char16Vector = UnsafeChar16Vector
+structure Char16Array = UnsafeChar16Array
+structure Char32Vector = UnsafeChar32Vector
+structure Char32Array = UnsafeChar32Array
+structure WideCharVector = UnsafeWideCharVector
+structure WideCharArray = UnsafeWideCharArray
 structure IntVector = UnsafeIntVector
 structure IntArray = UnsafeIntArray
 structure Int8Vector = UnsafeInt8Vector

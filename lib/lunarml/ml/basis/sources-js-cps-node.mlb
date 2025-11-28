@@ -9,7 +9,7 @@ js-cps/javascript-callback.sml
 js-cps/javascript-promise.sml
 timer.sig
 nodejs/timer.sml
-os-path-sig.sml
+os-path.sig
 os-path-unix.sml
 os-path-windows.sml
 nodejs/iodesc.sml
@@ -17,9 +17,9 @@ nodejs/os-async.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
-text-io.sml
+text-io.sig
 nodejs/text-io-async.sml
-bin-io.sml
+bin-io.sig
 nodejs/bin-io-async.sml
 nodejs/command-line.sml
 end
