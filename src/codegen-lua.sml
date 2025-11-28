@@ -1557,6 +1557,8 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.Char_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.String_LT => doBinaryOp (L.LT, PURE)
                | Primitives.String_GT => doBinaryOp (L.GT, PURE)
@@ -1572,6 +1574,8 @@ struct
                            (L.VarExp (L.PredefinedId "string_char"), vector [a])
                      , PURE
                      )
+               | Primitives.String_fromString7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char7_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.Char7_LT => doBinaryOp (L.LT, PURE)
                | Primitives.Char7_GT => doBinaryOp (L.GT, PURE)
@@ -1630,6 +1634,8 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.Char16_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char32_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.Char32_LT => doBinaryOp (L.LT, PURE)
                | Primitives.Char32_GT => doBinaryOp (L.GT, PURE)
@@ -1659,6 +1665,10 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.Char32_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_fromUChar =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.UChar_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.UChar_LT => doBinaryOp (L.LT, PURE)
                | Primitives.UChar_GT => doBinaryOp (L.GT, PURE)
@@ -1688,6 +1698,8 @@ struct
                         raise CodeGenError
                           ("primop " ^ Primitives.toString prim
                            ^ " is not supported on this target"))
+               | Primitives.UChar_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String7_EQUAL => doBinaryOp (L.EQUAL, PURE)
                | Primitives.String7_LT => doBinaryOp (L.LT, PURE)
                | Primitives.String7_GT => doBinaryOp (L.GT, PURE)
@@ -1773,6 +1785,12 @@ struct
                | Primitives.UString_LE => doBinaryOp (L.LE, PURE)
                | Primitives.UString_GE => doBinaryOp (L.GE, PURE)
                | Primitives.UString_HAT => doBinaryOp (L.CONCAT, PURE)
+               | Primitives.UString_fromString7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UString_uncheckedFromUtf8 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UString_encodeUtf8 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Vector_length _ =>
                    doUnaryExp
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))

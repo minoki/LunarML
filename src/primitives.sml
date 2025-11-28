@@ -80,6 +80,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Char_GE (* Char.>= *)
                 | Char_ord of int_width (* Char.ord{.i} *)
                 | Char_chr_unchecked of int_width (* Char.chr.unchecked{.i} *)
+                | Char_fromChar7 (* Char.fromChar7 *)
                 | Char7_EQUAL (* Char7.= *)
                 | Char7_LT (* Char7.< *)
                 | Char7_LE (* Char7.<= *)
@@ -94,6 +95,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Char16_GE (* Char16.>= *)
                 | Char16_ord of int_width (* Char16.ord{.i} *)
                 | Char16_chr_unchecked of int_width (* Char16.chr.unchecked{.i} *)
+                | Char16_fromChar7 (* Char16.fromChar7 *)
                 | Char32_EQUAL (* Char32.= *)
                 | Char32_LT (* Char32.< *)
                 | Char32_LE (* Char32.<= *)
@@ -101,6 +103,8 @@ datatype PrimOp = EQUAL (* = *)
                 | Char32_GE (* Char32.>= *)
                 | Char32_ord of int_width (* Char32.ord{.i} *)
                 | Char32_chr_unchecked of int_width (* Char32.chr.unchecked{.i} *)
+                | Char32_fromChar7 (* Char32.fromChar7 *)
+                | Char32_fromUChar (* Char32.fromUChar *)
                 | UChar_EQUAL (* UChar.= *)
                 | UChar_LT (* UChar.< *)
                 | UChar_LE (* UChar.<= *)
@@ -108,6 +112,7 @@ datatype PrimOp = EQUAL (* = *)
                 | UChar_GE (* UChar.>= *)
                 | UChar_ord of int_width (* UChar.ord{.i} *)
                 | UChar_chr_unchecked of int_width (* UChar.chr.unchecked{.i} *)
+                | UChar_fromChar7 (* UChar.fromChar7 *)
                 | String_EQUAL (* String.= *)
                 | String_LT (* String.< *)
                 | String_LE (* String.<= *)
@@ -118,6 +123,7 @@ datatype PrimOp = EQUAL (* = *)
                 | String_str (* String.str *)
                 | String_concat (* String.concat *)
                 | String_implode (* String.implode *)
+                | String_fromString7 (* String.fromString7 *)
                 | String7_EQUAL (* String7.= *)
                 | String7_LT (* String7.< *)
                 | String7_LE (* String7.<= *)
@@ -134,6 +140,7 @@ datatype PrimOp = EQUAL (* = *)
                 | String16_HAT (* String16.^ *)
                 | String16_size of int_width (* String16.size{.i} *)
                 | String16_str (* String16.str *)
+                | String16_fromString7 (* String16.fromString7 *)
                 | String32_EQUAL (* String32.= *)
                 | String32_LT (* String32.< *)
                 | String32_LE (* String32.<= *)
@@ -144,6 +151,7 @@ datatype PrimOp = EQUAL (* = *)
                 | String32_str (* String32.str *)
                 | String32_concat (* String32.concat *)
                 | String32_implode (* String32.implode *)
+                | String32_fromString7 (* String32.fromString7 *)
                 | UString_EQUAL (* UString.= *)
                 | UString_LT (* UString.< *)
                 | UString_LE (* UString.<= *)
@@ -152,6 +160,13 @@ datatype PrimOp = EQUAL (* = *)
                 | UString_HAT (* UString.^ *)
                 | UString_size of int_width (* UString.size{.i} *)
                 | UString_str (* UString.str *)
+                | UString_fromString7 (* UString.fromString7 *)
+                | UString_uncheckedFromUtf8 (* UString.uncheckedFromUtf8 *)
+                | UString_uncheckedFromUtf16 (* UString.uncheckedFromUtf16 *)
+                | UString_uncheckedFromUtf32 (* UString.uncheckedFromUtf32 *)
+                | UString_encodeUtf8 (* UString.encodeUtf8 *)
+                | UString_encodeUtf16 (* UString.encodeUtf16 *)
+                | UString_encodeUtf32 (* UString.encodeUtf32 *)
                 | IntInf_andb (* IntInf.andb *)
                 | IntInf_orb (* IntInf.orb *)
                 | IntInf_xorb (* IntInf.xorb *)
@@ -506,6 +521,7 @@ fun toString EQUAL = "="
   | toString (Char_chr_unchecked I54) = "Char.chr.unchecked.i54"
   | toString (Char_chr_unchecked I64) = "Char.chr.unchecked.i64"
   | toString (Char_chr_unchecked INT_INF) = "Char.chr.unchecked.intInf"
+  | toString Char_fromChar7 = "Char.fromChar7"
   | toString Char7_EQUAL = "Char7.="
   | toString Char7_LT = "Char7.<"
   | toString Char7_LE = "Char7.<="
@@ -536,6 +552,7 @@ fun toString EQUAL = "="
   | toString (Char16_chr_unchecked I54) = "Char16.chr.unchecked.i54"
   | toString (Char16_chr_unchecked I64) = "Char16.chr.unchecked.i64"
   | toString (Char16_chr_unchecked INT_INF) = "Char16.chr.unchecked.intInf"
+  | toString Char16_fromChar7 = "Char16.fromChar7"
   | toString Char32_EQUAL = "Char32.="
   | toString Char32_LT = "Char32.<"
   | toString Char32_LE = "Char32.<="
@@ -551,6 +568,8 @@ fun toString EQUAL = "="
   | toString (Char32_chr_unchecked I54) = "Char32.chr.unchecked.i54"
   | toString (Char32_chr_unchecked I64) = "Char32.chr.unchecked.i64"
   | toString (Char32_chr_unchecked INT_INF) = "Char32.chr.unchecked.intInf"
+  | toString Char32_fromChar7 = "Char32.fromChar7"
+  | toString Char32_fromUChar = "Char32.fromUChar"
   | toString UChar_EQUAL = "UChar.="
   | toString UChar_LT = "UChar.<"
   | toString UChar_LE = "UChar.<="
@@ -566,6 +585,7 @@ fun toString EQUAL = "="
   | toString (UChar_chr_unchecked I54) = "UChar.chr.unchecked.i54"
   | toString (UChar_chr_unchecked I64) = "UChar.chr.unchecked.i64"
   | toString (UChar_chr_unchecked INT_INF) = "UChar.chr.unchecked.intInf"
+  | toString UChar_fromChar7 = "UChar.fromChar7"
   | toString String_EQUAL = "String.="
   | toString String_LT = "String.<"
   | toString String_LE = "String.<="
@@ -580,6 +600,7 @@ fun toString EQUAL = "="
   | toString String_str = "String.str"
   | toString String_concat = "String.concat"
   | toString String_implode = "String.implode"
+  | toString String_fromString7 = "String.fromString7"
   | toString String7_EQUAL = "String7.="
   | toString String7_LT = "String7.<"
   | toString String7_LE = "String7.<="
@@ -604,6 +625,7 @@ fun toString EQUAL = "="
   | toString (String16_size I64) = "String16.size.i64"
   | toString (String16_size INT_INF) = "String16.size.intInf"
   | toString String16_str = "String16.str"
+  | toString String16_fromString7 = "String16.fromString7"
   | toString String32_EQUAL = "String32.="
   | toString String32_LT = "String32.<"
   | toString String32_LE = "String32.<="
@@ -618,6 +640,7 @@ fun toString EQUAL = "="
   | toString String32_str = "String32.str"
   | toString String32_concat = "String32.concat"
   | toString String32_implode = "String32.implode"
+  | toString String32_fromString7 = "String32.fromString7"
   | toString UString_EQUAL = "UString.="
   | toString UString_LT = "UString.<"
   | toString UString_LE = "UString.<="
@@ -630,6 +653,13 @@ fun toString EQUAL = "="
   | toString (UString_size I64) = "UString.size.i64"
   | toString (UString_size INT_INF) = "UString.size.intInf"
   | toString UString_str = "UString.str"
+  | toString UString_fromString7 = "UString.fromString7"
+  | toString UString_uncheckedFromUtf8 = "UString.uncheckedFromUtf8"
+  | toString UString_uncheckedFromUtf16 = "UString.uncheckedFromUtf16"
+  | toString UString_uncheckedFromUtf32 = "UString.uncheckedFromUtf32"
+  | toString UString_encodeUtf8 = "UString.encodeUtf8"
+  | toString UString_encodeUtf16 = "UString.encodeUtf16"
+  | toString UString_encodeUtf32 = "UString.encodeUtf32"
   | toString IntInf_andb = "IntInf.andb"
   | toString IntInf_orb = "IntInf.orb"
   | toString IntInf_xorb = "IntInf.xorb"
@@ -1012,6 +1042,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char.chr.unchecked.i54" = SOME (Char_chr_unchecked I54)
   | fromString "Char.chr.unchecked.i64" = SOME (Char_chr_unchecked I64)
   | fromString "Char.chr.unchecked.intInf" = SOME (Char_chr_unchecked INT_INF)
+  | fromString "Char.fromChar7" = SOME Char_fromChar7
   | fromString "Char7.=" = SOME Char7_EQUAL
   | fromString "Char7.<" = SOME Char7_LT
   | fromString "Char7.<=" = SOME Char7_LE
@@ -1042,6 +1073,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char16.chr.unchecked.i54" = SOME (Char16_chr_unchecked I54)
   | fromString "Char16.chr.unchecked.i64" = SOME (Char16_chr_unchecked I64)
   | fromString "Char16.chr.unchecked.intInf" = SOME (Char16_chr_unchecked INT_INF)
+  | fromString "Char16.fromChar7" = SOME Char16_fromChar7
   | fromString "Char32.=" = SOME Char32_EQUAL
   | fromString "Char32.<" = SOME Char32_LT
   | fromString "Char32.<=" = SOME Char32_LE
@@ -1057,6 +1089,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char32.chr.unchecked.i54" = SOME (Char32_chr_unchecked I54)
   | fromString "Char32.chr.unchecked.i64" = SOME (Char32_chr_unchecked I64)
   | fromString "Char32.chr.unchecked.intInf" = SOME (Char32_chr_unchecked INT_INF)
+  | fromString "Char32.fromChar7" = SOME Char32_fromChar7
+  | fromString "Char32.fromUChar" = SOME Char32_fromUChar
   | fromString "UChar.=" = SOME UChar_EQUAL
   | fromString "UChar.<" = SOME UChar_LT
   | fromString "UChar.<=" = SOME UChar_LE
@@ -1072,6 +1106,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "UChar.chr.unchecked.i54" = SOME (UChar_chr_unchecked I54)
   | fromString "UChar.chr.unchecked.i64" = SOME (UChar_chr_unchecked I64)
   | fromString "UChar.chr.unchecked.intInf" = SOME (UChar_chr_unchecked INT_INF)
+  | fromString "UChar.fromChar7" = SOME UChar_fromChar7
   | fromString "String.=" = SOME String_EQUAL
   | fromString "String.<" = SOME String_LT
   | fromString "String.<=" = SOME String_LE
@@ -1086,6 +1121,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "String.str" = SOME String_str
   | fromString "String.concat" = SOME String_concat
   | fromString "String.implode" = SOME String_implode
+  | fromString "String.fromString7" = SOME String_fromString7
   | fromString "String7.=" = SOME String7_EQUAL
   | fromString "String7.<" = SOME String7_LT
   | fromString "String7.<=" = SOME String7_LE
@@ -1110,6 +1146,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "String16.size.i64" = SOME (String16_size I64)
   | fromString "String16.size.intInf" = SOME (String16_size INT_INF)
   | fromString "String16.str" = SOME String16_str
+  | fromString "String16.fromString7" = SOME String16_fromString7
   | fromString "String32.=" = SOME String32_EQUAL
   | fromString "String32.<" = SOME String32_LT
   | fromString "String32.<=" = SOME String32_LE
@@ -1124,6 +1161,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "String32.str" = SOME String32_str
   | fromString "String32.concat" = SOME String32_concat
   | fromString "String32.implode" = SOME String32_implode
+  | fromString "String32.fromString7" = SOME String32_fromString7
   | fromString "UString.=" = SOME UString_EQUAL
   | fromString "UString.<" = SOME UString_LT
   | fromString "UString.<=" = SOME UString_LE
@@ -1136,6 +1174,13 @@ fun fromString "=" = SOME EQUAL
   | fromString "UString.size.i64" = SOME (UString_size I64)
   | fromString "UString.size.intInf" = SOME (UString_size INT_INF)
   | fromString "UString.str" = SOME UString_str
+  | fromString "UString.fromString7" = SOME UString_fromString7
+  | fromString "UString.uncheckedFromUtf8" = SOME UString_uncheckedFromUtf8
+  | fromString "UString.uncheckedFromUtf16" = SOME UString_uncheckedFromUtf16
+  | fromString "UString.uncheckedFromUtf32" = SOME UString_uncheckedFromUtf32
+  | fromString "UString.encodeUtf8" = SOME UString_encodeUtf8
+  | fromString "UString.encodeUtf16" = SOME UString_encodeUtf16
+  | fromString "UString.encodeUtf32" = SOME UString_encodeUtf32
   | fromString "IntInf.andb" = SOME IntInf_andb
   | fromString "IntInf.orb" = SOME IntInf_orb
   | fromString "IntInf.xorb" = SOME IntInf_xorb
@@ -1350,6 +1395,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Char_GE = false
   | mayRaise (Char_ord _) = false
   | mayRaise (Char_chr_unchecked _) = false
+  | mayRaise Char_fromChar7 = false
   | mayRaise Char7_EQUAL = false
   | mayRaise Char7_LT = false
   | mayRaise Char7_LE = false
@@ -1364,6 +1410,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Char16_GE = false
   | mayRaise (Char16_ord _) = false
   | mayRaise (Char16_chr_unchecked _) = false
+  | mayRaise Char16_fromChar7 = false
   | mayRaise Char32_EQUAL = false
   | mayRaise Char32_LT = false
   | mayRaise Char32_LE = false
@@ -1371,6 +1418,8 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Char32_GE = false
   | mayRaise (Char32_ord _) = false
   | mayRaise (Char32_chr_unchecked _) = false
+  | mayRaise Char32_fromChar7 = false
+  | mayRaise Char32_fromUChar = false
   | mayRaise UChar_EQUAL = false
   | mayRaise UChar_LT = false
   | mayRaise UChar_LE = false
@@ -1378,6 +1427,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise UChar_GE = false
   | mayRaise (UChar_ord _) = false
   | mayRaise (UChar_chr_unchecked _) = false
+  | mayRaise UChar_fromChar7 = false
   | mayRaise String_EQUAL = false
   | mayRaise String_LT = false
   | mayRaise String_LE = false
@@ -1388,6 +1438,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String_str = false
   | mayRaise String_concat = false
   | mayRaise String_implode = false
+  | mayRaise String_fromString7 = false
   | mayRaise String7_EQUAL = false
   | mayRaise String7_LT = false
   | mayRaise String7_LE = false
@@ -1404,6 +1455,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String16_HAT = false
   | mayRaise (String16_size _) = false
   | mayRaise String16_str = false
+  | mayRaise String16_fromString7 = false
   | mayRaise String32_EQUAL = false
   | mayRaise String32_LT = false
   | mayRaise String32_LE = false
@@ -1414,6 +1466,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String32_str = false
   | mayRaise String32_concat = false
   | mayRaise String32_implode = false
+  | mayRaise String32_fromString7 = false
   | mayRaise UString_EQUAL = false
   | mayRaise UString_LT = false
   | mayRaise UString_LE = false
@@ -1422,6 +1475,13 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise UString_HAT = false
   | mayRaise (UString_size _) = false
   | mayRaise UString_str = false
+  | mayRaise UString_fromString7 = false
+  | mayRaise UString_uncheckedFromUtf8 = false
+  | mayRaise UString_uncheckedFromUtf16 = false
+  | mayRaise UString_uncheckedFromUtf32 = false
+  | mayRaise UString_encodeUtf8 = false
+  | mayRaise UString_encodeUtf16 = false
+  | mayRaise UString_encodeUtf32 = false
   | mayRaise IntInf_andb = false
   | mayRaise IntInf_orb = false
   | mayRaise IntInf_xorb = false
@@ -1607,6 +1667,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Char_GE = true
   | isDiscardable (Char_ord _) = true
   | isDiscardable (Char_chr_unchecked _) = true
+  | isDiscardable Char_fromChar7 = true
   | isDiscardable Char7_EQUAL = true
   | isDiscardable Char7_LT = true
   | isDiscardable Char7_LE = true
@@ -1621,6 +1682,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Char16_GE = true
   | isDiscardable (Char16_ord _) = true
   | isDiscardable (Char16_chr_unchecked _) = true
+  | isDiscardable Char16_fromChar7 = true
   | isDiscardable Char32_EQUAL = true
   | isDiscardable Char32_LT = true
   | isDiscardable Char32_LE = true
@@ -1628,6 +1690,8 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Char32_GE = true
   | isDiscardable (Char32_ord _) = true
   | isDiscardable (Char32_chr_unchecked _) = true
+  | isDiscardable Char32_fromChar7 = true
+  | isDiscardable Char32_fromUChar = true
   | isDiscardable UChar_EQUAL = true
   | isDiscardable UChar_LT = true
   | isDiscardable UChar_LE = true
@@ -1635,6 +1699,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable UChar_GE = true
   | isDiscardable (UChar_ord _) = true
   | isDiscardable (UChar_chr_unchecked _) = true
+  | isDiscardable UChar_fromChar7 = true
   | isDiscardable String_EQUAL = true
   | isDiscardable String_LT = true
   | isDiscardable String_LE = true
@@ -1645,6 +1710,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String_str = true
   | isDiscardable String_concat = true
   | isDiscardable String_implode = true
+  | isDiscardable String_fromString7 = true
   | isDiscardable String7_EQUAL = true
   | isDiscardable String7_LT = true
   | isDiscardable String7_LE = true
@@ -1661,6 +1727,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String16_HAT = true
   | isDiscardable (String16_size _) = true
   | isDiscardable String16_str = true
+  | isDiscardable String16_fromString7 = true
   | isDiscardable String32_EQUAL = true
   | isDiscardable String32_LT = true
   | isDiscardable String32_LE = true
@@ -1671,6 +1738,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String32_str = true
   | isDiscardable String32_concat = true
   | isDiscardable String32_implode = true
+  | isDiscardable String32_fromString7 = true
   | isDiscardable UString_EQUAL = true
   | isDiscardable UString_LT = true
   | isDiscardable UString_LE = true
@@ -1679,6 +1747,13 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable UString_HAT = true
   | isDiscardable (UString_size _) = true
   | isDiscardable UString_str = true
+  | isDiscardable UString_fromString7 = true
+  | isDiscardable UString_uncheckedFromUtf8 = true
+  | isDiscardable UString_uncheckedFromUtf16 = true
+  | isDiscardable UString_uncheckedFromUtf32 = true
+  | isDiscardable UString_encodeUtf8 = true
+  | isDiscardable UString_encodeUtf16 = true
+  | isDiscardable UString_encodeUtf32 = true
   | isDiscardable IntInf_andb = true
   | isDiscardable IntInf_orb = true
   | isDiscardable IntInf_xorb = true
@@ -1867,6 +1942,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Char_GE, [_, _]) = true
   | isDiscardableWithArgs (Char_ord _, [_]) = true
   | isDiscardableWithArgs (Char_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Char_fromChar7, [_]) = true
   | isDiscardableWithArgs (Char7_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (Char7_LT, [_, _]) = true
   | isDiscardableWithArgs (Char7_LE, [_, _]) = true
@@ -1881,6 +1957,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Char16_GE, [_, _]) = true
   | isDiscardableWithArgs (Char16_ord _, [_]) = true
   | isDiscardableWithArgs (Char16_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Char16_fromChar7, [_]) = true
   | isDiscardableWithArgs (Char32_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (Char32_LT, [_, _]) = true
   | isDiscardableWithArgs (Char32_LE, [_, _]) = true
@@ -1888,6 +1965,8 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Char32_GE, [_, _]) = true
   | isDiscardableWithArgs (Char32_ord _, [_]) = true
   | isDiscardableWithArgs (Char32_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Char32_fromChar7, [_]) = true
+  | isDiscardableWithArgs (Char32_fromUChar, [_]) = true
   | isDiscardableWithArgs (UChar_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (UChar_LT, [_, _]) = true
   | isDiscardableWithArgs (UChar_LE, [_, _]) = true
@@ -1895,6 +1974,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (UChar_GE, [_, _]) = true
   | isDiscardableWithArgs (UChar_ord _, [_]) = true
   | isDiscardableWithArgs (UChar_chr_unchecked _, [_]) = true
+  | isDiscardableWithArgs (UChar_fromChar7, [_]) = true
   | isDiscardableWithArgs (String_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (String_LT, [_, _]) = true
   | isDiscardableWithArgs (String_LE, [_, _]) = true
@@ -1905,6 +1985,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (String_str, [_]) = true
   | isDiscardableWithArgs (String_concat, [_]) = true
   | isDiscardableWithArgs (String_implode, [_]) = true
+  | isDiscardableWithArgs (String_fromString7, [_]) = true
   | isDiscardableWithArgs (String7_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (String7_LT, [_, _]) = true
   | isDiscardableWithArgs (String7_LE, [_, _]) = true
@@ -1921,6 +2002,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (String16_HAT, [_, _]) = true
   | isDiscardableWithArgs (String16_size _, [_]) = true
   | isDiscardableWithArgs (String16_str, [_]) = true
+  | isDiscardableWithArgs (String16_fromString7, [_]) = true
   | isDiscardableWithArgs (String32_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (String32_LT, [_, _]) = true
   | isDiscardableWithArgs (String32_LE, [_, _]) = true
@@ -1931,6 +2013,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (String32_str, [_]) = true
   | isDiscardableWithArgs (String32_concat, [_]) = true
   | isDiscardableWithArgs (String32_implode, [_]) = true
+  | isDiscardableWithArgs (String32_fromString7, [_]) = true
   | isDiscardableWithArgs (UString_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (UString_LT, [_, _]) = true
   | isDiscardableWithArgs (UString_LE, [_, _]) = true
@@ -1939,6 +2022,13 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (UString_HAT, [_, _]) = true
   | isDiscardableWithArgs (UString_size _, [_]) = true
   | isDiscardableWithArgs (UString_str, [_]) = true
+  | isDiscardableWithArgs (UString_fromString7, [_]) = true
+  | isDiscardableWithArgs (UString_uncheckedFromUtf8, [_]) = true
+  | isDiscardableWithArgs (UString_uncheckedFromUtf16, [_]) = true
+  | isDiscardableWithArgs (UString_uncheckedFromUtf32, [_]) = true
+  | isDiscardableWithArgs (UString_encodeUtf8, [_]) = true
+  | isDiscardableWithArgs (UString_encodeUtf16, [_]) = true
+  | isDiscardableWithArgs (UString_encodeUtf32, [_]) = true
   | isDiscardableWithArgs (IntInf_andb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_orb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_xorb, [_, _]) = true
@@ -2192,6 +2282,7 @@ fun returnArity EQUAL = 1
   | returnArity Char_GE = 1
   | returnArity (Char_ord _) = 1
   | returnArity (Char_chr_unchecked _) = 1
+  | returnArity Char_fromChar7 = 1
   | returnArity Char7_EQUAL = 1
   | returnArity Char7_LT = 1
   | returnArity Char7_LE = 1
@@ -2206,6 +2297,7 @@ fun returnArity EQUAL = 1
   | returnArity Char16_GE = 1
   | returnArity (Char16_ord _) = 1
   | returnArity (Char16_chr_unchecked _) = 1
+  | returnArity Char16_fromChar7 = 1
   | returnArity Char32_EQUAL = 1
   | returnArity Char32_LT = 1
   | returnArity Char32_LE = 1
@@ -2213,6 +2305,8 @@ fun returnArity EQUAL = 1
   | returnArity Char32_GE = 1
   | returnArity (Char32_ord _) = 1
   | returnArity (Char32_chr_unchecked _) = 1
+  | returnArity Char32_fromChar7 = 1
+  | returnArity Char32_fromUChar = 1
   | returnArity UChar_EQUAL = 1
   | returnArity UChar_LT = 1
   | returnArity UChar_LE = 1
@@ -2220,6 +2314,7 @@ fun returnArity EQUAL = 1
   | returnArity UChar_GE = 1
   | returnArity (UChar_ord _) = 1
   | returnArity (UChar_chr_unchecked _) = 1
+  | returnArity UChar_fromChar7 = 1
   | returnArity String_EQUAL = 1
   | returnArity String_LT = 1
   | returnArity String_LE = 1
@@ -2230,6 +2325,7 @@ fun returnArity EQUAL = 1
   | returnArity String_str = 1
   | returnArity String_concat = 1
   | returnArity String_implode = 1
+  | returnArity String_fromString7 = 1
   | returnArity String7_EQUAL = 1
   | returnArity String7_LT = 1
   | returnArity String7_LE = 1
@@ -2246,6 +2342,7 @@ fun returnArity EQUAL = 1
   | returnArity String16_HAT = 1
   | returnArity (String16_size _) = 1
   | returnArity String16_str = 1
+  | returnArity String16_fromString7 = 1
   | returnArity String32_EQUAL = 1
   | returnArity String32_LT = 1
   | returnArity String32_LE = 1
@@ -2256,6 +2353,7 @@ fun returnArity EQUAL = 1
   | returnArity String32_str = 1
   | returnArity String32_concat = 1
   | returnArity String32_implode = 1
+  | returnArity String32_fromString7 = 1
   | returnArity UString_EQUAL = 1
   | returnArity UString_LT = 1
   | returnArity UString_LE = 1
@@ -2264,6 +2362,13 @@ fun returnArity EQUAL = 1
   | returnArity UString_HAT = 1
   | returnArity (UString_size _) = 1
   | returnArity UString_str = 1
+  | returnArity UString_fromString7 = 1
+  | returnArity UString_uncheckedFromUtf8 = 1
+  | returnArity UString_uncheckedFromUtf16 = 1
+  | returnArity UString_uncheckedFromUtf32 = 1
+  | returnArity UString_encodeUtf8 = 1
+  | returnArity UString_encodeUtf16 = 1
+  | returnArity UString_encodeUtf32 = 1
   | returnArity IntInf_andb = 1
   | returnArity IntInf_orb = 1
   | returnArity IntInf_xorb = 1
@@ -2675,6 +2780,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Char_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char] }
   | typeOf (Primitives.Char_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char] }
   | typeOf (Primitives.Char_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char] }
+  | typeOf Primitives.Char_fromChar7 = { vars = [], args = vector [char7], results = [char] }
   | typeOf Primitives.Char7_EQUAL = { vars = [], args = vector [char7, char7], results = [bool] }
   | typeOf Primitives.Char7_LT = { vars = [], args = vector [char7, char7], results = [bool] }
   | typeOf Primitives.Char7_LE = { vars = [], args = vector [char7, char7], results = [bool] }
@@ -2705,6 +2811,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Char16_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char16] }
   | typeOf (Primitives.Char16_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char16] }
   | typeOf (Primitives.Char16_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char16] }
+  | typeOf Primitives.Char16_fromChar7 = { vars = [], args = vector [char7], results = [char16] }
   | typeOf Primitives.Char32_EQUAL = { vars = [], args = vector [char32, char32], results = [bool] }
   | typeOf Primitives.Char32_LT = { vars = [], args = vector [char32, char32], results = [bool] }
   | typeOf Primitives.Char32_LE = { vars = [], args = vector [char32, char32], results = [bool] }
@@ -2720,6 +2827,8 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Char32_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char32] }
   | typeOf (Primitives.Char32_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char32] }
   | typeOf (Primitives.Char32_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char32] }
+  | typeOf Primitives.Char32_fromChar7 = { vars = [], args = vector [char7], results = [char32] }
+  | typeOf Primitives.Char32_fromUChar = { vars = [], args = vector [uchar], results = [char32] }
   | typeOf Primitives.UChar_EQUAL = { vars = [], args = vector [uchar, uchar], results = [bool] }
   | typeOf Primitives.UChar_LT = { vars = [], args = vector [uchar, uchar], results = [bool] }
   | typeOf Primitives.UChar_LE = { vars = [], args = vector [uchar, uchar], results = [bool] }
@@ -2735,6 +2844,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.UChar_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [uchar] }
   | typeOf (Primitives.UChar_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [uchar] }
   | typeOf (Primitives.UChar_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [uchar] }
+  | typeOf Primitives.UChar_fromChar7 = { vars = [], args = vector [char7], results = [uchar] }
   | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], results = [bool] }
   | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], results = [bool] }
   | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], results = [bool] }
@@ -2749,6 +2859,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.String_str = { vars = [], args = vector [char], results = [string] }
   | typeOf Primitives.String_concat = { vars = [], args = vector [listOf (string)], results = [string] }
   | typeOf Primitives.String_implode = { vars = [], args = vector [listOf (char)], results = [string] }
+  | typeOf Primitives.String_fromString7 = { vars = [], args = vector [string7], results = [string] }
   | typeOf Primitives.String7_EQUAL = { vars = [], args = vector [string7, string7], results = [bool] }
   | typeOf Primitives.String7_LT = { vars = [], args = vector [string7, string7], results = [bool] }
   | typeOf Primitives.String7_LE = { vars = [], args = vector [string7, string7], results = [bool] }
@@ -2773,6 +2884,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.String16_size Primitives.I64) = { vars = [], args = vector [string16], results = [int64] }
   | typeOf (Primitives.String16_size Primitives.INT_INF) = { vars = [], args = vector [string16], results = [intInf] }
   | typeOf Primitives.String16_str = { vars = [], args = vector [char16], results = [string16] }
+  | typeOf Primitives.String16_fromString7 = { vars = [], args = vector [string7], results = [string16] }
   | typeOf Primitives.String32_EQUAL = { vars = [], args = vector [string32, string32], results = [bool] }
   | typeOf Primitives.String32_LT = { vars = [], args = vector [string32, string32], results = [bool] }
   | typeOf Primitives.String32_LE = { vars = [], args = vector [string32, string32], results = [bool] }
@@ -2787,6 +2899,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.String32_str = { vars = [], args = vector [char32], results = [string32] }
   | typeOf Primitives.String32_concat = { vars = [], args = vector [listOf (string32)], results = [string32] }
   | typeOf Primitives.String32_implode = { vars = [], args = vector [listOf (char32)], results = [string32] }
+  | typeOf Primitives.String32_fromString7 = { vars = [], args = vector [string7], results = [string32] }
   | typeOf Primitives.UString_EQUAL = { vars = [], args = vector [ustring, ustring], results = [bool] }
   | typeOf Primitives.UString_LT = { vars = [], args = vector [ustring, ustring], results = [bool] }
   | typeOf Primitives.UString_LE = { vars = [], args = vector [ustring, ustring], results = [bool] }
@@ -2799,6 +2912,13 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.UString_size Primitives.I64) = { vars = [], args = vector [ustring], results = [int64] }
   | typeOf (Primitives.UString_size Primitives.INT_INF) = { vars = [], args = vector [ustring], results = [intInf] }
   | typeOf Primitives.UString_str = { vars = [], args = vector [uchar], results = [ustring] }
+  | typeOf Primitives.UString_fromString7 = { vars = [], args = vector [string7], results = [ustring] }
+  | typeOf Primitives.UString_uncheckedFromUtf8 = { vars = [], args = vector [string], results = [ustring] }
+  | typeOf Primitives.UString_uncheckedFromUtf16 = { vars = [], args = vector [string16], results = [ustring] }
+  | typeOf Primitives.UString_uncheckedFromUtf32 = { vars = [], args = vector [string32], results = [ustring] }
+  | typeOf Primitives.UString_encodeUtf8 = { vars = [], args = vector [ustring], results = [string] }
+  | typeOf Primitives.UString_encodeUtf16 = { vars = [], args = vector [ustring], results = [string16] }
+  | typeOf Primitives.UString_encodeUtf32 = { vars = [], args = vector [ustring], results = [string32] }
   | typeOf Primitives.IntInf_andb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], results = [intInf] }

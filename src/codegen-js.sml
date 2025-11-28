@@ -940,6 +940,8 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char_chr_unchecked Primitives.I54 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char7_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.Char7_LT => doBinaryOp (J.LT, PURE)
                | Primitives.Char7_GT => doBinaryOp (J.GT, PURE)
@@ -966,6 +968,8 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char16_chr_unchecked Primitives.I32 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char16_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char32_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.Char32_LT => doBinaryOp (J.LT, PURE)
                | Primitives.Char32_GT => doBinaryOp (J.GT, PURE)
@@ -979,6 +983,10 @@ struct
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Char32_chr_unchecked Primitives.I32 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_fromChar7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.Char32_fromUChar =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.UChar_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.UChar_LT => doBinaryOp (J.LT, PURE)
                | Primitives.UChar_GT => doBinaryOp (J.GT, PURE)
@@ -991,6 +999,8 @@ struct
                | Primitives.UChar_chr_unchecked Primitives.I54 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.UChar_chr_unchecked Primitives.I32 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UChar_fromChar7 =>
                    doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String_EQUAL =>
                    doBinaryExp
@@ -1054,6 +1064,10 @@ struct
                            )
                      , PURE
                      )
+               | Primitives.String_fromString7 =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_encodeUtf8"), vector [f]))
                | Primitives.String7_EQUAL => doBinaryOp (J.EQUAL, PURE)
                | Primitives.String7_LT => doBinaryOp (J.LT, PURE)
                | Primitives.String7_GT => doBinaryOp (J.GT, PURE)
@@ -1100,6 +1114,8 @@ struct
                            )
                      , PURE
                      )
+               | Primitives.String16_fromString7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.String32_EQUAL =>
                    doBinaryExp
                      ( fn (a, b) =>
@@ -1174,6 +1190,20 @@ struct
                            )
                      , PURE
                      )
+               | Primitives.UString_fromString7 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UString_encodeUtf8 =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_encodeUtf8"), vector [f]))
+               | Primitives.UString_uncheckedFromUtf8 =>
+                   doUnary (fn f =>
+                     J.CallExp
+                       (J.VarExp (J.PredefinedId "_decodeUtf8"), vector [f]))
+               | Primitives.UString_uncheckedFromUtf16 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UString_encodeUtf16 =>
+                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Int_PLUS Primitives.INT_INF =>
                    doBinaryOp (J.PLUS, PURE)
                | Primitives.Int_MINUS Primitives.INT_INF =>
