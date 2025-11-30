@@ -1,0 +1,328 @@
+[48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+true
+15
+[48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+15
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+Hello\227\129\130\244\138\175\141\^@\194\165\206\177\237\159\191\238\128\128\240\157\160\128\240\144\128\128\244\143\191\191
+Hello\227\129\130\244\138\175\141\^@\194\165\206\177\237\159\191\238\128\128\240\157\160\128\240\144\128\128\244\143\191\191
+a
+\194\165
+\206\177
+\227\129\130
+\239\191\191
+\240\157\146\156
+\244\143\191\191
+true
+true
+true
+true
+true
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+isWellFormed \128: false
+isWellFormedSubstring \128: false
+decode1Replace \128: SOME [FFFD]
+decode1Raise \128: NONE
+isWellFormed \192\128a: false
+isWellFormedSubstring \192\128a: false
+decode1Replace \192\128a: SOME [FFFD,FFFD,61]
+decode1Raise \192\128a: NONE
+isWellFormed \254\128a: false
+isWellFormedSubstring \254\128a: false
+decode1Replace \254\128a: SOME [FFFD,FFFD,61]
+decode1Raise \254\128a: NONE
+isWellFormed \255\128a: false
+isWellFormedSubstring \255\128a: false
+decode1Replace \255\128a: SOME [FFFD,FFFD,61]
+decode1Raise \255\128a: NONE
+isWellFormed \128: false
+isWellFormedSubstring \128: false
+decode1Replace \128: SOME [FFFD]
+decode1Raise \128: NONE
+isWellFormed \191: false
+isWellFormedSubstring \191: false
+decode1Replace \191: SOME [FFFD]
+decode1Raise \191: NONE
+isWellFormed \192: false
+isWellFormedSubstring \192: false
+decode1Replace \192: SOME [FFFD]
+decode1Raise \192: NONE
+isWellFormed \193: false
+isWellFormedSubstring \193: false
+decode1Replace \193: SOME [FFFD]
+decode1Raise \193: NONE
+isWellFormed \245: false
+isWellFormedSubstring \245: false
+decode1Replace \245: SOME [FFFD]
+decode1Raise \245: NONE
+isWellFormed \246: false
+isWellFormedSubstring \246: false
+decode1Replace \246: SOME [FFFD]
+decode1Raise \246: NONE
+isWellFormed \247: false
+isWellFormedSubstring \247: false
+decode1Replace \247: SOME [FFFD]
+decode1Raise \247: NONE
+isWellFormed \248: false
+isWellFormedSubstring \248: false
+decode1Replace \248: SOME [FFFD]
+decode1Raise \248: NONE
+isWellFormed \249: false
+isWellFormedSubstring \249: false
+decode1Replace \249: SOME [FFFD]
+decode1Raise \249: NONE
+isWellFormed \250: false
+isWellFormedSubstring \250: false
+decode1Replace \250: SOME [FFFD]
+decode1Raise \250: NONE
+isWellFormed \251: false
+isWellFormedSubstring \251: false
+decode1Replace \251: SOME [FFFD]
+decode1Raise \251: NONE
+isWellFormed \252: false
+isWellFormedSubstring \252: false
+decode1Replace \252: SOME [FFFD]
+decode1Raise \252: NONE
+isWellFormed \253: false
+isWellFormedSubstring \253: false
+decode1Replace \253: SOME [FFFD]
+decode1Raise \253: NONE
+isWellFormed \254: false
+isWellFormedSubstring \254: false
+decode1Replace \254: SOME [FFFD]
+decode1Raise \254: NONE
+isWellFormed \255: false
+isWellFormedSubstring \255: false
+decode1Replace \255: SOME [FFFD]
+decode1Raise \255: NONE
+isWellFormed \194\194: false
+isWellFormedSubstring \194\194: false
+decode1Replace \194\194: SOME [FFFD,FFFD]
+decode1Raise \194\194: NONE
+isWellFormed \227\129a: false
+isWellFormedSubstring \227\129a: false
+decode1Replace \227\129a: SOME [FFFD,FFFD,61]
+decode1Raise \227\129a: NONE
+isWellFormed \194\128\128: false
+isWellFormedSubstring \194\128\128: false
+decode1Replace \194\128\128: SOME [80,FFFD]
+decode1Raise \194\128\128: NONE
+isWellFormed \192\128: false
+isWellFormedSubstring \192\128: false
+decode1Replace \192\128: SOME [FFFD,FFFD]
+decode1Raise \192\128: NONE
+isWellFormed \193\128: false
+isWellFormedSubstring \193\128: false
+decode1Replace \193\128: SOME [FFFD,FFFD]
+decode1Raise \193\128: NONE
+isWellFormed \224\128\128: false
+isWellFormedSubstring \224\128\128: false
+decode1Replace \224\128\128: SOME [FFFD,FFFD,FFFD]
+decode1Raise \224\128\128: NONE
+isWellFormed \237\160\128: false
+isWellFormedSubstring \237\160\128: false
+decode1Replace \237\160\128: SOME [FFFD,FFFD,FFFD]
+decode1Raise \237\160\128: NONE
+isWellFormed \237\191\191: false
+isWellFormedSubstring \237\191\191: false
+decode1Replace \237\191\191: SOME [FFFD,FFFD,FFFD]
+decode1Raise \237\191\191: NONE
+isWellFormed \244\144\128\128: false
+isWellFormedSubstring \244\144\128\128: false
+decode1Replace \244\144\128\128: SOME [FFFD,FFFD,FFFD,FFFD]
+decode1Raise \244\144\128\128: NONE
+isWellFormed \247\191\191\191: false
+isWellFormedSubstring \247\191\191\191: false
+decode1Replace \247\191\191\191: SOME [FFFD,FFFD,FFFD,FFFD]
+decode1Raise \247\191\191\191: NONE
+isWellFormed \248\136\128\128\128: false
+isWellFormedSubstring \248\136\128\128\128: false
+decode1Replace \248\136\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \248\136\128\128\128: NONE
+isWellFormed \248\144\128\128\128: false
+isWellFormedSubstring \248\144\128\128\128: false
+decode1Replace \248\144\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \248\144\128\128\128: NONE
+isWellFormed \248\160\128\128\128: false
+isWellFormedSubstring \248\160\128\128\128: false
+decode1Replace \248\160\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \248\160\128\128\128: NONE
+isWellFormed \249\128\128\128\128: false
+isWellFormedSubstring \249\128\128\128\128: false
+decode1Replace \249\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \249\128\128\128\128: NONE
+isWellFormed \250\128\128\128\128: false
+isWellFormedSubstring \250\128\128\128\128: false
+decode1Replace \250\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \250\128\128\128\128: NONE
+isWellFormed \251\128\128\128\128: false
+isWellFormedSubstring \251\128\128\128\128: false
+decode1Replace \251\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \251\128\128\128\128: NONE
+isWellFormed \252\132\128\128\128\128: false
+isWellFormedSubstring \252\132\128\128\128\128: false
+decode1Replace \252\132\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \252\132\128\128\128\128: NONE
+isWellFormed \252\136\128\128\128\128: false
+isWellFormedSubstring \252\136\128\128\128\128: false
+decode1Replace \252\136\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \252\136\128\128\128\128: NONE
+isWellFormed \252\144\128\128\128\128: false
+isWellFormedSubstring \252\144\128\128\128\128: false
+decode1Replace \252\144\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \252\144\128\128\128\128: NONE
+isWellFormed \252\160\128\128\128\128: false
+isWellFormedSubstring \252\160\128\128\128\128: false
+decode1Replace \252\160\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \252\160\128\128\128\128: NONE
+isWellFormed \253\160\128\128\128\128: false
+isWellFormedSubstring \253\160\128\128\128\128: false
+decode1Replace \253\160\128\128\128\128: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \253\160\128\128\128\128: NONE
+isWellFormed \253\191\191\191\191\191: false
+isWellFormedSubstring \253\191\191\191\191\191: false
+decode1Replace \253\191\191\191\191\191: SOME [FFFD,FFFD,FFFD,FFFD,FFFD,FFFD]
+decode1Raise \253\191\191\191\191\191: NONE
+Hello\u3042\uDBEA\uDFCD\^@\165\945\uD7FF\uE000\uD836\uDC00\uD800\uDC00\uDBFF\uDFFF
+Hello\u3042\uDBEA\uDFCD\^@\165\945\uD7FF\uE000\uD836\uDC00\uD800\uDC00\uDBFF\uDFFF
+a
+\165
+\945
+\u3042
+\uFFFF
+\uD835\uDC9C
+\uDBFF\uDFFF
+true
+true
+true
+true
+true
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+isWellFormed \uD800: false
+isWellFormedSubstring \uD800: false
+decode1Replace \uD800: SOME [FFFD]
+decode1Raise \uD800: NONE
+isWellFormed \uD800\uD800: false
+isWellFormedSubstring \uD800\uD800: false
+decode1Replace \uD800\uD800: SOME [FFFD,FFFD]
+decode1Raise \uD800\uD800: NONE
+isWellFormed \uDC00: false
+isWellFormedSubstring \uDC00: false
+decode1Replace \uDC00: SOME [FFFD]
+decode1Raise \uDC00: NONE
+isWellFormed \uFFFF\uDFFF: false
+isWellFormedSubstring \uFFFF\uDFFF: false
+decode1Replace \uFFFF\uDFFF: SOME [FFFF,FFFD]
+decode1Raise \uFFFF\uDFFF: NONE
+isWellFormed \uD800\uD800\uDC00: false
+isWellFormedSubstring \uD800\uD800\uDC00: false
+decode1Replace \uD800\uD800\uDC00: SOME [FFFD,10000]
+decode1Raise \uD800\uD800\uDC00: NONE
+Hello\u3042\U0010ABCD\^@\165\945\uD7FF\uE000\U0001D800\U00010000\U0010FFFF
+Hello\u3042\U0010ABCD\^@\165\945\uD7FF\uE000\U0001D800\U00010000\U0010FFFF
+a
+\165
+\945
+\u3042
+\uFFFF
+\U0001D49C
+\U0010FFFF
+true
+true
+true
+true
+true
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+SOME [48,65,6C,6C,6F,3042,10ABCD,0,A5,3B1,D7FF,E000,1D800,10000,10FFFF]
+isWellFormed \uD800: false
+isWellFormedSubstring \uD800: false
+decode1Replace \uD800: SOME [FFFD]
+decode1Raise \uD800: NONE
+isWellFormed \uD800\uDC00: false
+isWellFormedSubstring \uD800\uDC00: false
+decode1Replace \uD800\uDC00: SOME [FFFD,FFFD]
+decode1Raise \uD800\uDC00: NONE
+isWellFormed \uD800\uD800: false
+isWellFormedSubstring \uD800\uD800: false
+decode1Replace \uD800\uD800: SOME [FFFD,FFFD]
+decode1Raise \uD800\uD800: NONE
+isWellFormed \uDC00: false
+isWellFormedSubstring \uDC00: false
+decode1Replace \uDC00: SOME [FFFD]
+decode1Raise \uDC00: NONE
+isWellFormed \uFFFF\uDFFF: false
+isWellFormedSubstring \uFFFF\uDFFF: false
+decode1Replace \uFFFF\uDFFF: SOME [FFFF,FFFD]
+decode1Raise \uFFFF\uDFFF: NONE
+isWellFormed \uD800\uD800\uDC00: false
+isWellFormedSubstring \uD800\uD800\uDC00: false
+decode1Replace \uD800\uD800\uDC00: SOME [FFFD,FFFD,FFFD]
+decode1Raise \uD800\uD800\uDC00: NONE

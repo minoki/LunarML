@@ -1,0 +1,26 @@
+local
+  $(SML_LIB)/basis/sources.mlb
+  ann "nonexhaustiveRaise ignore"
+      "sequenceNonUnit ignore"
+      "valDescInComments warn"
+      "allowExtendedNumConsts true"
+      "allowVectorExps true"
+      "allowHexFloatConsts true"
+      "allowInfixingDot true"
+      "allowPrim true"
+      "allowOverload true"
+      "allowExtendedTextConsts true"
+      "allowUtfEscapeSequences true"
+  in
+    uchar.sml
+    utf8-generic.sml
+    utf16-generic.sml
+    utf32-generic.sml
+    unicode.sig
+    unicode-luajit.sml
+  end
+in
+  signature UTF
+  signature UNICODE
+  structure Unicode
+end

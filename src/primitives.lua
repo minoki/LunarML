@@ -31,7 +31,6 @@ do
   local string7 = {"string7"}
   local string16 = {"string16"}
   local string32 = {"string32"}
-  local ustring = {"ustring"}
   local intInf = {"intInf"}
   local exn = {"exn"}
   local exntag = {"exntag"}
@@ -1117,111 +1116,6 @@ do
       discardable = true,
     },
     {
-      name = "UString.=",
-      srcname = "UString_EQUAL",
-      type = Compare(ustring),
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.<",
-      srcname = "UString_LT",
-      type = Compare(ustring),
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.<=",
-      srcname = "UString_LE",
-      type = Compare(ustring),
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.>",
-      srcname = "UString_GT",
-      type = Compare(ustring),
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.>=",
-      srcname = "UString_GE",
-      type = Compare(ustring),
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.^",
-      srcname = "UString_HAT",
-      type = HomoBinary(ustring),
-      mayraise = false, -- ignore Size
-      discardable = true, -- ignore Size
-    },
-    {
-      name = "UString.size{.i}",
-      srcname = "UString_size",
-      type = { vars = {}, args = {ustring}, results = {intA} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.str",
-      srcname = "UString_str",
-      type = { vars = {}, args = {uchar}, results = {ustring} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.fromString7",
-      srcname = "UString_fromString7",
-      type = { vars = {}, args = {string7}, results = {ustring} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.uncheckedFromUtf8",
-      srcname = "UString_uncheckedFromUtf8",
-      type = { vars = {}, args = {string}, results = {ustring} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.uncheckedFromUtf16",
-      srcname = "UString_uncheckedFromUtf16",
-      type = { vars = {}, args = {string16}, results = {ustring} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.uncheckedFromUtf32",
-      srcname = "UString_uncheckedFromUtf32",
-      type = { vars = {}, args = {string32}, results = {ustring} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.encodeUtf8",
-      srcname = "UString_encodeUtf8",
-      type = { vars = {}, args = {ustring}, results = {string} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.encodeUtf16",
-      srcname = "UString_encodeUtf16",
-      type = { vars = {}, args = {ustring}, results = {string16} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
-      name = "UString.encodeUtf32",
-      srcname = "UString_encodeUtf32",
-      type = { vars = {}, args = {ustring}, results = {string32} },
-      mayraise = false,
-      discardable = true,
-    },
-    {
       name = "IntInf.andb",
       srcname = "IntInf_andb",
       type = HomoBinary(intInf),
@@ -1383,6 +1277,97 @@ do
       type = { vars = {TV.a}, args = {}, results = {TV.a} },
       mayraise = true,
       discardable = false,
+    },
+    {
+      name = "UTF8.isWellFormed",
+      srcname = "UTF8_isWellFormed",
+      type = { vars = {}, args = {string}, results = {bool} },
+      mayraise = false,
+      discardable = true,
+      -- utf8.len on Lua 5.4
+      -- utf8.len on Lua 5.3 seems to allow surrogate code points
+    },
+    {
+      name = "UTF8.str",
+      srcname = "UTF8_str",
+      type = { vars = {}, args = {uchar}, results = {string} },
+      mayraise = false,
+      discardable = true,
+      -- utf8.char on Lua 5.3/5.4
+    },
+    {
+      name = "UTF8.size{.i}",
+      srcname = "UTF8_size",
+      type = { vars = {}, args = {string}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+      -- The input must be well-formed
+      -- utf8.len on Lua 5.3/5.4
+    },
+    {
+      name = "UTF8.codePointAt{.i}",
+      srcname = "UTF8_codePointAt",
+      type = { vars = {}, args = {string, intA}, results = {uchar} },
+      mayraise = false, -- unchecked
+      discardable = true,
+      -- The input must be well-formed
+      -- utf8.codepoint on Lua 5.3/5.4
+    },
+    {
+      name = "UTF8.offset{.i}",
+      srcname = "UTF8_offset",
+      type = { vars = {}, args = {string, intA}, results = {intA} },
+      mayraise = false, -- unchecked
+      discardable = true,
+      -- The input must be well-formed
+      -- utf8.offset on Lua 5.3/5.4
+    },
+    {
+      name = "UTF16.<",
+      srcname = "UTF16_LT",
+      type = { vars = {}, args = {string16, string16}, results = {bool} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "UTF16.isWellFormed",
+      srcname = "UTF16_isWellFormed",
+      type = { vars = {}, args = {string16}, results = {bool} },
+      mayraise = false,
+      discardable = true,
+      -- String.prototype.isWellFormed on ES2024
+    },
+    {
+      name = "UTF16.toWellFormed",
+      srcname = "UTF16_toWellFormed",
+      type = { vars = {}, args = {string16}, results = {string16} },
+      mayraise = false,
+      discardable = true,
+      -- String.prototype.toWellFormed on ES2024
+    },
+    {
+      name = "UTF16.str",
+      srcname = "UTF16_str",
+      type = { vars = {}, args = {uchar}, results = {string16} },
+      mayraise = false,
+      discardable = true,
+      -- String.fromCodePoint on JavaScript
+    },
+    {
+      name = "UTF16.codePointAt{.i}",
+      srcname = "UTF16_codePointAt",
+      type = { vars = {}, args = {string16, intA}, results = {char32} },
+      mayraise = false, -- unchecked
+      discardable = true,
+      -- String.prototype.codePointAt on JavaScript
+    },
+    {
+      name = "UTF16.size{.i}",
+      srcname = "UTF16_size",
+      type = { vars = {}, args = {string16}, results = {intA} },
+      mayraise = false,
+      discardable = true,
+      -- The input must be well-formed
     },
 
     --
@@ -1980,6 +1965,13 @@ do
       mayraise = true,
       discardable = true,
     },
+    {
+      name = "JavaScript.codePointAt{.i}",
+      srcname = "JavaScript_codePointAt",
+      type = { vars = {}, args = {string16, intA}, results = {char32} },
+      mayraise = false,
+      discardable = true,
+    },
   }
   --[[
   local PRIMITIVES_cooked = {}
@@ -2311,7 +2303,6 @@ functor TypeOfPrimitives (type ty
                           val string7 : ty
                           val string16 : ty
                           val string32 : ty
-                          val ustring : ty
                           val exn : ty
                           val exntag : ty
                           val LuaValue : ty

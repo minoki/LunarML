@@ -695,7 +695,6 @@ struct
     | isDiscardablePrimOp (F.String8ConstOp _) = true
     | isDiscardablePrimOp (F.String16ConstOp _) = true
     | isDiscardablePrimOp (F.String32ConstOp _) = true
-    | isDiscardablePrimOp (F.UStringConstOp _) = true
     | isDiscardablePrimOp (F.RaiseOp _) = false
     | isDiscardablePrimOp F.ListOp = true
     | isDiscardablePrimOp F.VectorOp = true

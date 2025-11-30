@@ -836,9 +836,6 @@ struct
             , valEnv = emptyValEnv
             }
           )
-        , ( "_Prim.UString.string"
-          , {typeFunction = TypeFunction ([], PT.ustring), valEnv = emptyValEnv}
-          )
         , ( "_Prim.Int32.int"
           , {typeFunction = TypeFunction ([], PT.int32), valEnv = emptyValEnv}
           )
@@ -1006,12 +1003,6 @@ struct
             }
           )
         , ( PT.Names.string32
-          , { arity = 0
-            , admitsEquality = false (* true *)
-            , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
-            }
-          )
-        , ( PT.Names.ustring
           , { arity = 0
             , admitsEquality = false (* true *)
             , overloadClass = NONE (* SOME Syntax.CLASS_STRING *)
@@ -1207,7 +1198,6 @@ struct
         , PT.Names.string7
         , PT.Names.string16
         , PT.Names.string32
-        , PT.Names.ustring
         , PT.Names.exn
         , PT.Names.bool
         , PT.Names.ref_

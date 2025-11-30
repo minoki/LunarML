@@ -37,7 +37,6 @@ sig
   | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
-  | UStringConst of int vector
   | PrimEffect of Primitives.prim_effect
   | Cast of {value: Value, from: Ty, to: Ty}
   | Pack of {value: Value, payloadTy: Ty, packageTy: Ty}
@@ -163,7 +162,6 @@ struct
   | String7Const of string
   | String16Const of int vector
   | String32Const of int vector
-  | UStringConst of int vector
   (*
   | RealConst of Numeric.float_notation
   *)
@@ -250,7 +248,6 @@ struct
     | extractVarFromValue (String7Const _) = NONE
     | extractVarFromValue (String16Const _) = NONE
     | extractVarFromValue (String32Const _) = NONE
-    | extractVarFromValue (UStringConst _) = NONE
     | extractVarFromValue (PrimEffect _) = NONE
     | extractVarFromValue (Cast {value, ...}) = extractVarFromValue value
     | extractVarFromValue (Pack {value, ...}) = extractVarFromValue value
@@ -276,7 +273,6 @@ struct
       | isDiscardable (PrimOp {primOp = F.String8ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String16ConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.String32ConstOp _, ...}) = true
-      | isDiscardable (PrimOp {primOp = F.UStringConstOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.RaiseOp _, ...}) = false
       | isDiscardable (PrimOp {primOp = F.ListOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.VectorOp, ...}) = true
@@ -632,11 +628,6 @@ struct
           ^
           String.concatWith ","
             (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
-      | valueToString (UStringConst x) =
-          "UString(["
-          ^
-          String.concatWith ","
-            (Vector.foldr (fn (c, acc) => Int.toString c :: acc) [] x) ^ "])"
       | valueToString (PrimEffect Primitives.PURE) = "PrimEffect(pure)"
       | valueToString (PrimEffect Primitives.DISCARDABLE) =
           "PrimEffect(discardable)"
@@ -660,7 +651,6 @@ struct
            | F.String8ConstOp _ => "PrimOp(String8ConstOp)"
            | F.String16ConstOp _ => "PrimOp(String16ConstOp)"
            | F.String32ConstOp _ => "PrimOp(String32ConstOp)"
-           | F.UStringConstOp _ => "PrimOp(UStringConstOp)"
            | F.RaiseOp _ => "PrimOp(RaiseOp)"
            | F.ListOp => "PrimOp(ListOp)"
            | F.VectorOp => "PrimOp(VectorOp)"
@@ -989,7 +979,6 @@ struct
               | (F.String8ConstOp _, [ty]) => ([], [ty])
               | (F.String16ConstOp _, [ty]) => ([], [ty])
               | (F.String32ConstOp _, [ty]) => ([], [ty])
-              | (F.UStringConstOp _, [ty]) => ([], [ty])
               | (F.RaiseOp _, [ty]) => ([FSyntax.Types.exn], [ty])
               | (F.ListOp, [elemTy]) =>
                   (List.map (fn _ => elemTy) args, [FSyntax.Types.list elemTy])
@@ -1209,11 +1198,6 @@ struct
                          apply revDecs k valueTransforms
                            ( C.String32Const x
                            , FSyntax.Types.string32
-                           ) (* assume the type is correct *)
-                     | F.UStringConstOp x =>
-                         apply revDecs k valueTransforms
-                           ( C.UStringConst x
-                           , FSyntax.Types.ustring
                            ) (* assume the type is correct *)
                      | _ =>
                          let
@@ -1885,7 +1869,6 @@ struct
           | goVal (v as C.String7Const _) = v
           | goVal (v as C.String16Const _) = v
           | goVal (v as C.String32Const _) = v
-          | goVal (v as C.UStringConst _) = v
           | goVal (v as C.PrimEffect _) = v
       in
         goVal

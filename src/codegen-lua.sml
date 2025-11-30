@@ -419,9 +419,6 @@ struct
                   Char.chr i3 :: Char.chr i2 :: Char.chr i1 :: Char.chr i0
                   :: acc
                 end) [] s))) (* big endian *)
-    | doValue _ (C.UStringConst s) =
-        L.ConstExp (L.LiteralString (StringElement.encode8bit
-          (Vector.map StringElement.UNICODE_SCALAR s)))
     | doValue _ (C.PrimEffect _) = L.ConstExp L.Nil
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
@@ -1779,18 +1776,6 @@ struct
                                 )
                           , PURE
                           ))
-               | Primitives.UString_EQUAL => doBinaryOp (L.EQUAL, PURE)
-               | Primitives.UString_LT => doBinaryOp (L.LT, PURE)
-               | Primitives.UString_GT => doBinaryOp (L.GT, PURE)
-               | Primitives.UString_LE => doBinaryOp (L.LE, PURE)
-               | Primitives.UString_GE => doBinaryOp (L.GE, PURE)
-               | Primitives.UString_HAT => doBinaryOp (L.CONCAT, PURE)
-               | Primitives.UString_fromString7 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
-               | Primitives.UString_uncheckedFromUtf8 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
-               | Primitives.UString_encodeUtf8 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
                | Primitives.Vector_length _ =>
                    doUnaryExp
                      ( fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n"))
@@ -1873,6 +1858,89 @@ struct
                            )
                      , PURE
                      )
+               | Primitives.UTF8_isWellFormed =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doUnaryExp
+                          ( fn s =>
+                              L.CallExp
+                                ( L.VarExp (L.PredefinedId "_utf8_isWellFormed")
+                                , vector [s]
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        raise CodeGenError
+                          "UTF8.isWellFormed not supported on LuaJIT")
+               | Primitives.UTF8_str =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doUnaryExp
+                          ( fn s =>
+                              L.CallExp
+                                ( L.VarExp (L.PredefinedId "utf8_char")
+                                , vector [s]
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        raise CodeGenError "UTF8.str not supported on LuaJIT")
+               | Primitives.UTF8_size _ =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doUnaryExp
+                          ( fn s =>
+                              L.CallExp
+                                ( L.VarExp (L.PredefinedId "utf8_len")
+                                , vector [s]
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        raise CodeGenError "UTF8.size not supported on LuaJIT")
+               | Primitives.UTF8_codePointAt _ =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doBinaryExp
+                          ( fn (s, i) =>
+                              L.CallExp
+                                ( L.VarExp (L.PredefinedId "utf8_codepoint")
+                                , vector
+                                    [ s
+                                    , L.BinExp
+                                        (L.PLUS, i, L.ConstExp (L.Numeral "1"))
+                                    ]
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        raise CodeGenError
+                          "UTF8.codePointAt not supported on LuaJIT")
+               | Primitives.UTF8_offset _ =>
+                   (case #targetLuaVersion ctx of
+                      LUA5_3 =>
+                        doBinaryExp
+                          ( fn (s, i) =>
+                              L.BinExp
+                                ( L.MINUS
+                                , L.CallExp
+                                    ( L.VarExp (L.PredefinedId "utf8_offset")
+                                    , vector
+                                        [ s
+                                        , L.ConstExp (L.Numeral "2")
+                                        , L.BinExp
+                                            ( L.PLUS
+                                            , i
+                                            , L.ConstExp (L.Numeral "1")
+                                            )
+                                        ]
+                                    )
+                                , L.ConstExp (L.Numeral "1")
+                                )
+                          , PURE
+                          )
+                    | LUAJIT =>
+                        raise CodeGenError "UTF8.offset not supported on LuaJIT")
                | Primitives.Lua_sub =>
                    doBinaryExpE (fn (a, b) => L.IndexExp (a, b))
                | Primitives.Lua_set => raise CodeGenError "unexpected Lua.set"

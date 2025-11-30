@@ -502,7 +502,6 @@ struct
        val string7 = PrimTypes.string7
        val string16 = PrimTypes.string16
        val string32 = PrimTypes.string32
-       val ustring = PrimTypes.ustring
        val intInf = PrimTypes.intInf
        val int32 = PrimTypes.int32
        val int54 = PrimTypes.int54
@@ -5005,6 +5004,14 @@ struct
               | SOME (_, _) =>
                   emitTypeError
                     (ctx, [span], "overload: maxOrd must be literal")
+            val () =
+              case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxCodeUnit) of
+                NONE => ()
+              | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) =>
+                  checkSubsumption (ctx, env, span, ty', PrimTypes.intInf)
+              | SOME (_, _) =>
+                  emitTypeError
+                    (ctx, [span], "overload: maxCodeUnit must be literal")
             val attr = lookupTyNameInEnv (#context ctx, env, span, tyname)
             val attr =
               { arity = #arity attr

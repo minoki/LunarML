@@ -59,7 +59,6 @@ struct
      | C.String7Const _ => FSyntax.Types.string7
      | C.String16Const _ => FSyntax.Types.string16
      | C.String32Const _ => FSyntax.Types.string32
-     | C.UStringConst _ => FSyntax.Types.ustring
      | C.PrimEffect _ => FSyntax.Types.prim_effect
      | C.Cast {value, from, to} =>
       (checkValue (env, fn () => "Cast", from) value; to)
@@ -128,7 +127,6 @@ struct
          | F.String8ConstOp _ => raise TypeError "unexpected String8ConstOp"
          | F.String16ConstOp _ => raise TypeError "unexpected String16ConstOp"
          | F.String32ConstOp _ => raise TypeError "unexpected String32ConstOp"
-         | F.UStringConstOp _ => raise TypeError "unexpected UStringConstOp"
          | F.RealConstOp _ => [F.Types.real]
          | F.RaiseOp _ => raise TypeError "unexpected RaiseOp"
          | F.ListOp =>

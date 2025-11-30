@@ -34,7 +34,6 @@ sig
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
   | String32ConstOp of int vector (* 1 type argument *)
-  | UStringConstOp of int vector (* 1 type argument *)
   | RaiseOp of
       SourcePos.span (* type argument: result type, value argument: the exception *)
   | ListOp (* type argument: element type, value arguments: the elements *)
@@ -76,7 +75,6 @@ sig
   | String7Constant of string
   | String16Constant of int vector
   | String32Constant of int vector
-  | UStringConstant of int vector
   datatype Pat =
     WildcardPat of SourcePos.span
   | SConPat of
@@ -198,7 +196,6 @@ sig
     val string7: Ty
     val string16: Ty
     val string32: Ty
-    val ustring: Ty
     val exn: Ty
     val exntag: Ty
     val lua_value: Ty
@@ -279,7 +276,6 @@ struct
   | String8ConstOp of string (* 1 type argument *)
   | String16ConstOp of int vector (* 1 type argument *)
   | String32ConstOp of int vector (* 1 type argument *)
-  | UStringConstOp of int vector (* 1 type argument *)
   | RaiseOp of
       SourcePos.span (* type argument: result type, value argument: the exception *)
   | ListOp (* type argument: element type, value arguments: the elements *)
@@ -321,7 +317,6 @@ struct
   | String7Constant of string
   | String16Constant of int vector
   | String32Constant of int vector
-  | UStringConstant of int vector
   datatype Pat =
     WildcardPat of SourcePos.span
   | SConPat of
@@ -447,7 +442,6 @@ struct
     val string7 = TyVar PrimTypes.Names.string7
     val string16 = TyVar PrimTypes.Names.string16
     val string32 = TyVar PrimTypes.Names.string32
-    val ustring = TyVar PrimTypes.Names.ustring
     val exn = TyVar PrimTypes.Names.exn
     val exntag = TyVar PrimTypes.Names.exntag
     val lua_value = TyVar PrimTypes.Names.lua_value
@@ -1659,13 +1653,6 @@ struct
             (fn (c, acc) =>
                StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\""
             x
-      | print_PrimOp (UStringConstOp x) =
-          "UStringConstOp \""
-          ^
-          Vector.foldr
-            (fn (c, acc) =>
-               StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\""
-            x
       | print_PrimOp (RaiseOp _) = "RaiseOp"
       | print_PrimOp ListOp = "ListOp"
       | print_PrimOp VectorOp = "VectorOp"
@@ -1774,13 +1761,6 @@ struct
              , equality = _
              , cookedValue = _
              }) = "SConPat(String32Constant)"
-      | print_Pat
-          (SConPat
-             { sourceSpan = _
-             , scon = UStringConstant _
-             , equality = _
-             , cookedValue = _
-             }) = "SConPat(UStringConstant)"
       | print_Pat (VarPat (_, vid, ty)) =
           "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
       | print_Pat (LayeredPat (_, vid, ty, pat)) =
@@ -2851,21 +2831,20 @@ struct
                  end
            end
        | _ => emitFatalError (ctx, [span], "invalid character constant: type"))
+    datatype string_rep = S7 | S8 | S16 | S32 | UTF8 | UTF16 | UTF32
     fun cookStringConstant (ctx: Context, env: Env, span, value, ty) =
       (case ty of
          T.TyCon (_, [], tycon) =>
            let
              val w =
                if T.eqTyName (tycon, PrimTypes.Names.string) then
-                 C8
+                 S8
                else if T.eqTyName (tycon, PrimTypes.Names.string7) then
-                 C7
+                 S7
                else if T.eqTyName (tycon, PrimTypes.Names.string16) then
-                 C16
+                 S16
                else if T.eqTyName (tycon, PrimTypes.Names.string32) then
-                 C32
-               else if T.eqTyName (tycon, PrimTypes.Names.ustring) then
-                 UNICODE_SCALAR
+                 S32
                else
                  let
                    val overloadMap =
@@ -2885,21 +2864,36 @@ struct
                              (ctx, [span], "invalid string constant: type")
                          ; 65535
                          )
+                   val maxCodeUnit =
+                     case
+                       Syntax.OverloadKeyMap.find
+                         (overloadMap, Syntax.OVERLOAD_maxCodeUnit)
+                     of
+                       NONE => NONE
+                     | SOME (F.PrimExp (F.IntConstOp x, _, _)) => SOME x
+                     | _ =>
+                         ( emitError
+                             (ctx, [span], "invalid string constant: type")
+                         ; SOME 255
+                         )
                  in
-                   case maxOrd of
-                     127 => C7
-                   | 255 => C8
-                   | 65535 => C16
-                   | 0x10FFFF => C32
+                   case (maxOrd, maxCodeUnit) of
+                     (127, NONE) => S7 (* ? *)
+                   | (255, NONE) => S8
+                   | (65535, NONE) => S16
+                   | (0x10FFFF, NONE) => S32
+                   | (0x10FFFF, SOME 255) => UTF8
+                   | (0x10FFFF, SOME 65535) => UTF16
+                   | (0x10FFFF, SOME 0x10FFFF) => UTF32
                    | _ =>
                        ( emitError
                            (ctx, [span], "invalid string constant: type")
-                       ; C16
+                       ; S16
                        )
                  end
            in
              case w of
-               C7 =>
+               S7 =>
                  let
                    val cooked =
                      StringElement.encode7bit value
@@ -2917,7 +2911,7 @@ struct
                        (F.String7ConstOp cooked, [toFTy (ctx, env, ty)], [])
                    )
                  end
-             | C8 =>
+             | S8 =>
                  let
                    val cooked =
                      StringElement.encode8bit value
@@ -2935,7 +2929,7 @@ struct
                        (F.String8ConstOp cooked, [toFTy (ctx, env, ty)], [])
                    )
                  end
-             | C16 =>
+             | S16 =>
                  let
                    val cooked =
                      StringElement.encode16bit value
@@ -2953,7 +2947,7 @@ struct
                        (F.String16ConstOp cooked, [toFTy (ctx, env, ty)], [])
                    )
                  end
-             | C32 =>
+             | S32 =>
                  let
                    val cooked =
                      StringElement.encode32bit value
@@ -2971,10 +2965,36 @@ struct
                        (F.String32ConstOp cooked, [toFTy (ctx, env, ty)], [])
                    )
                  end
-             | UNICODE_SCALAR =>
+             | UTF8 =>
                  let
                    val cooked =
-                     StringElement.encodeUString value
+                     StringElement.encode8bit
+                       (Vector.map StringElement.UNICODE_SCALAR
+                          (StringElement.encodeUString value))
+                     handle Chr =>
+                       ( emitError
+                           ( ctx
+                           , [span]
+                           , "invalid string constant: out of range"
+                           )
+                       ; ""
+                       )
+                 in
+                   ( F.StringConstant cooked
+                   , F.PrimExp
+                       ( F.PrimCall Primitives.Unsafe_cast
+                       , [F.Types.string, toFTy (ctx, env, ty)]
+                       , [F.PrimExp
+                            (F.String8ConstOp cooked, [F.Types.string], [])]
+                       )
+                   )
+                 end
+             | UTF16 =>
+                 let
+                   val cooked =
+                     StringElement.encode16bit
+                       (Vector.map StringElement.UNICODE_SCALAR
+                          (StringElement.encodeUString value))
                      handle Chr =>
                        ( emitError
                            ( ctx
@@ -2984,9 +3004,37 @@ struct
                        ; vector []
                        )
                  in
-                   ( F.UStringConstant cooked
+                   ( F.String16Constant cooked
                    , F.PrimExp
-                       (F.UStringConstOp cooked, [toFTy (ctx, env, ty)], [])
+                       ( F.PrimCall Primitives.Unsafe_cast
+                       , [F.Types.string16, toFTy (ctx, env, ty)]
+                       , [F.PrimExp
+                            (F.String16ConstOp cooked, [F.Types.string16], [])]
+                       )
+                   )
+                 end
+             | UTF32 =>
+                 let
+                   val cooked =
+                     StringElement.encode32bit
+                       (Vector.map StringElement.UNICODE_SCALAR
+                          (StringElement.encodeUString value))
+                     handle Chr =>
+                       ( emitError
+                           ( ctx
+                           , [span]
+                           , "invalid string constant: out of range"
+                           )
+                       ; vector []
+                       )
+                 in
+                   ( F.String32Constant cooked
+                   , F.PrimExp
+                       ( F.PrimCall Primitives.Unsafe_cast
+                       , [F.Types.string32, toFTy (ctx, env, ty)]
+                       , [F.PrimExp
+                            (F.String32ConstOp cooked, [F.Types.string32], [])]
+                       )
                    )
                  end
            end

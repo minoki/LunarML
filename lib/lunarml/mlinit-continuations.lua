@@ -46,6 +46,9 @@ local string_char = string.char
 --BEGIN string_format: string
 local string_format = string.format
 --END
+--BEGIN string_find: string
+local string_find = string.find
+--END
 --BEGIN table
 local table = table
 --END
@@ -66,6 +69,21 @@ end
 --BEGIN table_move: table
 local table_move = table.move
 --END
+--BEGIN utf8
+local utf8 = utf8
+--
+--BEGIN utf8_char: utf8
+local utf8_char = utf8.char
+--
+--BEGIN utf8_len: utf8
+local utf8_len = utf8.len
+--
+--BEGIN utf8_codepoint: utf8
+local utf8_codepoint = utf8.codepoint
+--
+--BEGIN utf8_offset: utf8
+local utf8_offset = utf8.offset
+--
 
 --BEGIN _id
 local function _id(x)
@@ -440,6 +458,26 @@ local function _Vector_concat(xs)
   return t
 end
 --END
+
+-- Unicode
+--BEGIN _utf8_isWellFormed: utf8_len string_find
+local _utf8_isWellFormed
+if utf8_len("\xED\xA0\x80") then
+  -- Lua 5.3
+  function _utf8_isWellFormed(s)
+    if not utf8_len(s) then
+      return false
+    end
+    -- Check for surrogates
+    return not string_find(s, "\xED[\xA0-\xBF]")
+  end
+else
+  -- Lua 5.4
+  function _utf8_isWellFormed(s)
+    return not (not utf8_len(s))
+  end
+end
+--
 
 -- Lua interface
 --BEGIN _Lua_function: table_pack table_unpack

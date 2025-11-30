@@ -152,21 +152,6 @@ datatype PrimOp = EQUAL (* = *)
                 | String32_concat (* String32.concat *)
                 | String32_implode (* String32.implode *)
                 | String32_fromString7 (* String32.fromString7 *)
-                | UString_EQUAL (* UString.= *)
-                | UString_LT (* UString.< *)
-                | UString_LE (* UString.<= *)
-                | UString_GT (* UString.> *)
-                | UString_GE (* UString.>= *)
-                | UString_HAT (* UString.^ *)
-                | UString_size of int_width (* UString.size{.i} *)
-                | UString_str (* UString.str *)
-                | UString_fromString7 (* UString.fromString7 *)
-                | UString_uncheckedFromUtf8 (* UString.uncheckedFromUtf8 *)
-                | UString_uncheckedFromUtf16 (* UString.uncheckedFromUtf16 *)
-                | UString_uncheckedFromUtf32 (* UString.uncheckedFromUtf32 *)
-                | UString_encodeUtf8 (* UString.encodeUtf8 *)
-                | UString_encodeUtf16 (* UString.encodeUtf16 *)
-                | UString_encodeUtf32 (* UString.encodeUtf32 *)
                 | IntInf_andb (* IntInf.andb *)
                 | IntInf_orb (* IntInf.orb *)
                 | IntInf_xorb (* IntInf.xorb *)
@@ -187,6 +172,17 @@ datatype PrimOp = EQUAL (* = *)
                 | DelimCont_newPromptTag (* DelimCont.newPromptTag *)
                 | assumeDiscardable (* assumeDiscardable *)
                 | unreachable (* unreachable *)
+                | UTF8_isWellFormed (* UTF8.isWellFormed *)
+                | UTF8_str (* UTF8.str *)
+                | UTF8_size of int_width (* UTF8.size{.i} *)
+                | UTF8_codePointAt of int_width (* UTF8.codePointAt{.i} *)
+                | UTF8_offset of int_width (* UTF8.offset{.i} *)
+                | UTF16_LT (* UTF16.< *)
+                | UTF16_isWellFormed (* UTF16.isWellFormed *)
+                | UTF16_toWellFormed (* UTF16.toWellFormed *)
+                | UTF16_str (* UTF16.str *)
+                | UTF16_codePointAt of int_width (* UTF16.codePointAt{.i} *)
+                | UTF16_size of int_width (* UTF16.size{.i} *)
                 | Lua_sub (* Lua.sub *)
                 | Lua_set (* Lua.set *)
                 | Lua_isNil (* Lua.isNil *)
@@ -271,6 +267,7 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_function (* JavaScript.function *)
                 | JavaScript_encodeUtf8 (* JavaScript.encodeUtf8 *)
                 | JavaScript_decodeUtf8 (* JavaScript.decodeUtf8 *)
+                | JavaScript_codePointAt of int_width (* JavaScript.codePointAt{.i} *)
 fun toString EQUAL = "="
   | toString mkFn2 = "mkFn2"
   | toString mkFn3 = "mkFn3"
@@ -641,25 +638,6 @@ fun toString EQUAL = "="
   | toString String32_concat = "String32.concat"
   | toString String32_implode = "String32.implode"
   | toString String32_fromString7 = "String32.fromString7"
-  | toString UString_EQUAL = "UString.="
-  | toString UString_LT = "UString.<"
-  | toString UString_LE = "UString.<="
-  | toString UString_GT = "UString.>"
-  | toString UString_GE = "UString.>="
-  | toString UString_HAT = "UString.^"
-  | toString (UString_size INT) = "UString.size"
-  | toString (UString_size I32) = "UString.size.i32"
-  | toString (UString_size I54) = "UString.size.i54"
-  | toString (UString_size I64) = "UString.size.i64"
-  | toString (UString_size INT_INF) = "UString.size.intInf"
-  | toString UString_str = "UString.str"
-  | toString UString_fromString7 = "UString.fromString7"
-  | toString UString_uncheckedFromUtf8 = "UString.uncheckedFromUtf8"
-  | toString UString_uncheckedFromUtf16 = "UString.uncheckedFromUtf16"
-  | toString UString_uncheckedFromUtf32 = "UString.uncheckedFromUtf32"
-  | toString UString_encodeUtf8 = "UString.encodeUtf8"
-  | toString UString_encodeUtf16 = "UString.encodeUtf16"
-  | toString UString_encodeUtf32 = "UString.encodeUtf32"
   | toString IntInf_andb = "IntInf.andb"
   | toString IntInf_orb = "IntInf.orb"
   | toString IntInf_xorb = "IntInf.xorb"
@@ -708,6 +686,37 @@ fun toString EQUAL = "="
   | toString DelimCont_newPromptTag = "DelimCont.newPromptTag"
   | toString assumeDiscardable = "assumeDiscardable"
   | toString unreachable = "unreachable"
+  | toString UTF8_isWellFormed = "UTF8.isWellFormed"
+  | toString UTF8_str = "UTF8.str"
+  | toString (UTF8_size INT) = "UTF8.size"
+  | toString (UTF8_size I32) = "UTF8.size.i32"
+  | toString (UTF8_size I54) = "UTF8.size.i54"
+  | toString (UTF8_size I64) = "UTF8.size.i64"
+  | toString (UTF8_size INT_INF) = "UTF8.size.intInf"
+  | toString (UTF8_codePointAt INT) = "UTF8.codePointAt"
+  | toString (UTF8_codePointAt I32) = "UTF8.codePointAt.i32"
+  | toString (UTF8_codePointAt I54) = "UTF8.codePointAt.i54"
+  | toString (UTF8_codePointAt I64) = "UTF8.codePointAt.i64"
+  | toString (UTF8_codePointAt INT_INF) = "UTF8.codePointAt.intInf"
+  | toString (UTF8_offset INT) = "UTF8.offset"
+  | toString (UTF8_offset I32) = "UTF8.offset.i32"
+  | toString (UTF8_offset I54) = "UTF8.offset.i54"
+  | toString (UTF8_offset I64) = "UTF8.offset.i64"
+  | toString (UTF8_offset INT_INF) = "UTF8.offset.intInf"
+  | toString UTF16_LT = "UTF16.<"
+  | toString UTF16_isWellFormed = "UTF16.isWellFormed"
+  | toString UTF16_toWellFormed = "UTF16.toWellFormed"
+  | toString UTF16_str = "UTF16.str"
+  | toString (UTF16_codePointAt INT) = "UTF16.codePointAt"
+  | toString (UTF16_codePointAt I32) = "UTF16.codePointAt.i32"
+  | toString (UTF16_codePointAt I54) = "UTF16.codePointAt.i54"
+  | toString (UTF16_codePointAt I64) = "UTF16.codePointAt.i64"
+  | toString (UTF16_codePointAt INT_INF) = "UTF16.codePointAt.intInf"
+  | toString (UTF16_size INT) = "UTF16.size"
+  | toString (UTF16_size I32) = "UTF16.size.i32"
+  | toString (UTF16_size I54) = "UTF16.size.i54"
+  | toString (UTF16_size I64) = "UTF16.size.i64"
+  | toString (UTF16_size INT_INF) = "UTF16.size.intInf"
   | toString Lua_sub = "Lua.sub"
   | toString Lua_set = "Lua.set"
   | toString Lua_isNil = "Lua.isNil"
@@ -792,6 +801,11 @@ fun toString EQUAL = "="
   | toString JavaScript_function = "JavaScript.function"
   | toString JavaScript_encodeUtf8 = "JavaScript.encodeUtf8"
   | toString JavaScript_decodeUtf8 = "JavaScript.decodeUtf8"
+  | toString (JavaScript_codePointAt INT) = "JavaScript.codePointAt"
+  | toString (JavaScript_codePointAt I32) = "JavaScript.codePointAt.i32"
+  | toString (JavaScript_codePointAt I54) = "JavaScript.codePointAt.i54"
+  | toString (JavaScript_codePointAt I64) = "JavaScript.codePointAt.i64"
+  | toString (JavaScript_codePointAt INT_INF) = "JavaScript.codePointAt.intInf"
 fun fromString "=" = SOME EQUAL
   | fromString "mkFn2" = SOME mkFn2
   | fromString "mkFn3" = SOME mkFn3
@@ -1162,25 +1176,6 @@ fun fromString "=" = SOME EQUAL
   | fromString "String32.concat" = SOME String32_concat
   | fromString "String32.implode" = SOME String32_implode
   | fromString "String32.fromString7" = SOME String32_fromString7
-  | fromString "UString.=" = SOME UString_EQUAL
-  | fromString "UString.<" = SOME UString_LT
-  | fromString "UString.<=" = SOME UString_LE
-  | fromString "UString.>" = SOME UString_GT
-  | fromString "UString.>=" = SOME UString_GE
-  | fromString "UString.^" = SOME UString_HAT
-  | fromString "UString.size" = SOME (UString_size INT)
-  | fromString "UString.size.i32" = SOME (UString_size I32)
-  | fromString "UString.size.i54" = SOME (UString_size I54)
-  | fromString "UString.size.i64" = SOME (UString_size I64)
-  | fromString "UString.size.intInf" = SOME (UString_size INT_INF)
-  | fromString "UString.str" = SOME UString_str
-  | fromString "UString.fromString7" = SOME UString_fromString7
-  | fromString "UString.uncheckedFromUtf8" = SOME UString_uncheckedFromUtf8
-  | fromString "UString.uncheckedFromUtf16" = SOME UString_uncheckedFromUtf16
-  | fromString "UString.uncheckedFromUtf32" = SOME UString_uncheckedFromUtf32
-  | fromString "UString.encodeUtf8" = SOME UString_encodeUtf8
-  | fromString "UString.encodeUtf16" = SOME UString_encodeUtf16
-  | fromString "UString.encodeUtf32" = SOME UString_encodeUtf32
   | fromString "IntInf.andb" = SOME IntInf_andb
   | fromString "IntInf.orb" = SOME IntInf_orb
   | fromString "IntInf.xorb" = SOME IntInf_xorb
@@ -1229,6 +1224,37 @@ fun fromString "=" = SOME EQUAL
   | fromString "DelimCont.newPromptTag" = SOME DelimCont_newPromptTag
   | fromString "assumeDiscardable" = SOME assumeDiscardable
   | fromString "unreachable" = SOME unreachable
+  | fromString "UTF8.isWellFormed" = SOME UTF8_isWellFormed
+  | fromString "UTF8.str" = SOME UTF8_str
+  | fromString "UTF8.size" = SOME (UTF8_size INT)
+  | fromString "UTF8.size.i32" = SOME (UTF8_size I32)
+  | fromString "UTF8.size.i54" = SOME (UTF8_size I54)
+  | fromString "UTF8.size.i64" = SOME (UTF8_size I64)
+  | fromString "UTF8.size.intInf" = SOME (UTF8_size INT_INF)
+  | fromString "UTF8.codePointAt" = SOME (UTF8_codePointAt INT)
+  | fromString "UTF8.codePointAt.i32" = SOME (UTF8_codePointAt I32)
+  | fromString "UTF8.codePointAt.i54" = SOME (UTF8_codePointAt I54)
+  | fromString "UTF8.codePointAt.i64" = SOME (UTF8_codePointAt I64)
+  | fromString "UTF8.codePointAt.intInf" = SOME (UTF8_codePointAt INT_INF)
+  | fromString "UTF8.offset" = SOME (UTF8_offset INT)
+  | fromString "UTF8.offset.i32" = SOME (UTF8_offset I32)
+  | fromString "UTF8.offset.i54" = SOME (UTF8_offset I54)
+  | fromString "UTF8.offset.i64" = SOME (UTF8_offset I64)
+  | fromString "UTF8.offset.intInf" = SOME (UTF8_offset INT_INF)
+  | fromString "UTF16.<" = SOME UTF16_LT
+  | fromString "UTF16.isWellFormed" = SOME UTF16_isWellFormed
+  | fromString "UTF16.toWellFormed" = SOME UTF16_toWellFormed
+  | fromString "UTF16.str" = SOME UTF16_str
+  | fromString "UTF16.codePointAt" = SOME (UTF16_codePointAt INT)
+  | fromString "UTF16.codePointAt.i32" = SOME (UTF16_codePointAt I32)
+  | fromString "UTF16.codePointAt.i54" = SOME (UTF16_codePointAt I54)
+  | fromString "UTF16.codePointAt.i64" = SOME (UTF16_codePointAt I64)
+  | fromString "UTF16.codePointAt.intInf" = SOME (UTF16_codePointAt INT_INF)
+  | fromString "UTF16.size" = SOME (UTF16_size INT)
+  | fromString "UTF16.size.i32" = SOME (UTF16_size I32)
+  | fromString "UTF16.size.i54" = SOME (UTF16_size I54)
+  | fromString "UTF16.size.i64" = SOME (UTF16_size I64)
+  | fromString "UTF16.size.intInf" = SOME (UTF16_size INT_INF)
   | fromString "Lua.sub" = SOME Lua_sub
   | fromString "Lua.set" = SOME Lua_set
   | fromString "Lua.isNil" = SOME Lua_isNil
@@ -1313,6 +1339,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.function" = SOME JavaScript_function
   | fromString "JavaScript.encodeUtf8" = SOME JavaScript_encodeUtf8
   | fromString "JavaScript.decodeUtf8" = SOME JavaScript_decodeUtf8
+  | fromString "JavaScript.codePointAt" = SOME (JavaScript_codePointAt INT)
+  | fromString "JavaScript.codePointAt.i32" = SOME (JavaScript_codePointAt I32)
+  | fromString "JavaScript.codePointAt.i54" = SOME (JavaScript_codePointAt I54)
+  | fromString "JavaScript.codePointAt.i64" = SOME (JavaScript_codePointAt I64)
+  | fromString "JavaScript.codePointAt.intInf" = SOME (JavaScript_codePointAt INT_INF)
   | fromString _ = NONE
 fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Int_MINUS INT_INF) = false
@@ -1467,21 +1498,6 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise String32_concat = false
   | mayRaise String32_implode = false
   | mayRaise String32_fromString7 = false
-  | mayRaise UString_EQUAL = false
-  | mayRaise UString_LT = false
-  | mayRaise UString_LE = false
-  | mayRaise UString_GT = false
-  | mayRaise UString_GE = false
-  | mayRaise UString_HAT = false
-  | mayRaise (UString_size _) = false
-  | mayRaise UString_str = false
-  | mayRaise UString_fromString7 = false
-  | mayRaise UString_uncheckedFromUtf8 = false
-  | mayRaise UString_uncheckedFromUtf16 = false
-  | mayRaise UString_uncheckedFromUtf32 = false
-  | mayRaise UString_encodeUtf8 = false
-  | mayRaise UString_encodeUtf16 = false
-  | mayRaise UString_encodeUtf32 = false
   | mayRaise IntInf_andb = false
   | mayRaise IntInf_orb = false
   | mayRaise IntInf_xorb = false
@@ -1502,6 +1518,17 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise DelimCont_newPromptTag = false
   | mayRaise assumeDiscardable = true
   | mayRaise unreachable = true
+  | mayRaise UTF8_isWellFormed = false
+  | mayRaise UTF8_str = false
+  | mayRaise (UTF8_size _) = false
+  | mayRaise (UTF8_codePointAt _) = false
+  | mayRaise (UTF8_offset _) = false
+  | mayRaise UTF16_LT = false
+  | mayRaise UTF16_isWellFormed = false
+  | mayRaise UTF16_toWellFormed = false
+  | mayRaise UTF16_str = false
+  | mayRaise (UTF16_codePointAt _) = false
+  | mayRaise (UTF16_size _) = false
   | mayRaise Lua_sub = true
   | mayRaise Lua_set = true
   | mayRaise Lua_isNil = false
@@ -1586,6 +1613,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise JavaScript_function = false
   | mayRaise JavaScript_encodeUtf8 = true
   | mayRaise JavaScript_decodeUtf8 = true
+  | mayRaise (JavaScript_codePointAt _) = false
 fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Int_MINUS INT_INF) = true
   | isDiscardable (Int_TIMES INT_INF) = true
@@ -1739,21 +1767,6 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable String32_concat = true
   | isDiscardable String32_implode = true
   | isDiscardable String32_fromString7 = true
-  | isDiscardable UString_EQUAL = true
-  | isDiscardable UString_LT = true
-  | isDiscardable UString_LE = true
-  | isDiscardable UString_GT = true
-  | isDiscardable UString_GE = true
-  | isDiscardable UString_HAT = true
-  | isDiscardable (UString_size _) = true
-  | isDiscardable UString_str = true
-  | isDiscardable UString_fromString7 = true
-  | isDiscardable UString_uncheckedFromUtf8 = true
-  | isDiscardable UString_uncheckedFromUtf16 = true
-  | isDiscardable UString_uncheckedFromUtf32 = true
-  | isDiscardable UString_encodeUtf8 = true
-  | isDiscardable UString_encodeUtf16 = true
-  | isDiscardable UString_encodeUtf32 = true
   | isDiscardable IntInf_andb = true
   | isDiscardable IntInf_orb = true
   | isDiscardable IntInf_xorb = true
@@ -1774,6 +1787,17 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable DelimCont_newPromptTag = true
   | isDiscardable assumeDiscardable = true
   | isDiscardable unreachable = false
+  | isDiscardable UTF8_isWellFormed = true
+  | isDiscardable UTF8_str = true
+  | isDiscardable (UTF8_size _) = true
+  | isDiscardable (UTF8_codePointAt _) = true
+  | isDiscardable (UTF8_offset _) = true
+  | isDiscardable UTF16_LT = true
+  | isDiscardable UTF16_isWellFormed = true
+  | isDiscardable UTF16_toWellFormed = true
+  | isDiscardable UTF16_str = true
+  | isDiscardable (UTF16_codePointAt _) = true
+  | isDiscardable (UTF16_size _) = true
   | isDiscardable Lua_sub = false
   | isDiscardable Lua_set = false
   | isDiscardable Lua_isNil = true
@@ -1858,6 +1882,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_function = true
   | isDiscardable JavaScript_encodeUtf8 = true
   | isDiscardable JavaScript_decodeUtf8 = true
+  | isDiscardable (JavaScript_codePointAt _) = true
 fun isDiscardablePE PURE = true
   | isDiscardablePE DISCARDABLE = true
   | isDiscardablePE IMPURE = false
@@ -2014,21 +2039,6 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (String32_concat, [_]) = true
   | isDiscardableWithArgs (String32_implode, [_]) = true
   | isDiscardableWithArgs (String32_fromString7, [_]) = true
-  | isDiscardableWithArgs (UString_EQUAL, [_, _]) = true
-  | isDiscardableWithArgs (UString_LT, [_, _]) = true
-  | isDiscardableWithArgs (UString_LE, [_, _]) = true
-  | isDiscardableWithArgs (UString_GT, [_, _]) = true
-  | isDiscardableWithArgs (UString_GE, [_, _]) = true
-  | isDiscardableWithArgs (UString_HAT, [_, _]) = true
-  | isDiscardableWithArgs (UString_size _, [_]) = true
-  | isDiscardableWithArgs (UString_str, [_]) = true
-  | isDiscardableWithArgs (UString_fromString7, [_]) = true
-  | isDiscardableWithArgs (UString_uncheckedFromUtf8, [_]) = true
-  | isDiscardableWithArgs (UString_uncheckedFromUtf16, [_]) = true
-  | isDiscardableWithArgs (UString_uncheckedFromUtf32, [_]) = true
-  | isDiscardableWithArgs (UString_encodeUtf8, [_]) = true
-  | isDiscardableWithArgs (UString_encodeUtf16, [_]) = true
-  | isDiscardableWithArgs (UString_encodeUtf32, [_]) = true
   | isDiscardableWithArgs (IntInf_andb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_orb, [_, _]) = true
   | isDiscardableWithArgs (IntInf_xorb, [_, _]) = true
@@ -2049,6 +2059,17 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (DelimCont_newPromptTag, []) = true
   | isDiscardableWithArgs (assumeDiscardable, [_, _]) = true
   | isDiscardableWithArgs (unreachable, []) = false
+  | isDiscardableWithArgs (UTF8_isWellFormed, [_]) = true
+  | isDiscardableWithArgs (UTF8_str, [_]) = true
+  | isDiscardableWithArgs (UTF8_size _, [_]) = true
+  | isDiscardableWithArgs (UTF8_codePointAt _, [_, _]) = true
+  | isDiscardableWithArgs (UTF8_offset _, [_, _]) = true
+  | isDiscardableWithArgs (UTF16_LT, [_, _]) = true
+  | isDiscardableWithArgs (UTF16_isWellFormed, [_]) = true
+  | isDiscardableWithArgs (UTF16_toWellFormed, [_]) = true
+  | isDiscardableWithArgs (UTF16_str, [_]) = true
+  | isDiscardableWithArgs (UTF16_codePointAt _, [_, _]) = true
+  | isDiscardableWithArgs (UTF16_size _, [_]) = true
   | isDiscardableWithArgs (Lua_sub, [_, _, e]) = isDiscardablePE e
   | isDiscardableWithArgs (Lua_set, [_, _, _]) = false
   | isDiscardableWithArgs (Lua_isNil, [_]) = true
@@ -2133,6 +2154,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (JavaScript_function, [_]) = true
   | isDiscardableWithArgs (JavaScript_encodeUtf8, [_]) = true
   | isDiscardableWithArgs (JavaScript_decodeUtf8, [_]) = true
+  | isDiscardableWithArgs (JavaScript_codePointAt _, [_, _]) = true
   | isDiscardableWithArgs _ = false (* should not occur *)
 fun fixIntWord { int, word }
   = let fun fixInt INT = int
@@ -2196,7 +2218,6 @@ fun fixIntWord { int, word }
         | String7_size a1 => String7_size (fixInt a1)
         | String16_size a1 => String16_size (fixInt a1)
         | String32_size a1 => String32_size (fixInt a1)
-        | UString_size a1 => UString_size (fixInt a1)
         | Vector_length a1 => Vector_length (fixInt a1)
         | Vector_unsafeFromListRevN a1 => Vector_unsafeFromListRevN (fixInt a1)
         | Array_length a1 => Array_length (fixInt a1)
@@ -2204,6 +2225,12 @@ fun fixIntWord { int, word }
         | Unsafe_Vector_sub a1 => Unsafe_Vector_sub (fixInt a1)
         | Unsafe_Array_sub a1 => Unsafe_Array_sub (fixInt a1)
         | Unsafe_Array_update a1 => Unsafe_Array_update (fixInt a1)
+        | UTF8_size a1 => UTF8_size (fixInt a1)
+        | UTF8_codePointAt a1 => UTF8_codePointAt (fixInt a1)
+        | UTF8_offset a1 => UTF8_offset (fixInt a1)
+        | UTF16_codePointAt a1 => UTF16_codePointAt (fixInt a1)
+        | UTF16_size a1 => UTF16_size (fixInt a1)
+        | JavaScript_codePointAt a1 => JavaScript_codePointAt (fixInt a1)
         | p => p
     end
 fun returnArity EQUAL = 1
@@ -2354,21 +2381,6 @@ fun returnArity EQUAL = 1
   | returnArity String32_concat = 1
   | returnArity String32_implode = 1
   | returnArity String32_fromString7 = 1
-  | returnArity UString_EQUAL = 1
-  | returnArity UString_LT = 1
-  | returnArity UString_LE = 1
-  | returnArity UString_GT = 1
-  | returnArity UString_GE = 1
-  | returnArity UString_HAT = 1
-  | returnArity (UString_size _) = 1
-  | returnArity UString_str = 1
-  | returnArity UString_fromString7 = 1
-  | returnArity UString_uncheckedFromUtf8 = 1
-  | returnArity UString_uncheckedFromUtf16 = 1
-  | returnArity UString_uncheckedFromUtf32 = 1
-  | returnArity UString_encodeUtf8 = 1
-  | returnArity UString_encodeUtf16 = 1
-  | returnArity UString_encodeUtf32 = 1
   | returnArity IntInf_andb = 1
   | returnArity IntInf_orb = 1
   | returnArity IntInf_xorb = 1
@@ -2389,6 +2401,17 @@ fun returnArity EQUAL = 1
   | returnArity DelimCont_newPromptTag = 1
   | returnArity assumeDiscardable = 1
   | returnArity unreachable = 1
+  | returnArity UTF8_isWellFormed = 1
+  | returnArity UTF8_str = 1
+  | returnArity (UTF8_size _) = 1
+  | returnArity (UTF8_codePointAt _) = 1
+  | returnArity (UTF8_offset _) = 1
+  | returnArity UTF16_LT = 1
+  | returnArity UTF16_isWellFormed = 1
+  | returnArity UTF16_toWellFormed = 1
+  | returnArity UTF16_str = 1
+  | returnArity (UTF16_codePointAt _) = 1
+  | returnArity (UTF16_size _) = 1
   | returnArity Lua_sub = 1
   | returnArity Lua_set = 0
   | returnArity Lua_isNil = 1
@@ -2473,6 +2496,7 @@ fun returnArity EQUAL = 1
   | returnArity JavaScript_function = 1
   | returnArity JavaScript_encodeUtf8 = 1
   | returnArity JavaScript_decodeUtf8 = 1
+  | returnArity (JavaScript_codePointAt _) = 1
 end;
 
 functor TypeOfPrimitives (type ty
@@ -2508,7 +2532,6 @@ functor TypeOfPrimitives (type ty
                           val string7 : ty
                           val string16 : ty
                           val string32 : ty
-                          val ustring : ty
                           val exn : ty
                           val exntag : ty
                           val LuaValue : ty
@@ -2900,25 +2923,6 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.String32_concat = { vars = [], args = vector [listOf (string32)], results = [string32] }
   | typeOf Primitives.String32_implode = { vars = [], args = vector [listOf (char32)], results = [string32] }
   | typeOf Primitives.String32_fromString7 = { vars = [], args = vector [string7], results = [string32] }
-  | typeOf Primitives.UString_EQUAL = { vars = [], args = vector [ustring, ustring], results = [bool] }
-  | typeOf Primitives.UString_LT = { vars = [], args = vector [ustring, ustring], results = [bool] }
-  | typeOf Primitives.UString_LE = { vars = [], args = vector [ustring, ustring], results = [bool] }
-  | typeOf Primitives.UString_GT = { vars = [], args = vector [ustring, ustring], results = [bool] }
-  | typeOf Primitives.UString_GE = { vars = [], args = vector [ustring, ustring], results = [bool] }
-  | typeOf Primitives.UString_HAT = { vars = [], args = vector [ustring, ustring], results = [ustring] }
-  | typeOf (Primitives.UString_size Primitives.INT) = { vars = [], args = vector [ustring], results = [int] }
-  | typeOf (Primitives.UString_size Primitives.I32) = { vars = [], args = vector [ustring], results = [int32] }
-  | typeOf (Primitives.UString_size Primitives.I54) = { vars = [], args = vector [ustring], results = [int54] }
-  | typeOf (Primitives.UString_size Primitives.I64) = { vars = [], args = vector [ustring], results = [int64] }
-  | typeOf (Primitives.UString_size Primitives.INT_INF) = { vars = [], args = vector [ustring], results = [intInf] }
-  | typeOf Primitives.UString_str = { vars = [], args = vector [uchar], results = [ustring] }
-  | typeOf Primitives.UString_fromString7 = { vars = [], args = vector [string7], results = [ustring] }
-  | typeOf Primitives.UString_uncheckedFromUtf8 = { vars = [], args = vector [string], results = [ustring] }
-  | typeOf Primitives.UString_uncheckedFromUtf16 = { vars = [], args = vector [string16], results = [ustring] }
-  | typeOf Primitives.UString_uncheckedFromUtf32 = { vars = [], args = vector [string32], results = [ustring] }
-  | typeOf Primitives.UString_encodeUtf8 = { vars = [], args = vector [ustring], results = [string] }
-  | typeOf Primitives.UString_encodeUtf16 = { vars = [], args = vector [ustring], results = [string16] }
-  | typeOf Primitives.UString_encodeUtf32 = { vars = [], args = vector [ustring], results = [string32] }
   | typeOf Primitives.IntInf_andb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
   | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
@@ -2967,6 +2971,37 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
   | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyA, tyB), tyA], results = [tyB] }
   | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [tyA] }
+  | typeOf Primitives.UTF8_isWellFormed = { vars = [], args = vector [string], results = [bool] }
+  | typeOf Primitives.UTF8_str = { vars = [], args = vector [uchar], results = [string] }
+  | typeOf (Primitives.UTF8_size Primitives.INT) = { vars = [], args = vector [string], results = [int] }
+  | typeOf (Primitives.UTF8_size Primitives.I32) = { vars = [], args = vector [string], results = [int32] }
+  | typeOf (Primitives.UTF8_size Primitives.I54) = { vars = [], args = vector [string], results = [int54] }
+  | typeOf (Primitives.UTF8_size Primitives.I64) = { vars = [], args = vector [string], results = [int64] }
+  | typeOf (Primitives.UTF8_size Primitives.INT_INF) = { vars = [], args = vector [string], results = [intInf] }
+  | typeOf (Primitives.UTF8_codePointAt Primitives.INT) = { vars = [], args = vector [string, int], results = [uchar] }
+  | typeOf (Primitives.UTF8_codePointAt Primitives.I32) = { vars = [], args = vector [string, int32], results = [uchar] }
+  | typeOf (Primitives.UTF8_codePointAt Primitives.I54) = { vars = [], args = vector [string, int54], results = [uchar] }
+  | typeOf (Primitives.UTF8_codePointAt Primitives.I64) = { vars = [], args = vector [string, int64], results = [uchar] }
+  | typeOf (Primitives.UTF8_codePointAt Primitives.INT_INF) = { vars = [], args = vector [string, intInf], results = [uchar] }
+  | typeOf (Primitives.UTF8_offset Primitives.INT) = { vars = [], args = vector [string, int], results = [int] }
+  | typeOf (Primitives.UTF8_offset Primitives.I32) = { vars = [], args = vector [string, int32], results = [int32] }
+  | typeOf (Primitives.UTF8_offset Primitives.I54) = { vars = [], args = vector [string, int54], results = [int54] }
+  | typeOf (Primitives.UTF8_offset Primitives.I64) = { vars = [], args = vector [string, int64], results = [int64] }
+  | typeOf (Primitives.UTF8_offset Primitives.INT_INF) = { vars = [], args = vector [string, intInf], results = [intInf] }
+  | typeOf Primitives.UTF16_LT = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.UTF16_isWellFormed = { vars = [], args = vector [string16], results = [bool] }
+  | typeOf Primitives.UTF16_toWellFormed = { vars = [], args = vector [string16], results = [string16] }
+  | typeOf Primitives.UTF16_str = { vars = [], args = vector [uchar], results = [string16] }
+  | typeOf (Primitives.UTF16_codePointAt Primitives.INT) = { vars = [], args = vector [string16, int], results = [char32] }
+  | typeOf (Primitives.UTF16_codePointAt Primitives.I32) = { vars = [], args = vector [string16, int32], results = [char32] }
+  | typeOf (Primitives.UTF16_codePointAt Primitives.I54) = { vars = [], args = vector [string16, int54], results = [char32] }
+  | typeOf (Primitives.UTF16_codePointAt Primitives.I64) = { vars = [], args = vector [string16, int64], results = [char32] }
+  | typeOf (Primitives.UTF16_codePointAt Primitives.INT_INF) = { vars = [], args = vector [string16, intInf], results = [char32] }
+  | typeOf (Primitives.UTF16_size Primitives.INT) = { vars = [], args = vector [string16], results = [int] }
+  | typeOf (Primitives.UTF16_size Primitives.I32) = { vars = [], args = vector [string16], results = [int32] }
+  | typeOf (Primitives.UTF16_size Primitives.I54) = { vars = [], args = vector [string16], results = [int54] }
+  | typeOf (Primitives.UTF16_size Primitives.I64) = { vars = [], args = vector [string16], results = [int64] }
+  | typeOf (Primitives.UTF16_size Primitives.INT_INF) = { vars = [], args = vector [string16], results = [intInf] }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue, prim_effect], results = [LuaValue] }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], results = [] }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], results = [bool] }
@@ -3051,4 +3086,9 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf Primitives.JavaScript_function = { vars = [], args = vector [function1Of (vectorOf (JavaScriptValue), JavaScriptValue)], results = [JavaScriptValue] }
   | typeOf Primitives.JavaScript_encodeUtf8 = { vars = [], args = vector [string16], results = [string] }
   | typeOf Primitives.JavaScript_decodeUtf8 = { vars = [], args = vector [string], results = [string16] }
+  | typeOf (Primitives.JavaScript_codePointAt Primitives.INT) = { vars = [], args = vector [string16, int], results = [char32] }
+  | typeOf (Primitives.JavaScript_codePointAt Primitives.I32) = { vars = [], args = vector [string16, int32], results = [char32] }
+  | typeOf (Primitives.JavaScript_codePointAt Primitives.I54) = { vars = [], args = vector [string16, int54], results = [char32] }
+  | typeOf (Primitives.JavaScript_codePointAt Primitives.I64) = { vars = [], args = vector [string16, int64], results = [char32] }
+  | typeOf (Primitives.JavaScript_codePointAt Primitives.INT_INF) = { vars = [], args = vector [string16, intInf], results = [char32] }
 end;

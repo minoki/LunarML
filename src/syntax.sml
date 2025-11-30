@@ -145,6 +145,7 @@ sig
   | OVERLOAD_maxInt
   | OVERLOAD_wordSize
   | OVERLOAD_maxOrd
+  | OVERLOAD_maxCodeUnit
   structure OverloadKeyMap: ORD_MAP where type Key.ord_key = OverloadKey
   type ESImportName = string
   datatype Exp =
@@ -523,6 +524,7 @@ struct
   | OVERLOAD_maxInt
   | OVERLOAD_wordSize
   | OVERLOAD_maxOrd
+  | OVERLOAD_maxCodeUnit
 
   structure OverloadKey =
   struct
@@ -580,6 +582,9 @@ struct
       | compare (OVERLOAD_wordSize, _) = LESS
       | compare (_, OVERLOAD_wordSize) = GREATER
       | compare (OVERLOAD_maxOrd, OVERLOAD_maxOrd) = EQUAL
+      | compare (OVERLOAD_maxOrd, _) = LESS
+      | compare (_, OVERLOAD_maxOrd) = GREATER
+      | compare (OVERLOAD_maxCodeUnit, OVERLOAD_maxCodeUnit) = EQUAL
   end
   structure OverloadKeyMap = RedBlackMapFn(OverloadKey)
 

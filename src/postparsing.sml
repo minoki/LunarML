@@ -1218,6 +1218,16 @@ struct
                   , ("maxOrd", Syntax.OVERLOAD_maxOrd)
                   ]
                 )
+            | "UnicodeString" =>
+                ( Syntax.CLASS_STRING
+                , [ ("<", Syntax.OVERLOAD_LT)
+                  , ("<=", Syntax.OVERLOAD_LE)
+                  , (">", Syntax.OVERLOAD_GT)
+                  , (">=", Syntax.OVERLOAD_GE)
+                  , ("maxOrd", Syntax.OVERLOAD_maxOrd)
+                  , ("maxCodeUnit", Syntax.OVERLOAD_maxCodeUnit)
+                  ]
+                )
             | _ => emitError (ctx, [span], "unknown overload class: " ^ class)
           fun isSimpleExp (Syntax.VarExp _) = true
             | isSimpleExp (Syntax.TypedExp (_, exp, _)) = isSimpleExp exp

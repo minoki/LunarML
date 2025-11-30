@@ -113,14 +113,6 @@ struct
               (fn (c, acc) =>
                  StringElement.charToString (StringElement.CODEUNIT c) ^ acc)
               "\"" x)]
-    | doPrimOp (F.UStringConstOp x) =
-        [P.Fragment
-           ("ustring \""
-            ^
-            Vector.foldr
-              (fn (c, acc) =>
-                 StringElement.charToString (StringElement.CODEUNIT c) ^ acc)
-              "\"" x)]
     | doPrimOp (F.RaiseOp _) = [P.Fragment "raise"]
     | doPrimOp F.ListOp = [P.Fragment "list"]
     | doPrimOp F.VectorOp = [P.Fragment "vector"]
@@ -168,8 +160,6 @@ struct
         [P.Fragment "<string16>"]
     | doPat _ (F.SConPat {scon = F.String32Constant _, ...}) =
         [P.Fragment "<string32>"]
-    | doPat _ (F.SConPat {scon = F.UStringConstant _, ...}) =
-        [P.Fragment "<ustring>"]
     | doPat prec (F.VarPat (_, vid, ty)) =
         showParen (prec >= 1)
           (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : "

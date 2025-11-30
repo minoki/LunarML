@@ -61,7 +61,6 @@ struct
       | goValue _ (v as C.String7Const _) = v
       | goValue _ (v as C.String16Const _) = v
       | goValue _ (v as C.String32Const _) = v
-      | goValue _ (v as C.UStringConst _) = v
       | goValue _ (v as C.PrimEffect _) = v
       | goValue (env as {tyMap, ...}) (C.Cast {value, from, to}) =
           C.Cast

@@ -269,7 +269,6 @@ struct
          val string7 = F.TyVar PrimTypes.Names.string7
          val string16 = F.TyVar PrimTypes.Names.string16
          val string32 = F.TyVar PrimTypes.Names.string32
-         val ustring = F.TyVar PrimTypes.Names.ustring
          val intInf = F.TyVar PrimTypes.Names.intInf
          val int32 = F.TyVar PrimTypes.Names.int32
          val int54 = F.TyVar PrimTypes.Names.int54

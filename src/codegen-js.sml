@@ -41,7 +41,7 @@ struct
    * string -> immutable Uint8Array
    * char -> 8-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
    * Char7.char -> 7-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
-   * String7.string, String16.string, ustring -> 16-bit string
+   * String7.string, String16.string -> 16-bit string
    * Char16.char -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
    * exn -> object
    * bool -> boolean
@@ -284,9 +284,6 @@ struct
           , "of"
           , Vector.map (J.ConstExp o J.Numeral o Int.toString) x
           )
-    | doValue _ (C.UStringConst x) =
-        J.ConstExp (J.WideString (StringElement.encode16bit
-          (Vector.map StringElement.UNICODE_SCALAR x)))
     | doValue _ (C.PrimEffect _) = J.ConstExp J.Null
     | doValue ctx (C.Cast {value, ...}) = doValue ctx value
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
@@ -1178,9 +1175,34 @@ struct
                            )
                      , PURE
                      )
-               | Primitives.UString_EQUAL => doBinaryOp (J.EQUAL, PURE)
-               | Primitives.UString_HAT => doBinaryOp (J.PLUS, PURE)
-               | Primitives.UString_str =>
+               | Primitives.UTF16_LT =>
+                   doBinaryExp
+                     ( fn (a, b) =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_UTF16_LT")
+                           , vector [a, b]
+                           )
+                     , PURE
+                     )
+               | Primitives.UTF16_isWellFormed =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_UTF16_isWellFormed")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.UTF16_toWellFormed =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           ( J.VarExp (J.PredefinedId "_UTF16_toWellFormed")
+                           , vector [a]
+                           )
+                     , PURE
+                     )
+               | Primitives.UTF16_str =>
                    doUnaryExp
                      ( fn a =>
                          J.MethodExp
@@ -1190,20 +1212,18 @@ struct
                            )
                      , PURE
                      )
-               | Primitives.UString_fromString7 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
-               | Primitives.UString_encodeUtf8 =>
-                   doUnary (fn f =>
-                     J.CallExp
-                       (J.VarExp (J.PredefinedId "_encodeUtf8"), vector [f]))
-               | Primitives.UString_uncheckedFromUtf8 =>
-                   doUnary (fn f =>
-                     J.CallExp
-                       (J.VarExp (J.PredefinedId "_decodeUtf8"), vector [f]))
-               | Primitives.UString_uncheckedFromUtf16 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
-               | Primitives.UString_encodeUtf16 =>
-                   doUnaryExp (fn a => a, PURE) (* no-op *)
+               | Primitives.UTF16_codePointAt Primitives.I54 =>
+                   doBinaryExp
+                     ( fn (s, i) => J.MethodExp (s, "codePointAt", vector [i])
+                     , PURE
+                     )
+               | Primitives.UTF16_size Primitives.I54 =>
+                   doUnaryExp
+                     ( fn a =>
+                         J.CallExp
+                           (J.VarExp (J.PredefinedId "_UTF16_size"), vector [a])
+                     , PURE
+                     )
                | Primitives.Int_PLUS Primitives.INT_INF =>
                    doBinaryOp (J.PLUS, PURE)
                | Primitives.Int_MINUS Primitives.INT_INF =>

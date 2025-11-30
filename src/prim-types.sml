@@ -25,7 +25,6 @@ sig
     val string7: TypedSyntax.TyName
     val string16: TypedSyntax.TyName
     val string32: TypedSyntax.TyName
-    val ustring: TypedSyntax.TyName
     val exn: TypedSyntax.TyName
     val exntag: TypedSyntax.TyName
     val lua_value: TypedSyntax.TyName
@@ -60,7 +59,6 @@ sig
   val string7: 'l TypedSyntax.BaseTy
   val string16: 'l TypedSyntax.BaseTy
   val string32: 'l TypedSyntax.BaseTy
-  val ustring: 'l TypedSyntax.BaseTy
   val exn: 'l TypedSyntax.BaseTy
   val exntag: 'l TypedSyntax.BaseTy
   val lua_value: 'l TypedSyntax.BaseTy
@@ -121,7 +119,6 @@ struct
     val char7 = TypedSyntax.MkTyName ("Char7.char", 29)
     val string7 = TypedSyntax.MkTyName ("String7.string", 30)
     val uchar = TypedSyntax.MkTyName ("UChar.char", 31)
-    val ustring = TypedSyntax.MkTyName ("UString.string", 32)
   end
 
   val unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
@@ -140,7 +137,6 @@ struct
   val char32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.char32)
   val string32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.string32)
   val uchar = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.uchar)
-  val ustring = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.ustring)
   val intInf = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.intInf)
   val lua_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.lua_value)
   val js_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.js_value)
