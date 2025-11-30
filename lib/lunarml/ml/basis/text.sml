@@ -13,14 +13,14 @@ signature TEXT = sig
                                = CharVector.vector = CharArray.vector
                                = CharVectorSlice.vector = CharArraySlice.vector
     sharing type CharArray.array = CharArraySlice.array
-    sharing type CharVectorSlice.slice = CharArraySlice.vector_slice
+    sharing type Substring.substring = CharVectorSlice.slice
+                                     = CharArraySlice.vector_slice
 end;
 
 structure Text :> TEXT where type Char.char = Char.char
                        where type String.string = String.string
                        where type Substring.substring = Substring.substring
                        where type CharArray.array = CharArray.array
-                       where type CharVectorSlice.slice = CharVectorSlice.slice
                        where type CharArraySlice.slice = CharArraySlice.slice
   = struct
 structure Char = Char
