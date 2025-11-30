@@ -295,7 +295,7 @@ fun implode (l : Char32.char list) : String32.string
       in Lua.unsafeFromValue result
       end
 fun explode (s : String32.string) : Char32.char list
-    = Vector.foldr (op ::) [] (Vector.tabulate (String32.size s, fn i => sub (s, i)))
+    = List.tabulate (String32.size s, fn i => sub (s, i))
 fun translate (f : Char32.char -> String32.string) (s : String32.string) : String32.string
     = let val n = String32.size s
           fun go i = if i >= n then

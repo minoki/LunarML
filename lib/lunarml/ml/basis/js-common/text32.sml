@@ -275,7 +275,7 @@ fun concatWith (s : String32.string) (l : String32.string list) : String32.strin
 fun implode xs = _primCall "String32.implode" (xs)
 fun implodeRev l = implode (List.rev l)
 fun explode (s : String32.string) : Char32.char list
-    = Vector.foldr (op ::) [] (Vector.tabulate (String32.size s, fn i => UnsafeString32.sub (s, i)))
+    = List.tabulate (String32.size s, fn i => UnsafeString32.sub (s, i))
 fun translate (f : Char32.char -> String32.string) (s : String32.string) : String32.string
     = let val n = String32.size s
           fun go i = if i >= n then

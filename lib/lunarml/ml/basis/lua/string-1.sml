@@ -61,7 +61,7 @@ fun implode (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.
 fun implodeRev (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.map String.str (Vector.fromList (List.rev l)))]
                                           in Lua.unsafeFromValue result
                                           end
-fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
+fun explode (s : string) : char list = List.tabulate (size s, fn i => sub (s, i))
 fun map (f : char -> char) (s : string) : string = let fun g (x : string) : string = String.str (f (Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.byte #[Lua.fromString x])))
                                                        val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue g]
                                                    in Lua.unsafeFromValue result

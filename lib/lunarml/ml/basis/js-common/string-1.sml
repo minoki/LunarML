@@ -42,7 +42,7 @@ fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse 
                                                                     JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue s, "subarray") #[JavaScript.fromInt i, JavaScript.fromInt (size s)])
   | extract (s, i, SOME j) = substring (s, i, j)
 fun concatWith (s : string) (l : string list) : string = _primCall "call2" (_Prim.String.concatWith, s, l)
-fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
+fun explode (s : string) : char list = List.tabulate (size s, fn i => sub (s, i))
 fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
                        | go (revTokens, acc, x :: xs) = if f x then
                                                             go (if List.null acc then revTokens else implodeRev acc :: revTokens, [], xs)

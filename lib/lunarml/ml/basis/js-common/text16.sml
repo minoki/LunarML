@@ -272,7 +272,7 @@ fun implode (l : Char16.char list) : String16.string
       in JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue v, "join") #[JavaScript.fromString16 ""])
       end
 fun explode (s : String16.string) : Char16.char list
-    = Vector.foldr (op ::) [] (Vector.tabulate (String16.size s, fn i => sub (s, i)))
+    = List.tabulate (String16.size s, fn i => sub (s, i))
 fun translate (f : Char16.char -> String16.string) (s : String16.string) : String16.string
     = let val n = String16.size s
           fun go i = if i >= n then
