@@ -5284,256 +5284,47 @@ struct
         List.map doBranch patsAndExps
       end
 
-    (* pretty printing *)
-    (*
-    structure PrettyPrint = struct
-    fun print_Env ({ tyConMap, valMap, strMap, boundTyVars, ... } : Env) = "Env{tyMap=" ^ TypedSyntax.print_TyConMap (fn _ => "TypeStructure _") tyConMap ^ ",valMap=" ^ TypedSyntax.print_VIdMap (Syntax.print_pair (TypedSyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=...,boundTyVars=...}"
-    end (* structure PrettyPrint *)
-    open PrettyPrint
-    *)
-    (*: val applyDefaultTypes : Context * TypedSyntax.Dec list -> unit *)
-    fun applyDefaultTypes (ctx, decs: T.Dec list) : unit =
+    (*: val applyDefaultTypes : Context * TypedSyntax.Dec list -> (SourcePos.span * T.TyName * bool) list *)
+    fun applyDefaultTypes (ctx, decs: T.Dec list) :
+      (SourcePos.span * T.TyName * bool) list =
       let
-        fun findClass [] = NONE
-          | findClass ((span, TypedSyntax.IsInt) :: _) =
-              SOME (span, Syntax.CLASS_INT)
-          | findClass ((span, TypedSyntax.IsWord) :: _) =
-              SOME (span, Syntax.CLASS_WORD)
-          | findClass ((span, TypedSyntax.IsReal) :: _) =
-              SOME (span, Syntax.CLASS_REAL)
-          | findClass ((span, TypedSyntax.IsChar) :: _) =
-              SOME (span, Syntax.CLASS_CHAR)
-          | findClass ((span, TypedSyntax.IsString) :: _) =
-              SOME (span, Syntax.CLASS_STRING)
-          | findClass (_ :: xs) = findClass xs
-        fun doInt (span1, xs) =
-          ( List.app
-              (fn (span2, c) =>
-                 case c of
-                   TypedSyntax.IsRecord _ =>
-                     emitError
-                       (ctx, [span1, span2], "invalid record syntax for int")
-                 | TypedSyntax.IsEqType => ()
-                 | TypedSyntax.IsIntegral => ()
-                 | TypedSyntax.IsSignedReal => ()
-                 | TypedSyntax.IsRing => ()
-                 | TypedSyntax.IsOrdered => ()
-                 | TypedSyntax.IsInt => ()
-                 | TypedSyntax.IsWord =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: int vs word")
-                 | TypedSyntax.IsReal =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: int vs real")
-                 | TypedSyntax.IsChar =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: int vs char")
-                 | TypedSyntax.IsString =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: int vs string")) xs
-          ; PrimTypes.int
-          )
-        fun doWord (span1, xs) =
-          ( List.app
-              (fn (span2, c) =>
-                 case c of
-                   TypedSyntax.IsRecord _ =>
-                     emitError
-                       (ctx, [span1, span2], "invalid record syntax for word")
-                 | TypedSyntax.IsEqType => ()
-                 | TypedSyntax.IsIntegral => ()
-                 | TypedSyntax.IsSignedReal =>
-                     emitError (ctx, [span1, span2], "abs is invalid for word")
-                 | TypedSyntax.IsRing => ()
-                 | TypedSyntax.IsOrdered => ()
-                 | TypedSyntax.IsInt =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: word vs int")
-                 | TypedSyntax.IsWord => ()
-                 | TypedSyntax.IsReal =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: word vs real")
-                 | TypedSyntax.IsChar =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: word vs char")
-                 | TypedSyntax.IsString =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: word vs string"))
-              xs
-          ; PrimTypes.word
-          )
-        fun doReal (span1, xs) =
-          ( List.app
-              (fn (span2, c) =>
-                 case c of
-                   TypedSyntax.IsRecord _ =>
-                     emitError
-                       (ctx, [span1, span2], "invalid record syntax for real")
-                 | TypedSyntax.IsEqType =>
-                     emitError
-                       (ctx, [span1, span2], "real does not admit equality")
-                 | TypedSyntax.IsIntegral =>
-                     emitError
-                       (ctx, [span1, span2], "div, mod are invalid for real")
-                 | TypedSyntax.IsSignedReal => ()
-                 | TypedSyntax.IsRing => ()
-                 | TypedSyntax.IsOrdered => ()
-                 | TypedSyntax.IsInt =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: real vs int")
-                 | TypedSyntax.IsWord =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: real vs word")
-                 | TypedSyntax.IsReal => ()
-                 | TypedSyntax.IsChar =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: real vs char")
-                 | TypedSyntax.IsString =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: real vs string"))
-              xs
-          ; PrimTypes.real
-          )
-        fun doChar (span1, xs) =
-          ( List.app
-              (fn (span2, c) =>
-                 case c of
-                   TypedSyntax.IsRecord _ =>
-                     emitError
-                       (ctx, [span1, span2], "invalid record syntax for char")
-                 | TypedSyntax.IsEqType => ()
-                 | TypedSyntax.IsIntegral =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on char")
-                 | TypedSyntax.IsSignedReal =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on char")
-                 | TypedSyntax.IsRing =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on char")
-                 | TypedSyntax.IsOrdered => ()
-                 | TypedSyntax.IsInt =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: char vs int")
-                 | TypedSyntax.IsWord =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: char vs word")
-                 | TypedSyntax.IsReal =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: char vs real")
-                 | TypedSyntax.IsChar => ()
-                 | TypedSyntax.IsString =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: char vs string"))
-              xs
-          ; PrimTypes.char
-          )
-        fun doString (span1, xs) =
-          ( List.app
-              (fn (span2, c) =>
-                 case c of
-                   TypedSyntax.IsRecord _ =>
-                     emitError
-                       (ctx, [span1, span2], "invalid record syntax for string")
-                 | TypedSyntax.IsEqType => ()
-                 | TypedSyntax.IsIntegral =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on string")
-                 | TypedSyntax.IsSignedReal =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on string")
-                 | TypedSyntax.IsRing =>
-                     emitError
-                       (ctx, [span1, span2], "invalid operation on string")
-                 | TypedSyntax.IsOrdered => ()
-                 | TypedSyntax.IsInt =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: string vs int")
-                 | TypedSyntax.IsWord =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: string vs word")
-                 | TypedSyntax.IsReal =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: string vs real")
-                 | TypedSyntax.IsChar =>
-                     emitError
-                       (ctx, [span1, span2], "type mismatch: string vs char")
-                 | TypedSyntax.IsString => ()) xs
-          ; PrimTypes.string
-          )
-        fun doIntOrReal (_, []) = PrimTypes.int
-          | doIntOrReal (span1, (span2, c) :: xs) =
-              case c of
-                TypedSyntax.IsRecord _ =>
-                  ( emitError (ctx, [span1, span2], "unresolved flex record")
-                  ; doIntOrReal (span1, xs)
-                  )
-              | TypedSyntax.IsEqType => doInt (span1, xs)
-              | TypedSyntax.IsIntegral => doInt (span1, xs)
-              | TypedSyntax.IsSignedReal => doIntOrReal (span1, xs)
-              | TypedSyntax.IsRing => doIntOrReal (span1, xs)
-              | TypedSyntax.IsOrdered => doIntOrReal (span1, xs)
-              | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsWord => doIntOrReal (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsReal => doReal (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsChar => doIntOrReal (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsString =>
-                  doIntOrReal (span1, xs) (* cannot occur *)
-        fun defaultTyForConstraints (_, _, []) = PrimTypes.unit
-          | defaultTyForConstraints (eq, spans, (span1, c) :: xs) =
-              case c of
-                TypedSyntax.IsRecord _ =>
-                  ( emitError (ctx, [span1], "unresolved flex record")
-                  ; defaultTyForConstraints (eq, spans, xs)
-                  )
-              | TypedSyntax.IsEqType =>
-                  defaultTyForConstraints
-                    (true, if List.null spans then [span1] else spans, xs)
-              | TypedSyntax.IsIntegral => doInt (span1, xs)
-              | TypedSyntax.IsSignedReal =>
-                  if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
-              | TypedSyntax.IsRing =>
-                  if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
-              | TypedSyntax.IsOrdered =>
-                  if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
-              | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsWord => doWord (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsReal =>
-                  ( if eq then
-                      emitError
-                        (ctx, span1 :: spans, "real does not admit equality")
-                    else
-                      ()
-                  ; doReal (span1, xs)
-                  ) (* cannot occur *)
-              | TypedSyntax.IsChar => doChar (span1, xs) (* cannot occur *)
-              | TypedSyntax.IsString => doString (span1, xs) (* cannot occur *)
         fun doTyVar tv =
           case !tv of
-            T.Link _ => ()
-          | T.Unbound ({sourceSpan, equalityRequired = _, class}, _) =>
-              let
-                val ty =
-                  case class of
-                    SOME T.Int => PrimTypes.int
-                  | SOME T.Word => PrimTypes.word
-                  | SOME T.Real => PrimTypes.real
-                  | SOME T.Char => PrimTypes.char
-                  | SOME T.String => PrimTypes.string
-                  | SOME T.NumTxt => PrimTypes.int
-                  | SOME T.IntWordReal => PrimTypes.int
-                  | SOME T.IntWord => PrimTypes.int
-                  | SOME T.IntReal => PrimTypes.int
-                  | SOME (T.Record _) =>
-                      ( emitError (ctx, [sourceSpan], "unresolved flex record")
-                      ; PrimTypes.unit
-                      )
-                  | NONE => PrimTypes.unit
-              in
-                tv := T.Link ty
-              end
+            T.Link _ => []
+          | T.Unbound ({sourceSpan, equalityRequired, class}, _) =>
+              case class of
+                SOME class =>
+                  let
+                    val defaultTy =
+                      case class of
+                        T.Int => PrimTypes.int
+                      | T.Word => PrimTypes.word
+                      | T.Real => PrimTypes.real
+                      | T.Char => PrimTypes.char
+                      | T.String => PrimTypes.string
+                      | T.NumTxt => PrimTypes.int
+                      | T.IntWordReal => PrimTypes.int
+                      | T.IntWord => PrimTypes.int
+                      | T.IntReal => PrimTypes.int
+                      | T.Record _ =>
+                          ( emitError
+                              (ctx, [sourceSpan], "unresolved flex record")
+                          ; PrimTypes.unit
+                          )
+                  in
+                    tv := T.Link defaultTy;
+                    []
+                  end
+              | NONE =>
+                  let
+                    val tyname =
+                      newTyName (ctx, Syntax.MkTyCon "<non-generalized type>")
+                  in
+                    tv := T.Link (T.TyCon (sourceSpan, [], tyname));
+                    [(sourceSpan, tyname, equalityRequired)]
+                  end
       in
-        List.app doTyVar (TypedSyntax.freeTyVarsInDecs ([], decs))
+        List.concat (List.map doTyVar (TypedSyntax.freeTyVarsInDecs ([], decs)))
       end
 
     local
@@ -5743,9 +5534,29 @@ struct
       let
         val ictx = {context = ctx, level = 0}
         val (env, decs) = typeCheckDecs (ictx, env, decs)
-        val () = applyDefaultTypes (ctx, decs)
-        val decs = #doDecs (TypedSyntax.forceTyIn ctx) decs
+        val nonGeneralizedTyNames = applyDefaultTypes (ctx, decs)
+        fun declareNonGeneralizedTyName (span, tyname, eq) =
+          T.DatatypeDec (span, [T.DatBind (span, [], tyname, [], eq)])
+        val decs =
+          List.map declareNonGeneralizedTyName nonGeneralizedTyNames
+          @ #doDecs (TypedSyntax.forceTyIn ctx) decs
         val () = checkTypeDescriptionInDecs (ctx, T.TyVarSet.empty, decs)
+        val env =
+          { valMap = #valMap env
+          , tyConMap = #tyConMap env
+          , tyNameMap =
+              List.foldl
+                (fn ((_, tyname, eq), acc) =>
+                   T.TyNameMap.insert
+                     ( acc
+                     , tyname
+                     , {arity = 0, admitsEquality = eq, overloadClass = NONE}
+                     )) (#tyNameMap env) nonGeneralizedTyNames
+          , strMap = #strMap env
+          , sigMap = #sigMap env
+          , funMap = #funMap env
+          , boundTyVars = #boundTyVars env
+          }
       in
         (env, decs)
       end
