@@ -184,18 +184,16 @@ struct
     }
 
   fun freeTyVarsInEnv
-    ( _ (* bound *)
-    , { valMap = _
-      , tyConMap = _
-      , tyNameMap = _
-      , strMap = _
-      , sigMap = _
-      , funMap = _
-      , boundTyVars
-      }: Env
-    ) =
-    Syntax.TyVarMap.foldl (fn (tv, set) => TypedSyntax.TyVarSet.add (set, tv))
-      TypedSyntax.TyVarSet.empty boundTyVars
+    ({ valMap = _
+     , tyConMap = _
+     , tyNameMap = _
+     , strMap = _
+     , sigMap = _
+     , funMap = _
+     , boundTyVars
+     }: Env) =
+    Syntax.TyVarMap.foldl TypedSyntax.TyVarSet.add' TypedSyntax.TyVarSet.empty
+      boundTyVars
 
   type Context =
     { nextTyVar: int ref
@@ -3623,33 +3621,34 @@ struct
                              (m, tv, genTyVar (#context ctx', tv)))
                         (#boundTyVars env) tyvarseq
                   }
+                fun goPatBind (S.PatBind (span, pat, exp)) =
+                  let
+                    val (expTy, exp) =
+                      case pat of
+                        S.TypedPat (_, _, ty) =>
+                          let val ty = evalTy (#context ctx', env, ty)
+                          in (ty, checkTypeOfExp (ctx', env, exp, ty))
+                          end
+                      | _ => synthTypeOfExp (ctx', env, exp)
+                    val (newValEnv, pat) = checkTypeOfPat
+                      (ctx', env, pat, expTy, Syntax.VIdMap.empty)
+                    val generalizable =
+                      isExhaustive (ctx', env, pat)
+                      andalso isNonexpansive (env, exp)
+                  in
+                    { sourceSpan = span
+                    , pat = pat
+                    , exp = exp
+                    , expTy = expTy
+                    , valEnv = newValEnv
+                    , generalizable = generalizable
+                    }
+                  end
               in
-                List.map
-                  (fn S.PatBind (span, pat, exp) =>
-                     let
-                       val (expTy, exp) =
-                         case pat of
-                           S.TypedPat (_, _, ty) =>
-                             let val ty = evalTy (#context ctx', env, ty)
-                             in (ty, checkTypeOfExp (ctx', env, exp, ty))
-                             end
-                         | _ => synthTypeOfExp (ctx', env, exp)
-                       val (newValEnv, pat) = checkTypeOfPat
-                         (ctx', env, pat, expTy, Syntax.VIdMap.empty)
-                       val generalizable =
-                         isExhaustive (ctx', env, pat)
-                         andalso isNonexpansive (env, exp)
-                     in
-                       { sourceSpan = span
-                       , pat = pat
-                       , exp = exp
-                       , expTy = expTy
-                       , valEnv = newValEnv
-                       , generalizable = generalizable
-                       }
-                     end) valbinds
+                List.map goPatBind valbinds
               end
-            val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env)
+            val outerTyVars =
+              freeTyVarsInEnv env (* type variables bound in an outer scope *)
             fun generalize
                   ( { sourceSpan = span
                     , pat
@@ -3662,6 +3661,11 @@ struct
                   ) =
                   let
                     val vars = Syntax.VIdMap.listItems valEnv
+                    fun forbidDuplicate (_, y) =
+                      ( emitTypeError
+                          (ctx, [span], "duplicate identifier in a binding")
+                      ; y
+                      )
                   in
                     List.app
                       (fn (_, ty) =>
@@ -3687,6 +3691,12 @@ struct
                                 T.VarPat _ => exp
                               | T.TypedPat (_, T.VarPat _, _) => exp
                               | _ =>
+                                  (*
+                                   * Translate
+                                   *   val <pat> = <exp>
+                                   * into:
+                                   *   val x = case <exp> of <pat> => x
+                                   *)
                                   let
                                     val espan = T.getSourceSpanOfExp exp
                                     val vid' = renewVId (#context ctx) vid
@@ -3715,15 +3725,7 @@ struct
                             )
                         in
                           ( valbind' :: valbinds
-                          , S.VIdMap.unionWith
-                              (fn (_, y) =>
-                                 ( emitTypeError
-                                     ( ctx
-                                     , [span]
-                                     , "duplicate identifier in a binding"
-                                     )
-                                 ; y
-                                 ))
+                          , S.VIdMap.unionWith forbidDuplicate
                               ( S.VIdMap.map
                                   (fn (vid, ty) => (vid, T.TypeScheme ([], ty)))
                                   valEnv
@@ -3732,6 +3734,12 @@ struct
                           )
                         end
                     | _ =>
+                        (*
+                         * Translate
+                         *   val <pat> = <exp>
+                         * into:
+                         *   val (x1, ..., xn) = case <exp> of <pat> => (x1, ..., xn)
+                         *)
                         let
                           val espan = T.getSourceSpanOfExp exp
                           val vars' =
@@ -3763,15 +3771,7 @@ struct
                             })
                         in
                           ( valbind' :: valbinds
-                          , S.VIdMap.unionWith
-                              (fn (_, y) =>
-                                 ( emitTypeError
-                                     ( ctx
-                                     , [span]
-                                     , "duplicate identifier in a binding"
-                                     )
-                                 ; y
-                                 ))
+                          , S.VIdMap.unionWith forbidDuplicate
                               ( S.VIdMap.map
                                   (fn (vid, ty) => (vid, T.TypeScheme ([], ty)))
                                   valEnv
@@ -3791,63 +3791,57 @@ struct
                   , (valbinds, valEnvRest)
                   ) =
                   let
-                    fun doVal (vid, ty) =
+                    fun getTypeScheme (vid, ty) =
                       let
                         val ty = T.forceTy ty
-                        val tyVars = T.freeTyVarsInTy (tyVars_env, ty)
-                        val aTyVars_ty = T.freeAnonymousTyVarsInTy ty
-                        val aTyVars =
-                          List.foldl
-                            (fn (tv, vars) =>
-                               case !tv of
-                                 T.Unbound
-                                   ( ct as
-                                       {sourceSpan = _, equalityRequired, class}
-                                   , level
-                                   ) =>
-                                   if
-                                     level > #level ctx
-                                     andalso not (Option.isSome class)
-                                   then
-                                     if not equalityRequired then
-                                       let
-                                         val tv' =
-                                           genTyVar
-                                             (#context ctx, Syntax.MkTyVar "'?")
-                                       in
-                                         tv := T.Link (T.TyVar (span, tv'));
-                                         (tv', NONE) :: vars
-                                       end
-                                     else
-                                       let
-                                         val tv' =
-                                           genTyVar
-                                             ( #context ctx
-                                             , Syntax.MkTyVar "''?"
-                                             )
-                                       in
-                                         tv := T.Link (T.TyVar (span, tv'));
-                                         (tv', SOME T.IsEqType) :: vars
-                                       end
-                                   else if
-                                     level > #level ctx
-                                   then
-                                     (tv := T.Unbound (ct, #level ctx); vars)
-                                   else
-                                     vars
-                               | T.Link _ => vars) [] aTyVars_ty
-                        fun doTyVar tv =
+                        fun doNamedTyVar tv =
                           if T.tyVarAdmitsEquality tv then (tv, SOME T.IsEqType)
                           else (tv, NONE)
-                        val tysc = T.TypeScheme
-                          ( List.map doTyVar (T.TyVarSet.listItems tyVars)
-                            @ aTyVars
-                          , ty
-                          )
+                        val namedTyVars =
+                          List.map doNamedTyVar (T.TyVarSet.listItems
+                            (T.freeTyVarsInTy (outerTyVars, ty)))
+                        fun addAnonTyVar (tv, vars) =
+                          case !tv of
+                            T.Unbound
+                              ( ct as {sourceSpan = _, equalityRequired, class}
+                              , level
+                              ) =>
+                              if
+                                level > #level ctx
+                                andalso not (Option.isSome class)
+                              then
+                                if not equalityRequired then
+                                  let
+                                    val tv' =
+                                      genTyVar
+                                        (#context ctx, Syntax.MkTyVar "'?")
+                                  in
+                                    tv := T.Link (T.TyVar (span, tv'));
+                                    (tv', NONE) :: vars
+                                  end
+                                else
+                                  let
+                                    val tv' =
+                                      genTyVar
+                                        (#context ctx, Syntax.MkTyVar "''?")
+                                  in
+                                    tv := T.Link (T.TyVar (span, tv'));
+                                    (tv', SOME T.IsEqType) :: vars
+                                  end
+                              else if
+                                level > #level ctx
+                              then
+                                (tv := T.Unbound (ct, #level ctx); vars)
+                              else
+                                vars
+                          | T.Link _ => vars
+                        val anonTyVars =
+                          List.foldl addAnonTyVar []
+                            (T.freeAnonymousTyVarsInTy ty)
                       in
-                        (vid, tysc)
+                        (vid, T.TypeScheme (namedTyVars @ anonTyVars, ty))
                       end
-                    val valEnv' = Syntax.VIdMap.map doVal valEnv
+                    val valEnv' = Syntax.VIdMap.map getTypeScheme valEnv
                     val valEnv'L = Syntax.VIdMap.listItems valEnv'
                     val allPoly =
                       List.all
@@ -3858,6 +3852,7 @@ struct
                       | polyPart ((_, T.TypeScheme ([], _)) :: rest) =
                           polyPart rest
                       | polyPart ((vid, tysc as T.TypeScheme (_, ty)) :: rest) =
+                          (* Generate `val <vid> = case <exp> of <pat> => <vid>` *)
                           let
                             val vid' = renewVId (#context ctx) vid
                             val pat' =
@@ -3885,6 +3880,7 @@ struct
                               }) :: polyPart rest
                           end
                     fun isMonoVar vid =
+                      (* Is this a monomorphic variable? *)
                       List.exists
                         (fn (vid', T.TypeScheme (tvs, _)) =>
                            T.eqVId (vid, vid') andalso List.null tvs) valEnv'L
@@ -3893,7 +3889,7 @@ struct
                         if List.null valEnv'L then
                           let
                             val vid = freshVId (#context ctx, "dummy")
-                            val (_, tysc) = doVal (vid, expTy)
+                            val (_, tysc) = getTypeScheme (vid, expTy)
                           in
                             [T.PolyVarBind (span, vid, tysc, exp)] (* Make sure the constants in exp are range-checked *)
                           end
@@ -3975,17 +3971,15 @@ struct
                                   }) :: polyPart valEnv'L
                               end
                         end
+                    fun forbidDuplicate (_, y) =
+                      ( emitTypeError
+                          (ctx, [span], "duplicate identifier in a binding")
+                      ; y
+                      )
                   in
                     ( valbind' @ valbinds
-                    , Syntax.VIdMap.unionWith
-                        (fn (_, y) =>
-                           ( emitTypeError
-                               ( ctx
-                               , [span]
-                               , "duplicate identifier in a binding"
-                               )
-                           ; y
-                           )) (valEnv', valEnvRest)
+                    , Syntax.VIdMap.unionWith forbidDuplicate
+                        (valEnv', valEnvRest)
                     )
                   end
             val (valbinds, valEnv) =
@@ -4119,84 +4113,80 @@ struct
                      , valEnv = newValEnv
                      }
                    end) valbinds'
-            val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env)
+            val outerTyVars =
+              freeTyVarsInEnv env (* type variables bound in an outer scope *)
             fun generalize
               ( {sourceSpan = span, pat = _, exp, expTy, valEnv}
               , (valbinds, valEnvRest, tyVarsAcc)
               ) =
               let
-                fun doVal (vid, ty) =
+                fun getTypeScheme (vid, ty) =
                   let
                     val ty = T.forceTy ty
-                    val tyVars = T.freeTyVarsInTy (tyVars_env, ty)
-                    val aTyVars_ty = T.freeAnonymousTyVarsInTy ty
-                    val aTyVars =
-                      List.foldl
-                        (fn (tv, vars) =>
-                           case !tv of
-                             T.Unbound
-                               ( ct as {sourceSpan = _, equalityRequired, class}
-                               , level
-                               ) =>
-                               if
-                                 level > #level ctx
-                                 andalso not (Option.isSome class)
-                               then
-                                 if not equalityRequired then
-                                   let
-                                     val tv' =
-                                       genTyVar
-                                         (#context ctx, Syntax.MkTyVar "'?")
-                                   in
-                                     tv := T.Link (T.TyVar (span, tv'));
-                                     (tv', NONE) :: vars
-                                   end
-                                 else
-                                   let
-                                     val tv' =
-                                       genTyVar
-                                         (#context ctx, Syntax.MkTyVar "''?")
-                                   in
-                                     tv := T.Link (T.TyVar (span, tv'));
-                                     (tv', SOME T.IsEqType) :: vars
-                                   end
-                               else if
-                                 level > #level ctx
-                               then
-                                 (tv := T.Unbound (ct, #level ctx); vars)
-                               else
-                                 vars
-                           | T.Link _ => vars) [] aTyVars_ty
-                    fun doTyVar tv =
+                    fun doNamedTyVar tv =
                       if T.tyVarAdmitsEquality tv then (tv, SOME T.IsEqType)
                       else (tv, NONE)
-                    val tysc = T.TypeScheme
-                      ( List.map doTyVar (T.TyVarSet.listItems tyVars) @ aTyVars
-                      , ty
-                      )
+                    val namedTyVars =
+                      List.map doNamedTyVar (T.TyVarSet.listItems
+                        (T.freeTyVarsInTy (outerTyVars, ty)))
+                    fun addAnonTyVar (tv, vars) =
+                      case !tv of
+                        T.Unbound
+                          ( ct as {sourceSpan = _, equalityRequired, class}
+                          , level
+                          ) =>
+                          if
+                            level > #level ctx andalso not (Option.isSome class)
+                          then
+                            if not equalityRequired then
+                              let
+                                val tv' =
+                                  genTyVar (#context ctx, Syntax.MkTyVar "'?")
+                              in
+                                tv := T.Link (T.TyVar (span, tv'));
+                                (tv', NONE) :: vars
+                              end
+                            else
+                              let
+                                val tv' =
+                                  genTyVar (#context ctx, Syntax.MkTyVar "''?")
+                              in
+                                tv := T.Link (T.TyVar (span, tv'));
+                                (tv', SOME T.IsEqType) :: vars
+                              end
+                          else if
+                            level > #level ctx
+                          then
+                            (tv := T.Unbound (ct, #level ctx); vars)
+                          else
+                            vars
+                      | T.Link _ => vars
+                    val anonTyVars =
+                      List.foldl addAnonTyVar [] (T.freeAnonymousTyVarsInTy ty)
+                    val tysc = T.TypeScheme (namedTyVars @ anonTyVars, ty)
                   in
-                    (vid, tysc, aTyVars)
+                    (vid, tysc, anonTyVars)
                   end
                 val (valEnv', valEnv'L) =
                   if Syntax.VIdMap.isEmpty valEnv then
                     let
                       val vid = freshVId (#context ctx, "dummy")
-                      val (vid, tysc, aTyVars) = doVal (vid, expTy)
+                      val (vid, tysc, anonTyVars) = getTypeScheme (vid, expTy)
                     in
                       ( Syntax.VIdMap.empty
-                      , [(vid, tysc, aTyVars)]
+                      , [(vid, tysc, anonTyVars)]
                       ) (* Make sure the constants in exp are range-checked *)
                     end
                   else
-                    let val valEnv' = Syntax.VIdMap.map doVal valEnv
+                    let val valEnv' = Syntax.VIdMap.map getTypeScheme valEnv
                     in (valEnv', Syntax.VIdMap.listItems valEnv')
                     end
-                val aTyVars =
+                val anonTyVars =
                   List.foldl
-                    (fn ((_, _, aTyVars), acc) =>
+                    (fn ((_, _, anonTyVars), acc) =>
                        List.foldl
                          (fn ((tv, _), acc) => T.TyVarSet.add (acc, tv)) acc
-                         aTyVars) T.TyVarSet.empty valEnv'L
+                         anonTyVars) T.TyVarSet.empty valEnv'L
                 val valbinds =
                   List.foldr
                     (fn ((vid, tysc, _), rest) => (span, vid, tysc, exp) :: rest)
@@ -4204,7 +4194,7 @@ struct
               in
                 ( valbinds
                 , Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest)
-                , T.TyVarSet.union (aTyVars, tyVarsAcc)
+                , T.TyVarSet.union (anonTyVars, tyVarsAcc)
                 )
               end
             val (valbinds, valEnv, allTyVars) =
