@@ -388,16 +388,8 @@ struct
         in
           L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
         end
-    | doValue _ (C.CharConst c) =
-        L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
-    | doValue _ (C.Char7Const c) =
-        L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
-    | doValue _ (C.Char16Const i) =
-        L.ConstExp (L.Numeral (Int.toString i))
-    | doValue _ (C.Char32Const i) =
-        L.ConstExp (L.Numeral (Int.toString i))
-    | doValue _ (C.UCharConst i) =
-        L.ConstExp (L.Numeral (Int.toString i))
+    | doValue _ (C.CharConst (_, c)) =
+        L.ConstExp (L.Numeral (Int.toString c))
     | doValue _ (C.StringConst s) =
         L.ConstExp (L.LiteralString s)
     | doValue _ (C.String7Const s) =

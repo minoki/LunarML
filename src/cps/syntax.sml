@@ -20,6 +20,7 @@ sig
   structure CVarMap: ORD_MAP where type Key.ord_key = CVar.t
   structure CVarTable: MONO_HASH_TABLE where type Key.hash_key = CVar.t
   type Ty = FSyntax.Ty
+  datatype char_width = C7 | C8 | C16 | C32 | UNICODE_SCALAR
   datatype Value =
     Var of Var
   | Unit (* : unit *)
@@ -28,11 +29,7 @@ sig
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
-  | CharConst of char
-  | Char7Const of char
-  | Char16Const of int
-  | Char32Const of int
-  | UCharConst of int
+  | CharConst of char_width * int
   | StringConst of string
   | String7Const of string
   | String16Const of int vector
@@ -145,6 +142,7 @@ struct
          fun sameKey (x: CVar.t, y: CVar.t) = x = y
        end)
   type Ty = FSyntax.Ty
+  datatype char_width = C7 | C8 | C16 | C32 | UNICODE_SCALAR
   datatype Value =
     Var of Var
   | Unit (* : unit *)
@@ -153,11 +151,7 @@ struct
   | BoolConst of bool
   | IntConst of Primitives.int_width * IntInf.int
   | WordConst of Primitives.word_width * IntInf.int
-  | CharConst of char
-  | Char7Const of char
-  | Char16Const of int
-  | Char32Const of int
-  | UCharConst of int
+  | CharConst of char_width * int
   | StringConst of string
   | String7Const of string
   | String16Const of int vector
@@ -240,10 +234,6 @@ struct
     | extractVarFromValue (IntConst _) = NONE
     | extractVarFromValue (WordConst _) = NONE
     | extractVarFromValue (CharConst _) = NONE
-    | extractVarFromValue (Char7Const _) = NONE
-    | extractVarFromValue (Char16Const _) = NONE
-    | extractVarFromValue (Char32Const _) = NONE
-    | extractVarFromValue (UCharConst _) = NONE
     | extractVarFromValue (StringConst _) = NONE
     | extractVarFromValue (String7Const _) = NONE
     | extractVarFromValue (String16Const _) = NONE
@@ -604,15 +594,15 @@ struct
           "Word32(" ^ IntInf.toString x ^ ")"
       | valueToString (WordConst (Primitives.W64, x)) =
           "Word64(" ^ IntInf.toString x ^ ")"
-      | valueToString (CharConst x) =
-          "Char(" ^ Char.toString x ^ ")"
-      | valueToString (Char7Const x) =
-          "Char7(" ^ Char.toString x ^ ")"
-      | valueToString (Char16Const x) =
+      | valueToString (CharConst (C8, x)) =
+          "Char(" ^ Int.toString x ^ ")"
+      | valueToString (CharConst (C7, x)) =
+          "Char7(" ^ Int.toString x ^ ")"
+      | valueToString (CharConst (C16, x)) =
           "Char16(" ^ Int.toString x ^ ")"
-      | valueToString (Char32Const x) =
+      | valueToString (CharConst (C32, x)) =
           "Char32(" ^ Int.toString x ^ ")"
-      | valueToString (UCharConst x) =
+      | valueToString (CharConst (UNICODE_SCALAR, x)) =
           "UChar(" ^ Int.toString x ^ ")"
       | valueToString (StringConst x) =
           "String(\"" ^ String.toString x ^ "\")"
@@ -1127,7 +1117,7 @@ struct
                           | _ => raise Fail "WordConstOp: invalid type")
                      | F.Char7ConstOp x =>
                          apply revDecs k valueTransforms
-                           ( C.Char7Const x
+                           ( C.CharConst (C.C7, Char.ord x)
                            , FSyntax.Types.char7
                            ) (* assume the type is correct *)
                      | F.Char8ConstOp x =>
@@ -1144,24 +1134,24 @@ struct
                                     [TCast {from = FSyntax.Types.char, to = ty}]
                               in
                                 apply revDecs k (t @ valueTransforms)
-                                  ( C.CharConst x
+                                  ( C.CharConst (C.C8, Char.ord x)
                                   , FSyntax.Types.char
                                   ) (* assume the type is correct *)
                               end
                           | _ => raise Fail "Char8ConstOp: invalid type")
                      | F.Char16ConstOp x =>
                          apply revDecs k valueTransforms
-                           ( C.Char16Const x
+                           ( C.CharConst (C.C16, x)
                            , FSyntax.Types.char16
                            ) (* assume the type is correct *)
                      | F.Char32ConstOp x =>
                          apply revDecs k valueTransforms
-                           ( C.Char32Const x
+                           ( C.CharConst (C.C32, x)
                            , FSyntax.Types.char32
                            ) (* assume the type is correct *)
                      | F.UCharConstOp x =>
                          apply revDecs k valueTransforms
-                           ( C.UCharConst x
+                           ( C.CharConst (C.UNICODE_SCALAR, x)
                            , FSyntax.Types.uchar
                            ) (* assume the type is correct *)
                      | F.String7ConstOp x =>
@@ -1861,10 +1851,6 @@ struct
           | goVal (v as C.IntConst _) = v
           | goVal (v as C.WordConst _) = v
           | goVal (v as C.CharConst _) = v
-          | goVal (v as C.Char7Const _) = v
-          | goVal (v as C.Char16Const _) = v
-          | goVal (v as C.Char32Const _) = v
-          | goVal (v as C.UCharConst _) = v
           | goVal (v as C.StringConst _) = v
           | goVal (v as C.String7Const _) = v
           | goVal (v as C.String16Const _) = v

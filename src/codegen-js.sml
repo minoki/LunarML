@@ -256,15 +256,7 @@ struct
         J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
     | doValue _ (C.WordConst (Primitives.W64, x)) =
         J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ "n"))
-    | doValue _ (C.CharConst x) =
-        J.ConstExp (J.Numeral (Int.toString (ord x)))
-    | doValue _ (C.Char7Const x) =
-        J.ConstExp (J.Numeral (Int.toString (ord x)))
-    | doValue _ (C.Char16Const x) =
-        J.ConstExp (J.Numeral (Int.toString x))
-    | doValue _ (C.Char32Const x) =
-        J.ConstExp (J.Numeral (Int.toString x))
-    | doValue _ (C.UCharConst x) =
+    | doValue _ (C.CharConst (_, x)) =
         J.ConstExp (J.Numeral (Int.toString x))
     | doValue _ (C.StringConst x) =
         J.MethodExp

@@ -893,18 +893,18 @@ struct
                if w = w' then VALUE y else NOT_SIMPLIFIED
            | (F.PrimCall (P.Word_xorb w), [x, C.WordConst (w', 0)]) =>
                if w = w' then VALUE x else NOT_SIMPLIFIED
-           | (F.PrimCall (P.Char_ord w), [C.CharConst c]) =>
-               VALUE (C.IntConst (w, Int.toLarge (Char.ord c)))
+           | (F.PrimCall (P.Char_ord w), [C.CharConst (C.C8, c)]) =>
+               VALUE (C.IntConst (w, Int.toLarge c))
            | (F.PrimCall (P.Char_chr_unchecked w), [C.IntConst (w', c)]) =>
                if w = w' andalso 0 <= c andalso c <= 255 then
-                 VALUE (C.CharConst (Char.chr (Int.fromLarge c)))
+                 VALUE (C.CharConst (C.C8, Int.fromLarge c))
                else
                  NOT_SIMPLIFIED
-           | (F.PrimCall (P.Char16_ord w), [C.Char16Const c]) =>
+           | (F.PrimCall (P.Char16_ord w), [C.CharConst (C.C16, c)]) =>
                VALUE (C.IntConst (w, Int.toLarge c))
            | (F.PrimCall (P.Char16_chr_unchecked w), [C.IntConst (w', c)]) =>
                if w = w' andalso 0 <= c andalso c <= 0xffff then
-                 VALUE (C.Char16Const (Int.fromLarge c))
+                 VALUE (C.CharConst (C.C16, Int.fromLarge c))
                else
                  NOT_SIMPLIFIED
            | (F.PrimCall P.Vector_fromList, [C.TypedNil _]) =>

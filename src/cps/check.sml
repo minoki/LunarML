@@ -50,11 +50,11 @@ struct
      | C.WordConst (Primitives.WORD, _) => FSyntax.Types.word
      | C.WordConst (Primitives.W32, _) => FSyntax.Types.word32
      | C.WordConst (Primitives.W64, _) => FSyntax.Types.word64
-     | C.CharConst _ => FSyntax.Types.char
-     | C.Char7Const _ => FSyntax.Types.char7
-     | C.Char16Const _ => FSyntax.Types.char16
-     | C.Char32Const _ => FSyntax.Types.char32
-     | C.UCharConst _ => FSyntax.Types.uchar
+     | C.CharConst (C.C8, _) => FSyntax.Types.char
+     | C.CharConst (C.C7, _) => FSyntax.Types.char7
+     | C.CharConst (C.C16, _) => FSyntax.Types.char16
+     | C.CharConst (C.C32, _) => FSyntax.Types.char32
+     | C.CharConst (C.UNICODE_SCALAR, _) => FSyntax.Types.uchar
      | C.StringConst _ => FSyntax.Types.string
      | C.String7Const _ => FSyntax.Types.string7
      | C.String16Const _ => FSyntax.Types.string16
