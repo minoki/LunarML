@@ -15,12 +15,23 @@ sig
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
   | AnyType of Kind (* erased type *)
+  | BoxedType (* boxed value type *)
   | DelayedSubst of DelayedSubst ref
   and DelayedSubst =
     UnevaluatedSubst of Ty TypedSyntax.TyVarMap.map * Ty
   | EvaluatedSubst of Ty
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
+  datatype UnboxedTy =
+    UBTyInt32
+  | UBTyInt64
+  | UBTyWord32
+  | UBTyWord64
+  | UBTyReal
+  | UBTyChar
+  | UBTyChar16
+  | UBTyChar32
+  | UBTyBool
   datatype PrimOp =
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
@@ -63,6 +74,8 @@ sig
   | LuaMethodNOp of
       string
       * int (* returnArity (int), value argument: prim_effect, object, arguments *)
+  | BoxOp of UnboxedTy (* 0 type args, 1 value arg *)
+  | UnboxOp of UnboxedTy (* 0 type args, 1 value arg *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -201,10 +214,13 @@ sig
     val lua_value: Ty
     val js_value: Ty
     val prim_effect: Ty
+    val boxed: Ty
     val list: Ty -> Ty
     val vector: Ty -> Ty
     val array: Ty -> Ty
   end
+  val isUnboxedTy: Ty -> bool
+  val unboxedTyToTy: UnboxedTy -> Ty
   val AsciiStringAsDatatypeTag: TargetInfo.target_info * string -> Exp
   val strIdToVId: TypedSyntax.StrId -> TypedSyntax.VId
   val SimplifyingAndalsoExp: Exp * Exp -> Exp
@@ -257,12 +273,23 @@ struct
   | ExistsType of TyVar * Kind * Ty
   | TypeFn of TyVar * Kind * Ty (* type-level function *)
   | AnyType of Kind (* erased type *)
+  | BoxedType (* boxed value type *)
   | DelayedSubst of DelayedSubst ref
   and DelayedSubst =
     UnevaluatedSubst of Ty TypedSyntax.TyVarMap.map * Ty
   | EvaluatedSubst of Ty
   datatype ConBind = ConBind of TypedSyntax.VId * Ty option
   datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
+  datatype UnboxedTy =
+    UBTyInt32
+  | UBTyInt64
+  | UBTyWord32
+  | UBTyWord64
+  | UBTyReal
+  | UBTyChar
+  | UBTyChar16
+  | UBTyChar32
+  | UBTyBool
   datatype PrimOp =
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
@@ -305,6 +332,8 @@ struct
   | LuaMethodNOp of
       string
       * int (* returnArity (int), value argument: prim_effect, object, arguments *)
+  | BoxOp of UnboxedTy (* 0 type args, 1 value arg *)
+  | UnboxOp of UnboxedTy (* 0 type args, 1 value arg *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -447,6 +476,7 @@ struct
     val lua_value = TyVar PrimTypes.Names.lua_value
     val js_value = TyVar PrimTypes.Names.js_value
     val prim_effect = TyVar PrimTypes.Names.prim_effect
+    val boxed = BoxedType
     fun list ty =
       AppType {applied = TyVar PrimTypes.Names.list, arg = ty}
     fun vector ty =
@@ -454,6 +484,26 @@ struct
     fun array ty =
       AppType {applied = TyVar PrimTypes.Names.array, arg = ty}
   end
+  fun unboxedTyToTy UBTyInt32 = Types.int32
+    | unboxedTyToTy UBTyInt64 = Types.int64
+    | unboxedTyToTy UBTyWord32 = Types.word32
+    | unboxedTyToTy UBTyWord64 = Types.word64
+    | unboxedTyToTy UBTyReal = Types.real
+    | unboxedTyToTy UBTyChar = Types.char
+    | unboxedTyToTy UBTyChar16 = Types.char16
+    | unboxedTyToTy UBTyChar32 = Types.char32
+    | unboxedTyToTy UBTyBool = Types.bool
+  fun isUnboxedTy (TyVar tv) =
+        TypedSyntax.eqTyVar (tv, PrimTypes.Names.int32)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.int64)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.word32)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.word64)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.real)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.char)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.char16)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.char32)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.bool)
+    | isUnboxedTy _ = false
   fun FnType (param, result) =
     MultiFnType ([param], result)
   fun TupleType xs =
@@ -575,6 +625,7 @@ struct
               TypeFn (tv, kind, ty)
             end
         | go subst (ty as AnyType _) = ty
+        | go subst (ty as BoxedType) = ty
         | go subst (DelayedSubst r) =
             (case !r of
                EvaluatedSubst ty => go subst ty
@@ -601,6 +652,7 @@ struct
                NONE => ty
              | SOME replacement => replacement)
         | lazySubstTy subst (ty as AnyType _) = ty
+        | lazySubstTy subst (ty as BoxedType) = ty
         | lazySubstTy subst ty =
             if TypedSyntax.TyVarMap.isEmpty subst then ty
             else DelayedSubst (ref (UnevaluatedSubst (subst, ty)))
@@ -630,6 +682,7 @@ struct
         | go subst (TypeFn (tv, kind, ty)) =
             TypeFn (tv, kind, lazySubstTy subst ty)
         | go subst (ty as AnyType _) = ty
+        | go subst (ty as BoxedType) = ty
         | go subst (DelayedSubst r) =
             (case !r of
                EvaluatedSubst ty => go subst ty
@@ -660,6 +713,7 @@ struct
     | weakNormalizeTy (ty as ExistsType _) = ty
     | weakNormalizeTy (ty as TypeFn _) = ty
     | weakNormalizeTy (ty as AnyType _) = ty
+    | weakNormalizeTy (ty as BoxedType) = ty
     | weakNormalizeTy (ty as DelayedSubst _) =
         substAndWeakNormalizeTy TypedSyntax.TyVarMap.empty ty
 
@@ -678,6 +732,7 @@ struct
         | check (TypeFn (tv', _, ty)) =
             if TypedSyntax.eqTyVar (tv, tv') then false else check ty
         | check (AnyType _) = false
+        | check BoxedType = false
         | check (ty as DelayedSubst _) =
             check (forceTy ty)
     in
@@ -700,6 +755,7 @@ struct
         | go (TypeFn (TypedSyntax.MkTyVar (_, i), _, ty), j) =
             go (ty, Int.min (i, j))
         | go (AnyType _, i) = i
+        | go (BoxedType, i) = i
         | go (ty as DelayedSubst _, i) =
             go (forceTy ty, i)
     in
@@ -752,6 +808,7 @@ struct
             else
               TypeFn (tv', kind, go ty')
         | go (ty as AnyType _) = ty
+        | go (ty as BoxedType) = ty
         | go (ty as DelayedSubst _) =
             go (forceTy ty)
     in
@@ -772,6 +829,7 @@ struct
         | isRelevant (ExistsType (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (TypeFn (_, _, ty)) = isRelevant ty (* approximation *)
         | isRelevant (AnyType _) = false
+        | isRelevant BoxedType = false
         | isRelevant (DelayedSubst _) = true (* conservative *)
       fun doTy (ty as TyVar tv) =
             (case TypedSyntax.TyVarMap.find (subst, tv) of
@@ -848,6 +906,7 @@ struct
                ) (* TODO: use fresh tyvar if necessary *)
          | NONE => TypeFn (tv, kind, doTy ty)) *)
         | doTy (ty as AnyType _) = ty
+        | doTy (ty as BoxedType) = ty
         | doTy (ty as DelayedSubst _) = substAndForceTy subst ty
       val doTy = fn ty =>
         if isRelevant ty then doTy ty else ty (* optimization *)
@@ -1022,6 +1081,7 @@ struct
                NONE => ty
              | SOME replacement => replacement)
         | doTy (ty as AnyType _) = ty
+        | doTy (ty as BoxedType) = ty
         | doTy ty =
             DelayedSubst (ref (UnevaluatedSubst (subst, ty)))
       val doTy =
@@ -1207,6 +1267,7 @@ struct
     | freeTyVarsInTy (bound, TypeFn (tv, _, ty)) acc =
         freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
     | freeTyVarsInTy (_, AnyType _) acc = acc
+    | freeTyVarsInTy (_, BoxedType) acc = acc
     | freeTyVarsInTy (bound, ty as DelayedSubst _) acc =
         freeTyVarsInTy (bound, forceTy ty) acc
   fun freeTyVarsInPat (_, WildcardPat _) acc = acc
@@ -1616,6 +1677,7 @@ struct
       | print_Ty (TypeFn (tv, _, x)) =
           "TypeFn(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
       | print_Ty (AnyType _) = "AnyType"
+      | print_Ty BoxedType = "BoxedType"
       | print_Ty (ty as DelayedSubst _) =
           print_Ty (forceTy ty)
     fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
@@ -1674,6 +1736,19 @@ struct
       | print_PrimOp (LuaMethodOp _) = "LuaMethodOp"
       | print_PrimOp (LuaMethod1Op _) = "LuaMethod1Op"
       | print_PrimOp (LuaMethodNOp _) = "LuaMethodNOp"
+      | print_PrimOp (BoxOp fsp) =
+          "BoxOp(" ^ print_UnboxedTy fsp ^ ")"
+      | print_PrimOp (UnboxOp fsp) =
+          "UnboxOp(" ^ print_UnboxedTy fsp ^ ")"
+    and print_UnboxedTy UBTyInt32 = "Int32"
+      | print_UnboxedTy UBTyInt64 = "Int64"
+      | print_UnboxedTy UBTyWord32 = "Word32"
+      | print_UnboxedTy UBTyWord64 = "Word64"
+      | print_UnboxedTy UBTyReal = "Real"
+      | print_UnboxedTy UBTyChar = "Char"
+      | print_UnboxedTy UBTyChar16 = "Char16"
+      | print_UnboxedTy UBTyChar32 = "Char32"
+      | print_UnboxedTy UBTyBool = "Bool"
     fun print_Pat (WildcardPat _) = "WildcardPat"
       | print_Pat
           (SConPat

@@ -716,6 +716,8 @@ struct
     | isDiscardablePrimOp (F.LuaMethodOp _) = false
     | isDiscardablePrimOp (F.LuaMethod1Op _) = false
     | isDiscardablePrimOp (F.LuaMethodNOp _) = false
+    | isDiscardablePrimOp (F.BoxOp _) = true
+    | isDiscardablePrimOp (F.UnboxOp _) = true
   fun isDiscardable (F.PrimExp (primOp, _, args)) =
         isDiscardablePrimOp primOp andalso List.all isDiscardable args
     | isDiscardable (F.VarExp _) = true

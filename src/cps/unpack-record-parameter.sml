@@ -353,6 +353,7 @@ in
                                SOME fieldTy => fieldTy
                              | NONE => raise Fail "missing field")
                         | anyTy as FSyntax.AnyType FSyntax.TypeKind => anyTy
+                        | boxedTy as FSyntax.BoxedType => boxedTy
                         | recordTy =>
                             raise Fail
                               ("invalid record type: "
@@ -391,6 +392,7 @@ in
                                   | NONE => raise Fail "missing field")
                              | anyTy as FSyntax.AnyType FSyntax.TypeKind =>
                                  anyTy
+                             | boxedTy as FSyntax.BoxedType => boxedTy
                              | recordTy =>
                                  raise Fail
                                    ("invalid record type: "
