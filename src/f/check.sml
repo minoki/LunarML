@@ -77,6 +77,7 @@ struct
           F.ArrowKind
             (kind, kindOf (TypedSyntax.TyVarMap.insert (env, tv, kind)) ty)
       | kindOf _ (F.AnyType kind) = kind
+      | kindOf _ F.BoxedType = F.TypeKind
       | kindOf env (ty as F.DelayedSubst _) =
           kindOf env (F.forceTy ty)
     and checkKind (env, expectedKind) ty =
@@ -135,6 +136,7 @@ struct
       | normalizeType env (F.TypeFn (tv, kind, ty)) =
           F.TypeFn (tv, kind, normalizeType env ty)
       | normalizeType _ (ty as F.AnyType _) = ty
+      | normalizeType _ (ty as F.BoxedType) = ty
       | normalizeType env (ty as F.DelayedSubst _) =
           normalizeType env (F.forceTy ty)
 
@@ -206,6 +208,11 @@ struct
           end
       | sameType'' _ (F.AnyType _, _) = true
       | sameType'' _ (_, F.AnyType _) = true
+      | sameType'' _ (F.BoxedType, F.BoxedType) = true
+      | sameType'' _ (F.BoxedType, ty) =
+          not (F.isUnboxedTy ty)
+      | sameType'' _ (ty, F.BoxedType) =
+          not (F.isUnboxedTy ty)
       | sameType'' _ _ = false
     (*: val sameType : F.Ty * F.Ty -> bool *)
     val sameType =
@@ -602,6 +609,10 @@ struct
             List.app (fn a => checkExp (env, F.Types.lua_value, a)) args;
             loop (n, Syntax.LabelMap.empty)
           end
+      | inferExp (env, F.PrimExp (F.BoxOp fsp, [], [e])) =
+          (checkExp (env, F.unboxedTyToTy fsp, e); F.BoxedType)
+      | inferExp (env, F.PrimExp (F.UnboxOp fsp, [], [e])) =
+          (checkExp (env, F.BoxedType, e); F.unboxedTyToTy fsp)
       | inferExp (_, F.PrimExp (p, _, _)) =
           raise TypeError
             ("PrimOp with invalid arguments: "

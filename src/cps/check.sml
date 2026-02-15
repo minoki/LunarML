@@ -316,7 +316,21 @@ struct
                          (env, fn () => "LuaMethodNOp", F.Types.lua_value)) args
                   ; List.tabulate (n, fn _ => F.Types.lua_value)
                   )
-              | _ => raise TypeError "invalid LuaMethodNOp"))
+              | _ => raise TypeError "invalid LuaMethodNOp")
+         | F.BoxOp fsp =>
+             (case (tyargs, args) of
+                ([], [e]) =>
+                  ( checkValue (env, fn () => "BoxOp", F.unboxedTyToTy fsp) e
+                  ; [F.BoxedType]
+                  )
+              | _ => raise TypeError "invalid BoxOp")
+         | F.UnboxOp fsp =>
+             (case (tyargs, args) of
+                ([], [e]) =>
+                  ( checkValue (env, fn () => "UnboxOp", F.BoxedType) e
+                  ; [F.unboxedTyToTy fsp]
+                  )
+              | _ => raise TypeError "invalid UnboxOp"))
     | inferSimpleExp (env, C.Record fields) =
         [F.RecordType (Syntax.LabelMap.map (inferValue env) fields)]
     | inferSimpleExp (env as {tyEnv, ...}, C.ExnTag {name = _, payloadTy}) =
@@ -332,6 +346,7 @@ struct
                      ^ Printer.build (FPrinter.doTy 0 recordTy) ^ ", label="
                      ^ Syntax.print_Label label))
          | anyTy as F.AnyType F.TypeKind => [anyTy]
+         | F.BoxedType => [F.BoxedType]
          | recordTy =>
              raise Fail
                ("invalid record type for projection: "

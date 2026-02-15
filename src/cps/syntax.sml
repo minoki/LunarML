@@ -320,6 +320,8 @@ struct
           isDiscardablePrimEffect e
       | isDiscardable (PrimOp {primOp = F.LuaMethodNOp _, args = [], ...}) =
           false (* should not occur *)
+      | isDiscardable (PrimOp {primOp = F.BoxOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.UnboxOp _, ...}) = true
       | isDiscardable (Record _) = true
       | isDiscardable (ExnTag _) = true
       | isDiscardable (Projection _) = true
@@ -661,7 +663,9 @@ struct
            | F.LuaCallNOp _ => "PrimOp(LuaCallNOp)"
            | F.LuaMethodOp _ => "PrimOp(LuaMethodOp)"
            | F.LuaMethod1Op _ => "PrimOp(LuaMethod1Op)"
-           | F.LuaMethodNOp _ => "PrimOp(LuaMethodNOp)")
+           | F.LuaMethodNOp _ => "PrimOp(LuaMethodNOp)"
+           | F.BoxOp _ => "PrimOp(BoxOp)"
+           | F.UnboxOp _ => "PrimOp(UnboxOp)")
       | simpleExpToString (Record _) = "Record"
       | simpleExpToString (ExnTag _) = "ExnTag"
       | simpleExpToString (Projection _) = "Projection"
@@ -734,6 +738,7 @@ struct
               | goTy (F.TypeFn (tv, kind, ty)) =
                   F.TypeFn (tv, kind, goTy ty)
               | goTy (ty as F.AnyType _) = ty
+              | goTy (ty as F.BoxedType) = ty
               | goTy (ty as F.DelayedSubst _) =
                   goTy (F.forceTy ty)
           in

@@ -69,6 +69,7 @@ struct
            doTyVar tv
            @ P.Fragment " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
     | doTy _ (F.AnyType _) = [P.Fragment "Any"]
+    | doTy _ F.BoxedType = [P.Fragment "Boxed"]
     | doTy prec (ty as F.DelayedSubst _) =
         doTy prec (F.forceTy ty)
   fun doPrimOp (F.IntConstOp x) =
@@ -137,6 +138,8 @@ struct
     | doPrimOp (F.LuaMethodOp _) = [P.Fragment "LuaMethod"]
     | doPrimOp (F.LuaMethod1Op _) = [P.Fragment "LuaMethod1"]
     | doPrimOp (F.LuaMethodNOp _) = [P.Fragment "LuaMethodN"]
+    | doPrimOp (F.BoxOp _) = [P.Fragment "Box"]
+    | doPrimOp (F.UnboxOp _) = [P.Fragment "Unbox"]
   fun doPat _ (F.WildcardPat _) = [P.Fragment "_"]
     | doPat _ (F.SConPat {scon = F.IntegerConstant x, ...}) =
         [P.Fragment (IntInf.toString x)]
