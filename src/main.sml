@@ -878,6 +878,20 @@ struct
           CpsErasePoly.transform (context, cexp)
         end
       val () = checkCpsAfterErasure ("after erasePoly", cexp)
+      (* Boxing pass: only for WasmGC backend (not yet implemented).
+         When enabled, disable CPS type checks after boxing since the checker
+         doesn't fully support BoxedType boundaries.
+      val cexp =
+        let
+          val context =
+            { nextTyVar = nextTyVar
+            , nextVId = nextId
+            , simplificationOccurred = ref false
+            }
+        in
+          CpsBoxing.transform (context, cexp)
+        end
+      *)
       val cexp =
         optimizeCps
           { nextTyVar = nextTyVar

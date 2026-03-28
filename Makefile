@@ -67,6 +67,7 @@ sources = \
   src/cps/unpack-record-parameter.sml \
   src/cps/eta.sml \
   src/cps/erase-poly.sml \
+  src/cps/boxing.sml \
   src/backend.sml \
   src/nested.sml \
   src/lua/syntax.sml \
