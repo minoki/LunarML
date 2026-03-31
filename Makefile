@@ -70,6 +70,8 @@ sources = \
   src/cps/boxing.sml \
   src/backend.sml \
   src/nested.sml \
+  src/wasm/syntax.sml \
+  src/wasm/wat-writer.sml \
   src/lua/syntax.sml \
   src/lua/transform.sml \
   src/codegen-lua.sml \

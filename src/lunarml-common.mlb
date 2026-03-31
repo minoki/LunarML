@@ -60,6 +60,8 @@ backend.sml
 nested.sml
 lua/transform.sml
 codegen-lua.sml
+wasm/syntax.sml
+wasm/wat-writer.sml
 js/syntax.sml
 js/transform.sml
 js/simplify-jumps.sml

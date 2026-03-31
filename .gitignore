@@ -8,6 +8,9 @@ test/*/*/*.lua
 test/*/*.mjs
 test/*/*/*.mjs
 test/**/*.output
+test/wasm/fact-fib
+test/wasm/fact-fib.wasm
+test/wasm/fact-fib.wat
 bin/lunarml
 bin/lunarml.debug
 thirdparty/smlnj-lib/
