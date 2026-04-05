@@ -1,4 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 ../../src/wasm/syntax.sml
 ../../src/wasm/wat-writer.sml
+../../src/wasm/writer.sml
 fact-fib.sml

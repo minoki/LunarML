@@ -96,10 +96,22 @@ val theModule : module =
   }
 
 val () =
-  let val out = TextIO.openOut "fact-fib.wat"
-  in  WatWriter.writeModule (out, theModule)
-    ; TextIO.closeOut out
-    ; print "Wrote fact-fib.wat\n"
+  let
+    val args = CommandLine.arguments ()
+    val binary = List.exists (fn s => s = "--binary") args
+  in
+    if binary then
+      let val out = BinIO.openOut "fact-fib.wasm"
+      in  WasmWriter.writeModule (out, theModule)
+        ; BinIO.closeOut out
+        ; print "Wrote fact-fib.wasm\n"
+      end
+    else
+      let val out = TextIO.openOut "fact-fib.wat"
+      in  WatWriter.writeModule (out, theModule)
+        ; TextIO.closeOut out
+        ; print "Wrote fact-fib.wat\n"
+      end
   end
 
 end

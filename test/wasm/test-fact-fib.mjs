@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-const wasm = await WebAssembly.compile(await readFile("fact-fib.wasm"));
+const useWat = process.argv.includes("--wat");
+const wasmFile = useWat ? "fact-fib-from-wat.wasm" : "fact-fib.wasm";
+const wasm = await WebAssembly.compile(await readFile(wasmFile));
 const { exports } = await WebAssembly.instantiate(wasm);
 
 let ok = true;
