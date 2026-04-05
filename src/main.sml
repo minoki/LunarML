@@ -40,6 +40,8 @@ struct
         \  --nodejs-cps          Produce JavaScript code for Node.js (CPS mode).\n\
         \  --webjs               Produce JavaScript code for Web.\n\
         \  --webjs-cps           Produce JavaScript code for Web (CPS mode).\n\
+        \  --wasm                Produce WebAssembly binary (.wasm).\n\
+        \  --wasm-wat            Produce WebAssembly text format (.wat).\n\
         \  -h,--help             Show this message.\n\
         \  -v,--version          Show version information.\n\
         \  --dump                Dump intermediate code.\n\
@@ -93,6 +95,14 @@ struct
          , datatypeTag = TargetInfo.STRING16
          , minInt = SOME TargetInfo.minInt54
          , maxInt = SOME TargetInfo.maxInt54
+         , wordSize = 32
+         }
+     | BACKEND_WASM _ =>
+         { defaultInt = Primitives.I32
+         , defaultWord = Primitives.W32
+         , datatypeTag = TargetInfo.STRING8
+         , minInt = SOME TargetInfo.minInt32
+         , maxInt = SOME TargetInfo.maxInt32
          , wordSize = 32
          })
   fun optimizeCps
@@ -361,6 +371,8 @@ struct
         in
           ()
         end
+    | emit ({backend = BACKEND_WASM _, ...}: options) _ _ _ _ _ _ =
+        raise Fail "Wasm code generation is not yet implemented"
   structure CheckFInit =
   struct
     fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
@@ -456,12 +468,14 @@ struct
             | BACKEND_LUAJIT => "luajit"
             | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => "js"
             | BACKEND_JS {style = Backend.CPS, ...} => "js-cps"
+            | BACKEND_WASM _ => "wasm"
           )
         , ( "TARGET_OS"
           , case #backend opts of
               BACKEND_LUA _ => "lua"
             | BACKEND_LUAJIT => "lua"
             | BACKEND_JS {os, ...} => os
+            | BACKEND_WASM _ => "wasm"
           )
         , ( "DELIMITED_CONTINUATIONS"
           , case #backend opts of
@@ -718,6 +732,7 @@ struct
         | BACKEND_LUAJIT => true
         | BACKEND_JS {style = Backend.DIRECT_STYLE, ...} => false
         | BACKEND_JS {style = Backend.CPS, ...} => true
+        | BACKEND_WASM _ => true
       val fexp =
         case targetInfo of
           {defaultInt = Primitives.INT, defaultWord = Primitives.WORD, ...} =>
@@ -878,34 +893,40 @@ struct
           CpsErasePoly.transform (context, cexp)
         end
       val () = checkCpsAfterErasure ("after erasePoly", cexp)
-      (* Boxing pass: only for WasmGC backend (not yet implemented).
-         When enabled, disable CPS type checks after boxing since the checker
-         doesn't fully support BoxedType boundaries.
       val cexp =
-        let
-          val context =
-            { nextTyVar = nextTyVar
-            , nextVId = nextId
-            , simplificationOccurred = ref false
-            }
-        in
-          CpsBoxing.transform (context, cexp)
-        end
-      *)
+        case #backend opts of
+          BACKEND_WASM _ =>
+            let
+              val context =
+                { nextTyVar = nextTyVar
+                , nextVId = nextId
+                , simplificationOccurred = ref false
+                }
+            in
+              CpsBoxing.transform (context, cexp)
+            end
+        | _ => cexp
+      (* After boxing, disable CPS type checks since the checker
+         doesn't fully support BoxedType boundaries. *)
+      val checkCpsAfterBoxing =
+        case #backend opts of
+          BACKEND_WASM _ => (fn _ => ())
+        | _ => checkCpsAfterErasure
+      val () = checkCpsAfterBoxing ("after boxing", cexp)
       val cexp =
         optimizeCps
           { nextTyVar = nextTyVar
           , nextVId = nextId
           , printTimings = #printTimings opts
-          } checkCpsAfterErasure cexp (3 * (#optimizationLevel opts + 3))
-      val () = checkCpsAfterErasure ("optimization #3", cexp)
+          } checkCpsAfterBoxing cexp (3 * (#optimizationLevel opts + 3))
+      val () = checkCpsAfterBoxing ("optimization #3", cexp)
       val ctx' =
         { nextTyVar = nextTyVar
         , nextVId = nextId
         , simplificationOccurred = ref false
         }
       val cexp = CpsDeadCodeElimination.goStat (ctx', true, cexp)
-      val () = checkCpsAfterErasure ("after final DCE", cexp)
+      val () = checkCpsAfterBoxing ("after final DCE", cexp)
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then
@@ -1024,6 +1045,8 @@ struct
   | OPT_TARGET_NODEJS_CPS (* --nodejs-cps *)
   | OPT_TARGET_WEBJS (* --webjs *)
   | OPT_TARGET_WEBJS_CPS (* --webjs-cps *)
+  | OPT_TARGET_WASM (* --wasm *)
+  | OPT_TARGET_WASM_WAT (* --wasm-wat *)
   | OPT_HELP (* -h,--help *)
   | OPT_VERSION (* -v,--version *)
   | OPT_STOP (* -- *)
@@ -1048,6 +1071,8 @@ struct
     , (LONG "--nodejs-cps", SIMPLE OPT_TARGET_NODEJS_CPS)
     , (LONG "--webjs", SIMPLE OPT_TARGET_WEBJS)
     , (LONG "--webjs-cps", SIMPLE OPT_TARGET_WEBJS_CPS)
+    , (LONG "--wasm", SIMPLE OPT_TARGET_WASM)
+    , (LONG "--wasm-wat", SIMPLE OPT_TARGET_WASM_WAT)
     , (SHORT "-h", SIMPLE OPT_HELP)
     , (LONG "--help", SIMPLE OPT_HELP)
     , (SHORT "-v", SIMPLE OPT_VERSION)
@@ -1117,6 +1142,13 @@ struct
           (S.set.backend
              (BACKEND_JS {style = Backend.CPS, os = "web", default_ext = ".js"})
              opts) args
+    | SOME (OPT_TARGET_WASM, args) =>
+        parseArgs
+          (S.set.backend (BACKEND_WASM {output = Backend.WASM_BINARY}) opts)
+          args
+    | SOME (OPT_TARGET_WASM_WAT, args) =>
+        parseArgs
+          (S.set.backend (BACKEND_WASM {output = Backend.WASM_TEXT}) opts) args
     | SOME (OPT_HELP, _) => (showHelp (); OS.Process.exit OS.Process.success)
     | SOME (OPT_VERSION, _) =>
         (showVersion (); OS.Process.exit OS.Process.success)

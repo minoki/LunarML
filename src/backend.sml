@@ -6,10 +6,12 @@ structure Backend:
 sig
   datatype lua_runtime = LUA_PLAIN | LUA_CONTINUATIONS
   datatype code_style = DIRECT_STYLE | CPS
+  datatype wasm_output = WASM_BINARY | WASM_TEXT
   datatype backend =
     BACKEND_LUA of lua_runtime
   | BACKEND_LUAJIT
   | BACKEND_JS of {style: code_style, os: string, default_ext: string}
+  | BACKEND_WASM of {output: wasm_output}
 end =
 struct
   (*
@@ -17,6 +19,7 @@ struct
    *   * lua
    *   * node
    *   * web
+   *   * wasm
    *
    * MLton's TARGET_OS:
    *   * aix
@@ -36,8 +39,10 @@ struct
     LUA_PLAIN
   | LUA_CONTINUATIONS
   datatype code_style = DIRECT_STYLE | CPS
+  datatype wasm_output = WASM_BINARY | WASM_TEXT
   datatype backend =
     BACKEND_LUA of lua_runtime
   | BACKEND_LUAJIT
   | BACKEND_JS of {style: code_style, os: string, default_ext: string}
+  | BACKEND_WASM of {output: wasm_output}
 end;

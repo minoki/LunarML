@@ -394,6 +394,7 @@ struct
     fun canInlineLua _ = true
     fun canInlineJs (ExnTag _) = false
       | canInlineJs _ = true
+    fun canInlineWasm _ = true
     val DEPTH_LIMIT = 10
     fun toNestedImpl (backend, usage) =
       let
@@ -402,6 +403,7 @@ struct
             Backend.BACKEND_LUA _ => canInlineLua
           | Backend.BACKEND_LUAJIT => canInlineLua
           | Backend.BACKEND_JS _ => canInlineJs
+          | Backend.BACKEND_WASM _ => canInlineWasm
         fun goExp (e as Value _) = e
           | goExp (PrimOp {primOp, tyargs, args}) =
               PrimOp
