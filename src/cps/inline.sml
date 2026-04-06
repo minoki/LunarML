@@ -59,7 +59,8 @@ struct
         and goStat (C.Let {decs, cont}, acc) =
               goStat (cont, List.foldl goDec acc decs)
           | goStat (C.App _, acc) = acc
-          | goStat (C.AppCont {applied = _, args}, acc) = args :: acc
+          | goStat (C.AppCont {applied, args}, acc) =
+              if applied = retCont then args :: acc else acc
           | goStat (C.If {cond = _, thenCont, elseCont}, acc) =
               goStat (elseCont, goStat (thenCont, acc))
           | goStat
@@ -1294,6 +1295,12 @@ struct
                                             Syntax.SourceName.merge
                                             (acc, v, TypedSyntax.getVIdName n)
                                       | _ => acc) acc (resultNames, r)
+                                 handle ListPair.UnequalLengths =>
+                                   raise Fail
+                                     ("inliner: number of results mismatch in function application ("
+                                      ^ TypedSyntax.print_VId applied ^ ","
+                                      ^ Int.toString (List.length resultNames)
+                                      ^ "," ^ Int.toString (List.length r) ^ ")")
                              in
                                List.foldl go TypedSyntax.VIdMap.empty results
                              end

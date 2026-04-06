@@ -101,6 +101,7 @@ should_compile += $(addprefix should_compile/,\
   generalization1.sml \
   generalization2.sml \
   record.sml \
+  trivial_loop.sml \
 )
 should_not_compile += $(addprefix should_not_compile/,\
   fixity.sml \
