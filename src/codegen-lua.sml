@@ -2117,12 +2117,12 @@ struct
         in
           L.IndexExp (doExp (ctx, env, record), label)
         end
-    | doExp (ctx, _, N.Abs {contParam, params, body, attr = _}) =
+    | doExp (ctx, _, N.Abs {contParam, params, body, resultTy = _, attr = _}) =
         let
           val env' = {continuations = C.CVarMap.singleton (contParam, RETURN)}
         in
           L.FunctionExp
-            ( Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params)
+            ( Vector.map (fn (vid, _) => VIdToLua (ctx, vid)) (vector params)
             , vector (doStat (ctx, env', SOME contParam, body))
             )
         end
@@ -2205,7 +2205,7 @@ struct
                  fun doUnaryExp (f, purity) =
                    doUnary (fn a =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f a)
                           | DISCARDABLE => discardable (result, f a)
@@ -2224,7 +2224,7 @@ struct
                  fun doBinaryExpRaw (f, purity) =
                    doBinaryRaw (fn (a, b) =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f (a, b))
                           | DISCARDABLE => discardable (result, f (a, b))
@@ -2233,7 +2233,7 @@ struct
                  fun doBinaryExp (f, purity) =
                    doBinary (fn (a, b) =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f (a, b))
                           | DISCARDABLE => discardable (result, f (a, b))
@@ -2258,7 +2258,7 @@ struct
                    case args of
                      [a, e] =>
                        (case results of
-                          [result] =>
+                          [(result, _)] =>
                             (case getPrimEffect e of
                                PURE => pure (result, f (doExp (ctx, env, a)))
                              | DISCARDABLE =>
@@ -2276,7 +2276,7 @@ struct
                    case args of
                      [a, b, e] =>
                        (case results of
-                          [result] =>
+                          [(result, _)] =>
                             (case getPrimEffect e of
                                PURE =>
                                  pure (result, f
@@ -2300,10 +2300,11 @@ struct
                        val arg = vector [TableUnpackN args]
                        val stat =
                          if List.length results = n then
-                           if List.exists Option.isSome results then
+                           if List.exists (Option.isSome o #1) results then
                              let
-                               fun makeResultVar (SOME r) = (r, L.CONST)
-                                 | makeResultVar NONE = (genSym ctx, L.CONST)
+                               fun makeResultVar (SOME r, _) = (r, L.CONST)
+                                 | makeResultVar (NONE, _) =
+                                     (genSym ctx, L.CONST)
                              in
                                L.LocalStat
                                  ( List.map makeResultVar results
@@ -2330,10 +2331,11 @@ struct
                        val arg = [TableUnpackN args]
                        val stat =
                          if List.length results = n then
-                           if List.exists Option.isSome results then
+                           if List.exists (Option.isSome o #1) results then
                              let
-                               fun makeResultVar (SOME r) = (r, L.CONST)
-                                 | makeResultVar NONE = (genSym ctx, L.CONST)
+                               fun makeResultVar (SOME r, _) = (r, L.CONST)
+                                 | makeResultVar (NONE, _) =
+                                     (genSym ctx, L.CONST)
                              in
                                L.LocalStat
                                  ( List.map makeResultVar results
@@ -2377,7 +2379,7 @@ struct
                          val arg = vector [TableUnpackN args]
                        in
                          case results of
-                           [SOME result] =>
+                           [(SOME result, _)] =>
                              doDecs
                                ( ctx
                                , env
@@ -2392,7 +2394,7 @@ struct
                                        )
                                    ) :: revStats
                                )
-                         | [NONE] =>
+                         | [(NONE, _)] =>
                              doDecs
                                ( ctx
                                , env
@@ -2419,7 +2421,7 @@ struct
                          val arg = [TableUnpackN args]
                          val stat =
                            case results of
-                             [SOME result] =>
+                             [(SOME result, _)] =>
                                L.ConstStat
                                  ( result
                                  , L.CallExp
@@ -2427,7 +2429,7 @@ struct
                                      , vector [MethodExp (obj, name, arg)]
                                      )
                                  )
-                           | [NONE] => MethodStat (obj, name, arg)
+                           | [(NONE, _)] => MethodStat (obj, name, arg)
                            | _ =>
                                raise CodeGenError "unexpected number of results"
                        in
@@ -2465,7 +2467,7 @@ struct
                        end)
                  | _ =>
                      (case results of
-                        [result] =>
+                        [(result, _)] =>
                           impure (result, doExp
                             ( ctx
                             , env
@@ -2478,7 +2480,7 @@ struct
                { exp =
                    N.PrimOp
                      {primOp = F.LuaCallOp, tyargs = _, args = _ :: f :: args}
-               , results = [result]
+               , results = [(result, _)]
                } =>
                let
                  val stat =
@@ -2510,7 +2512,7 @@ struct
                { exp =
                    N.PrimOp
                      {primOp = F.LuaCall1Op, tyargs = _, args = _ :: f :: args}
-               , results = [result]
+               , results = [(result, _)]
                } =>
                let
                  val stat =
@@ -2542,10 +2544,10 @@ struct
                } =>
                let
                  val stat =
-                   if List.exists Option.isSome results then
+                   if List.exists (Option.isSome o #1) results then
                      let
-                       fun makeResultVar (SOME r) = (r, L.CONST)
-                         | makeResultVar NONE = (genSym ctx, L.CONST)
+                       fun makeResultVar (SOME r, _) = (r, L.CONST)
+                         | makeResultVar (NONE, _) = (genSym ctx, L.CONST)
                      in
                        L.LocalStat
                          ( List.map makeResultVar results
@@ -2572,7 +2574,7 @@ struct
                      , tyargs = _
                      , args = _ :: obj :: args
                      }
-               , results = [result]
+               , results = [(result, _)]
                } =>
                let
                  val stat =
@@ -2609,7 +2611,7 @@ struct
                      , tyargs = _
                      , args = _ :: obj :: args
                      }
-               , results = [result]
+               , results = [(result, _)]
                } =>
                let
                  val stat =
@@ -2643,10 +2645,10 @@ struct
                } =>
                let
                  val stat =
-                   if List.exists Option.isSome results then
+                   if List.exists (Option.isSome o #1) results then
                      let
-                       fun makeResultVar (SOME r) = (r, L.CONST)
-                         | makeResultVar NONE = (genSym ctx, L.CONST)
+                       fun makeResultVar (SOME r, _) = (r, L.CONST)
+                         | makeResultVar (NONE, _) = (genSym ctx, L.CONST)
                      in
                        L.LocalStat
                          ( List.map makeResultVar results
@@ -2670,13 +2672,19 @@ struct
                end
            | N.ValDec {exp, results} =>
                (case results of
-                  [result] => impure (result, doExp (ctx, env, exp))
+                  [(result, _)] => impure (result, doExp (ctx, env, exp))
                 | _ => raise CodeGenError "unexpected number of results")
            | N.RecDec defs =>
                let
                  val (decs', assignments) =
                    List.foldr
-                     (fn ( {name, contParam, params, body, attr = _}
+                     (fn ( { name
+                           , contParam
+                           , params
+                           , body
+                           , resultTy = _
+                           , attr = _
+                           }
                          , (decs, assignments)
                          ) =>
                         let
@@ -2687,7 +2695,8 @@ struct
                           val assignment = L.AssignStat
                             ( [L.VarExp (VIdToLua (ctx, name))]
                             , [L.FunctionExp
-                                 ( Vector.map (fn vid => VIdToLua (ctx, vid))
+                                 ( Vector.map
+                                     (fn (vid, _) => VIdToLua (ctx, vid))
                                      (vector params)
                                  , vector
                                      (doStat (ctx, env', SOME contParam, body))
@@ -2706,11 +2715,11 @@ struct
                     if cont = name then
                       let
                         val stat =
-                          if List.exists Option.isSome params then
+                          if List.exists (Option.isSome o #1) params then
                             L.LocalStat
                               ( List.map
-                                  (fn SOME p => (p, L.CONST)
-                                    | NONE => (genSym ctx, L.CONST)) params
+                                  (fn (SOME p, _) => (p, L.CONST)
+                                    | (NONE, _) => (genSym ctx, L.CONST)) params
                               , [L.CallExp
                                    ( doExp (ctx, env, applied)
                                    , Vector.map (fn x => doExp (ctx, env, x))
@@ -2743,14 +2752,16 @@ struct
                              { label = label
                              , params =
                                  List.map
-                                   (Option.map (fn p => VIdToLua (ctx, p)))
+                                   (fn (p, _) =>
+                                      Option.map (fn p => VIdToLua (ctx, p)) p)
                                    params
                              })}
                       val decs' =
                         let
                           val params' =
                             List.mapPartial
-                              (Option.map (fn p => (p, L.LATE_INIT))) params
+                              (fn (SOME p, _) => SOME (p, L.LATE_INIT)
+                                | (NONE, _) => NONE) params
                         in
                           if List.null params' then []
                           else [L.LocalStat (params', [])]
@@ -2782,7 +2793,7 @@ struct
                          List.exists
                            (fn (name, params, _) =>
                               name = applied
-                              andalso List.all Option.isSome params) defs
+                              andalso List.all (Option.isSome o #1) params) defs
                        then INIT_WITH_VALUES (applied, args)
                        else NO_INIT
                    | _ => NO_INIT
@@ -2790,13 +2801,14 @@ struct
                    List.foldl
                      (fn ((_, params, _), n) =>
                         Int.max (n, List.length
-                          (List.filter Option.isSome params))) 0 defs
+                          (List.filter (Option.isSome o #1) params))) 0 defs
                  val commonParams = List.tabulate (maxParams, fn _ =>
                    genSym ctx)
                  fun mapCommonParams params =
                    List.rev (#2
                      (List.foldl
-                        (fn (SOME _, (c :: rest, acc)) => (rest, SOME c :: acc)
+                        (fn ((SOME _, _), (c :: rest, acc)) =>
+                           (rest, SOME c :: acc)
                           | (_, (rest, acc)) => (rest, NONE :: acc))
                         (commonParams, []) params))
                  val env' =
@@ -2855,7 +2867,8 @@ struct
                             let
                               val params' =
                                 List.mapPartial
-                                  (Option.map (fn v => (v, L.CONST))) params
+                                  (fn (SOME v, _) => SOME (v, L.CONST)
+                                    | (NONE, _) => NONE) params
                             in
                               if List.null params' then
                                 []
@@ -3011,7 +3024,13 @@ struct
         ( ctx
         , env
         , defaultCont
-        , N.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut}
+        , N.Handle
+            { body
+            , handler = (e, h)
+            , successfulExitIn
+            , successfulExitOut
+            , resultTy = _
+            }
         ) =
         let
           val env' =
