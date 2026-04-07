@@ -1492,7 +1492,7 @@ struct
         in
           J.IndexExp (doExp (ctx, env, record), label)
         end
-    | doExp (ctx, env, N.Abs {contParam, params, body, attr = _}) =
+    | doExp (ctx, env, N.Abs {contParam, params, body, resultTy = _, attr = _}) =
         (case #style ctx of
            Backend.DIRECT_STYLE =>
              if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
@@ -1505,7 +1505,7 @@ struct
                in
                  J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector
                    [J.FunctionExp
-                      ( Vector.map (VIdToJs ctx) (vector params)
+                      ( Vector.map (VIdToJs ctx o #1) (vector params)
                       , vector (doStat ctx env' body)
                       )])
                end
@@ -1517,8 +1517,10 @@ struct
                    , subst = #subst env
                    }
                in
-                 J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector
-                   (doStat ctx env' body))
+                 J.FunctionExp
+                   ( Vector.map (VIdToJs ctx o #1) (vector params)
+                   , vector (doStat ctx env' body)
+                   )
                end
          | Backend.CPS =>
              let
@@ -1529,7 +1531,8 @@ struct
                  }
              in
                J.FunctionExp
-                 ( vector (CVarToJs contParam :: List.map (VIdToJs ctx) params)
+                 ( vector
+                     (CVarToJs contParam :: List.map (VIdToJs ctx o #1) params)
                  , vector (doStat ctx env' body)
                  )
              end)
@@ -1595,7 +1598,7 @@ struct
                  fun doNullaryExp (f, purity) =
                    doNullary (fn () =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f ())
                           | DISCARDABLE => discardable (result, f ())
@@ -1611,7 +1614,7 @@ struct
                  fun doUnaryExp (f, purity) =
                    doUnary (fn a =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f a)
                           | DISCARDABLE => discardable (result, f a)
@@ -1627,7 +1630,7 @@ struct
                  fun doBinaryExp (f, purity) =
                    doBinary (fn (a, b) =>
                      case results of
-                       [result] =>
+                       [(result, _)] =>
                          (case purity of
                             PURE => pure (result, f (a, b))
                           | DISCARDABLE => discardable (result, f (a, b))
@@ -1667,7 +1670,7 @@ struct
                          )))
                  | _ =>
                      (case results of
-                        [result] =>
+                        [(result, _)] =>
                           impure (result, doExp
                             ( ctx
                             , env
@@ -1676,7 +1679,8 @@ struct
                             ))
                       | _ => raise CodeGenError "unexpected number of results")
                end
-           | N.ValDec {exp = N.ExnTag {name, payloadTy}, results = [result]} =>
+           | N.ValDec
+               {exp = N.ExnTag {name, payloadTy}, results = [(result, _)]} =>
                (case result of
                   SOME result =>
                     let
@@ -1737,7 +1741,7 @@ struct
                 | NONE => doDecs (ctx, env, decs, finalExp, revStats))
            | N.ValDec {exp, results} =>
                (case results of
-                  [result] => impure (result, doExp (ctx, env, exp))
+                  [(result, _)] => impure (result, doExp (ctx, env, exp))
                 | _ => raise CodeGenError "unexpected number of results")
            | N.RecDec defs =>
                (case #style ctx of
@@ -1745,7 +1749,13 @@ struct
                     let
                       val (decs', assignments) =
                         List.foldr
-                          (fn ( {name, contParam, params, body, attr = _}
+                          (fn ( { name
+                                , contParam
+                                , params
+                                , body
+                                , resultTy = _
+                                , attr = _
+                                }
                               , (decs, assignments)
                               ) =>
                              if
@@ -1767,7 +1777,7 @@ struct
                                          ( J.VarExp (J.PredefinedId "_wrap")
                                          , vector
                                              [J.FunctionExp
-                                                ( Vector.map (VIdToJs ctx)
+                                                ( Vector.map (VIdToJs ctx o #1)
                                                     (vector params)
                                                 , vector (doStat ctx env' body)
                                                 )]
@@ -1788,7 +1798,7 @@ struct
                                  , J.AssignStat
                                      ( J.VarExp (J.UserDefinedId name)
                                      , J.FunctionExp
-                                         ( Vector.map (VIdToJs ctx)
+                                         ( Vector.map (VIdToJs ctx o #1)
                                              (vector params)
                                          , vector (doStat ctx env' body)
                                          )
@@ -1808,7 +1818,13 @@ struct
                     let
                       val (decs', assignments) =
                         List.foldr
-                          (fn ( {name, contParam, params, body, attr = _}
+                          (fn ( { name
+                                , contParam
+                                , params
+                                , body
+                                , resultTy = _
+                                , attr = _
+                                }
                               , (decs, assignments)
                               ) =>
                              let
@@ -1825,7 +1841,8 @@ struct
                                    , J.FunctionExp
                                        ( vector
                                            (CVarToJs contParam
-                                            :: List.map (VIdToJs ctx) params)
+                                            ::
+                                            List.map (VIdToJs ctx o #1) params)
                                        , vector (doStat ctx env' body)
                                        )
                                    ) :: assignments
@@ -1856,8 +1873,9 @@ struct
                          , J.FunctionExp
                              ( vector
                                  (List.map
-                                    (fn SOME p => VIdToJs ctx p
-                                      | NONE => VIdToJs ctx (genSym ctx)) params)
+                                    (fn (SOME p, _) => VIdToJs ctx p
+                                      | (NONE, _) => VIdToJs ctx (genSym ctx))
+                                    params)
                              , vector (doStat ctx env body)
                              )
                          )
@@ -1872,7 +1890,10 @@ struct
                    end
                  else
                    case (decs, finalExp, params) of
-                     ([], N.App {applied, cont, args, attr = _}, [SOME result]) =>
+                     ( []
+                     , N.App {applied, cont, args, attr = _}
+                     , [(SOME result, _)]
+                     ) =>
                        if cont = name then
                          List.revAppend
                            ( revStats
@@ -1892,8 +1913,9 @@ struct
                          val dec =
                            let
                              val params' =
-                               List.mapPartial (Option.map (fn p => (p, NONE)))
-                                 params
+                               List.mapPartial
+                                 (fn (SOME p, _) => SOME (p, NONE)
+                                   | (NONE, _) => NONE) params
                            in
                              if List.null params' then []
                              else [J.LetStat (vector params')]
@@ -1907,8 +1929,9 @@ struct
                                      { label = CVarToJs name
                                      , which = NONE
                                      , params =
-                                         List.map (Option.map (VIdToJs ctx))
-                                           params
+                                         List.map
+                                           (fn (p, _) =>
+                                              Option.map (VIdToJs ctx) p) params
                                      }
                                  )
                            , subst = #subst env
@@ -1954,9 +1977,9 @@ struct
                                 , J.FunctionExp
                                     ( vector
                                         (List.map
-                                           (fn SOME p => VIdToJs ctx p
-                                             | NONE => VIdToJs ctx (genSym ctx))
-                                           params)
+                                           (fn (SOME p, _) => VIdToJs ctx p
+                                             | (NONE, _) =>
+                                              VIdToJs ctx (genSym ctx)) params)
                                     , vector (doStat ctx env' body)
                                     )
                                 ) :: assignments
@@ -1975,7 +1998,7 @@ struct
                    let
                      datatype init =
                        INIT_WITH_VALUES of
-                         int * (C.Var option list) * N.Exp list
+                         int * (C.Var option * FSyntax.Ty) list * N.Exp list
                      | NO_INIT
                      val init =
                        case (decs, finalExp) of
@@ -1994,18 +2017,19 @@ struct
                      val loopLabel = J.UserDefinedId (genSymNamed (ctx, "loop"))
                      datatype needs_which =
                        NEED_WHICH of J.Id
-                     | NO_WHICH of C.CVar * (C.Var option) list * N.Stat
+                     | NO_WHICH of
+                         C.CVar * (C.Var option * FSyntax.Ty) list * N.Stat
                      val maxargs =
                        List.foldl
                          (fn ((_, params, _), n) =>
                             Int.max (n, List.length
-                              (List.filter Option.isSome params))) 0 defs
+                              (List.filter (Option.isSome o #1) params))) 0 defs
                      val commonParams = List.tabulate (maxargs, fn _ =>
                        genSym ctx)
                      fun mapCommonParams params =
                        List.rev (#2
                          (List.foldl
-                            (fn (SOME _, (c :: rest, acc)) =>
+                            (fn ((SOME _, _), (c :: rest, acc)) =>
                                (rest, SOME c :: acc)
                               | (_, (rest, acc)) => (rest, NONE :: acc))
                             (commonParams, []) params))
@@ -2045,8 +2069,9 @@ struct
                            let
                              val args =
                                ListPair.foldrEq
-                                 (fn (SOME _, a, acc) => a :: acc
-                                   | (NONE, _, acc) => acc) [] (params, args)
+                                 (fn ((SOME _, _), a, acc) => a :: acc
+                                   | ((NONE, _), _, acc) => acc) []
+                                 (params, args)
                              val args' =
                                case optWhich of
                                  NO_WHICH _ =>
@@ -2113,7 +2138,7 @@ struct
                                           ListPair.map
                                             (fn (p, c) =>
                                                (p, J.VarExp (J.UserDefinedId c)))
-                                            ( List.mapPartial (fn x => x) params
+                                            ( List.mapPartial #1 params
                                             , commonParams
                                             )
                                       in
@@ -2139,8 +2164,8 @@ struct
                                                           , J.VarExp
                                                               (J.UserDefinedId c)
                                                           ))
-                                                       ( List.mapPartial
-                                                           (fn x => x) params
+                                                       ( List.mapPartial #1
+                                                           params
                                                        , commonParams
                                                        )
                                                  in
@@ -2171,8 +2196,8 @@ struct
                            ( acc
                            , [{ specs =
                                   List.map
-                                    (fn (name, vid) => (name, VIdToJs ctx vid))
-                                    specs
+                                    (fn (name, vid, _) =>
+                                       (name, VIdToJs ctx vid)) specs
                               , moduleName = moduleName
                               }]
                            )
@@ -2186,7 +2211,7 @@ struct
                        if moduleName' = moduleName then
                          let
                            fun loop ([], env, acc) = (env, acc)
-                             | loop ((name, vid) :: ss, env, acc) =
+                             | loop ((name, vid, _) :: ss, env, acc) =
                                  case
                                    List.find (fn (name', _) => name = name')
                                      specs'
@@ -2305,7 +2330,13 @@ struct
            , vector (doStat ctx env elseCont)
            )]
     | doStat ctx env
-        (N.Handle {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
+        (N.Handle
+           { body
+           , handler = (e, h)
+           , successfulExitIn
+           , successfulExitOut
+           , resultTy = _
+           }) =
         (case #style ctx of
            Backend.DIRECT_STYLE =>
              let

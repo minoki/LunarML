@@ -18,26 +18,31 @@ sig
       }
   | Abs of
       { contParam: CVar
-      , params: Var list
+      , params: (Var * FSyntax.Ty) list
       , body: Stat
+      , resultTy: FSyntax.Ty
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
   | LogicalAnd of Exp * Exp
   | LogicalOr of Exp * Exp
   (* TODO: direct-style function application? *)
   and Dec =
-    ValDec of {exp: Exp, results: (Var option) list}
+    ValDec of {exp: Exp, results: (Var option * FSyntax.Ty) list}
   | RecDec of
       { name: Var
       , contParam: CVar
-      , params: Var list
+      , params: (Var * FSyntax.Ty) list
       , body: Stat
+      , resultTy: FSyntax.Ty
       , attr: CSyntax.AbsAttr
       } list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option) list, body: Stat}
-  | RecContDec of (CVar * (Var option) list * Stat) list
+  | ContDec of {name: CVar, params: (Var option * FSyntax.Ty) list, body: Stat}
+  | RecContDec of (CVar * (Var option * FSyntax.Ty) list * Stat) list
   | ESImportDec of
-      {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
+      { pure: bool
+      , specs: (Syntax.ESImportName * Var * FSyntax.Ty) list
+      , moduleName: string
+      }
   and Stat =
     Let of {decs: Dec list, cont: Stat}
   | App of {applied: Exp, cont: CVar, args: Exp list, attr: CSyntax.AppAttr}
@@ -48,6 +53,7 @@ sig
       , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
+      , resultTy: FSyntax.Ty
       }
   | Raise of SourcePos.span * Exp
   | Unreachable
@@ -70,25 +76,30 @@ struct
       }
   | Abs of
       { contParam: CVar
-      , params: Var list
+      , params: (Var * FSyntax.Ty) list
       , body: Stat
+      , resultTy: FSyntax.Ty
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
   | LogicalAnd of Exp * Exp
   | LogicalOr of Exp * Exp
   and Dec =
-    ValDec of {exp: Exp, results: (Var option) list}
+    ValDec of {exp: Exp, results: (Var option * FSyntax.Ty) list}
   | RecDec of
       { name: Var
       , contParam: CVar
-      , params: Var list
+      , params: (Var * FSyntax.Ty) list
       , body: Stat
+      , resultTy: FSyntax.Ty
       , attr: CSyntax.AbsAttr
       } list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option) list, body: Stat}
-  | RecContDec of (CVar * (Var option) list * Stat) list
+  | ContDec of {name: CVar, params: (Var option * FSyntax.Ty) list, body: Stat}
+  | RecContDec of (CVar * (Var option * FSyntax.Ty) list * Stat) list
   | ESImportDec of
-      {pure: bool, specs: (Syntax.ESImportName * Var) list, moduleName: string}
+      { pure: bool
+      , specs: (Syntax.ESImportName * Var * FSyntax.Ty) list
+      , moduleName: string
+      }
   and Stat =
     Let of {decs: Dec list, cont: Stat}
   | App of {applied: Exp, cont: CVar, args: Exp list, attr: CSyntax.AppAttr}
@@ -99,6 +110,7 @@ struct
       , handler: Var * Stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
+      , resultTy: FSyntax.Ty
       }
   | Raise of SourcePos.span * Exp
   | Unreachable
@@ -130,59 +142,62 @@ struct
       | goSimpleExp (C.Projection {label, record, fieldTypes}) =
           Projection
             {label = label, record = Value record, fieldTypes = fieldTypes}
-      | goSimpleExp
-          (C.Abs {contParam, tyParams = _, params, body, resultTy = _, attr}) =
-          Abs
-            { contParam = contParam
-            , params = List.map #1 params
-            , body = goStat body
-            , attr = attr
-            }
+      | goSimpleExp (C.Abs {contParam, tyParams, params, body, resultTy, attr}) =
+          ( case tyParams of
+              [] => ()
+            | _ => raise Fail "NSyntax.fromStat: Abs with non-empty tyParams"
+          ; Abs
+              { contParam = contParam
+              , params = params
+              , body = goStat body
+              , resultTy = resultTy
+              , attr = attr
+              }
+          )
     and goDec (C.ValDec {exp, results}) =
-          SOME (ValDec {exp = goSimpleExp exp, results = List.map #1 results})
+          SOME (ValDec {exp = goSimpleExp exp, results = results})
       | goDec (C.RecDec decs) =
           SOME (RecDec
             (List.map
-               (fn { name
-                   , contParam
-                   , tyParams = _
-                   , params
-                   , body
-                   , resultTy = _
-                   , attr
-                   } =>
-                  { name = name
-                  , contParam = contParam
-                  , params = List.map #1 params
-                  , body = goStat body
-                  , attr = attr
-                  }) decs))
-      | goDec (C.UnpackDec {tyVar = _, kind = _, vid, unpackedTy = _, package}) =
-          SOME (ValDec {exp = Value package, results = [SOME vid]})
+               (fn {name, contParam, tyParams, params, body, resultTy, attr} =>
+                  ( case tyParams of
+                      [] => ()
+                    | _ =>
+                        raise Fail
+                          "NSyntax.fromStat: RecDec with non-empty tyParams"
+                  ; { name = name
+                    , contParam = contParam
+                    , params = params
+                    , body = goStat body
+                    , resultTy = resultTy
+                    , attr = attr
+                    }
+                  )) decs))
+      | goDec (C.UnpackDec _) =
+          raise Fail "NSyntax.fromStat: unexpected UnpackDec"
       | goDec (C.ContDec {name, params, body, attr = _}) =
-          SOME (ContDec
-            {name = name, params = List.map #1 params, body = goStat body})
+          SOME (ContDec {name = name, params = params, body = goStat body})
       | goDec (C.RecContDec decs) =
           SOME (RecContDec
-            (List.map
-               (fn (name, params, body) =>
-                  (name, List.map #1 params, goStat body)) decs))
+            (List.map (fn (name, params, body) => (name, params, goStat body))
+               decs))
       | goDec (C.DatatypeDec _) = NONE
       | goDec (C.ESImportDec {pure, specs, moduleName}) =
-          SOME (ESImportDec
-            { pure = pure
-            , specs = List.map (fn (name, v, _) => (name, v)) specs
-            , moduleName = moduleName
-            })
+          SOME
+            (ESImportDec {pure = pure, specs = specs, moduleName = moduleName})
     and goStat (C.Let {decs, cont}) =
           Let {decs = List.mapPartial goDec decs, cont = goStat cont}
-      | goStat (C.App {applied, cont, tyArgs = _, args, attr}) =
-          App
-            { applied = Value applied
-            , cont = cont
-            , args = List.map Value args
-            , attr = attr
-            }
+      | goStat (C.App {applied, cont, tyArgs, args, attr}) =
+          ( case tyArgs of
+              [] => ()
+            | _ => raise Fail "NSyntax.fromStat: App with non-empty tyArgs"
+          ; App
+              { applied = Value applied
+              , cont = cont
+              , args = List.map Value args
+              , attr = attr
+              }
+          )
       | goStat (C.AppCont {applied, args}) =
           AppCont {applied = applied, args = List.map Value args}
       | goStat (C.If {cond, thenCont, elseCont}) =
@@ -197,13 +212,14 @@ struct
              , handler = (e, h)
              , successfulExitIn
              , successfulExitOut
-             , resultTy = _
+             , resultTy
              }) =
           Handle
             { body = goStat body
             , handler = (e, goStat h)
             , successfulExitIn = successfulExitIn
             , successfulExitOut = successfulExitOut
+            , resultTy = resultTy
             }
       | goStat (C.Raise (span, x)) =
           Raise (span, Value x)
@@ -396,11 +412,12 @@ struct
           | goExp (Projection {label, record, fieldTypes}) =
               Projection
                 {label = label, record = goExp record, fieldTypes = fieldTypes}
-          | goExp (Abs {contParam, params, body, attr}) =
+          | goExp (Abs {contParam, params, body, resultTy, attr}) =
               Abs
                 { contParam = contParam
                 , params = params
                 , body = goStat body
+                , resultTy = resultTy
                 , attr = attr
                 }
           | goExp (LogicalAnd (x, y)) =
@@ -408,7 +425,7 @@ struct
           | goExp (LogicalOr (x, y)) =
               LogicalOr (goExp x, goExp y)
         and goDecs (_, [], revAcc) = revAcc (* reversed *)
-          | goDecs (i, ValDec {exp, results as [SOME v]} :: decs, revAcc) =
+          | goDecs (i, ValDec {exp, results as [(SOME v, _)]} :: decs, revAcc) =
               (*
                * Situation:
                *   ...(rev revAcc)...
@@ -443,11 +460,12 @@ struct
                 , decs
                 , RecDec
                     (List.map
-                       (fn {name, contParam, params, body, attr} =>
+                       (fn {name, contParam, params, body, resultTy, attr} =>
                           { name = name
                           , contParam = contParam
                           , params = params
                           , body = goStat body
+                          , resultTy = resultTy
                           , attr = attr
                           }) rdecs) :: revAcc
                 )
@@ -475,7 +493,7 @@ struct
                   | LetRev (revDecs, cont) =
                       Let {decs = List.rev revDecs, cont = cont}
                 fun searchFirstValDec
-                      (acc, ValDec {exp, results = [SOME v]} :: revDecs) =
+                      (acc, ValDec {exp, results = [(SOME v, _)]} :: revDecs) =
                       SOME (List.revAppend (acc, revDecs), exp, v)
                   | searchFirstValDec (_, ValDec _ :: _) = NONE
                   | searchFirstValDec (acc, (dec as RecDec _) :: revDecs) =
@@ -506,7 +524,7 @@ struct
                             val cont = goStat cont
                           in
                             case (revDecs1, cont) of
-                              ( ContDec {name, params as [SOME p], body} ::
+                              ( ContDec {name, params as [(SOME p, _)], body} ::
                                   revDecs2
                               , AppCont {applied, args = [a]}
                               ) =>
@@ -607,12 +625,18 @@ struct
               end
           | goStat
               (Handle
-                 {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
+                 { body
+                 , handler = (e, h)
+                 , successfulExitIn
+                 , successfulExitOut
+                 , resultTy
+                 }) =
               Handle
                 { body = goStat body
                 , handler = (e, goStat h)
                 , successfulExitIn = successfulExitIn
                 , successfulExitOut = successfulExitOut
+                , resultTy = resultTy
                 }
           | goStat (Raise (span, x)) =
               Raise (span, goExp x)
