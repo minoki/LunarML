@@ -63,6 +63,7 @@ codegen-lua.sml
 wasm/syntax.sml
 wasm/wat-writer.sml
 wasm/writer.sml
+codegen-wasm.sml
 js/syntax.sml
 js/transform.sml
 js/simplify-jumps.sml

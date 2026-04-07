@@ -79,6 +79,7 @@ sources = \
   src/js/transform.sml \
   src/js/simplify-jumps.sml \
   src/codegen-js.sml \
+  src/codegen-wasm.sml \
   src/mlb-syntax.sml \
   src/mlb-parser.sml \
   src/driver.sml \
