@@ -371,8 +371,50 @@ struct
         in
           ()
         end
-    | emit ({backend = BACKEND_WASM _, ...}: options) _ _ _ _ _ _ =
-        raise Fail "Wasm code generation is not yet implemented"
+    | emit (opts as {backend as BACKEND_WASM {output}, ...}: options) _ fileName
+        cont _ cexp _ =
+        let
+          val timer = Timer.startCPUTimer ()
+          val base = OS.Path.base fileName
+          val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
+          val wasmCtx = CodeGenWasm.initContext ()
+          val wasmModule = CodeGenWasm.doProgram wasmCtx cont nested
+          val codegenTime = Time.toMicroseconds
+            (#usr (Timer.checkCPUTimer timer))
+          val () =
+            case output of
+              Backend.WASM_BINARY =>
+                let
+                  val outs = BinIO.openOut
+                    (Option.getOpt (#output opts, base ^ ".wasm"))
+                  val () = WasmWriter.writeModule (outs, wasmModule)
+                  val () = BinIO.closeOut outs
+                in
+                  ()
+                end
+            | Backend.WASM_TEXT =>
+                let
+                  val outs = TextIO.openOut
+                    (Option.getOpt (#output opts, base ^ ".wat"))
+                  val () = WatWriter.writeModule (outs, wasmModule)
+                  val () = TextIO.closeOut outs
+                in
+                  ()
+                end
+          val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val () =
+            if #printTimings opts then
+              print
+                ("[TIME] Wasm codegen: " ^ LargeInt.toString codegenTime
+                 ^
+                 " us\n\
+                 \[TIME] Wasm writer: "
+                 ^ LargeInt.toString (writeTime - codegenTime) ^ " us\n")
+            else
+              ()
+        in
+          ()
+        end
   structure CheckFInit =
   struct
     fun toFTy (TypedSyntax.TyVar (_, tv)) = FSyntax.TyVar tv
