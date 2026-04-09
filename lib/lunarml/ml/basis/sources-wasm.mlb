@@ -1,0 +1,31 @@
+lunarml-prim.mlb
+local
+ann "nonexhaustiveRaise ignore"
+    "sequenceNonUnit ignore"
+    "valDescInComments warn"
+    "allowExtendedNumConsts true"
+    "allowVectorExps true"
+    "allowHexFloatConsts true"
+    "allowInfixingDot true"
+    "allowPrim true"
+    "allowOverload true"
+    "allowExtendedTextConsts true"
+in
+wasm/general-prim.sml
+general.sml
+option.sml
+js-common/int-prim.sml
+list.sml
+unsafe-basic.sml
+bool.sml
+lunarml.sml
+end
+in
+signature OPTION
+structure General
+structure Option
+structure Bool
+structure List
+structure LunarML
+wasm/top-level.sml
+end

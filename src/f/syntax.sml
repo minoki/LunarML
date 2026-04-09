@@ -1967,10 +1967,12 @@ sig
     }
   val programToFDecs: Context * Env * TypedSyntax.TopDec list
                       -> Env * FSyntax.Dec list
+  (* Wasm export signature: number of i32 params *)
+  type export_sig = {nParams: int}
   datatype export_entity =
     NO_EXPORT
   | EXPORT_VALUE
-  | EXPORT_NAMED of string vector
+  | EXPORT_NAMED of (string * export_sig) vector
   val addExport: Context * Typing.Env * Env * FSyntax.Dec list
                  -> FSyntax.Exp * export_entity
   val initialEnv: Env
@@ -4971,10 +4973,28 @@ struct
           end
     fun isAlphaNumName name =
       List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
+    type export_sig = {nParams: int}
     datatype export_entity =
       NO_EXPORT
     | EXPORT_VALUE
-    | EXPORT_NAMED of string vector
+    | EXPORT_NAMED of (string * export_sig) vector
+    (* Compute the number of i32 params for a Wasm export wrapper.
+       For int -> int, nParams = 1.
+       For (int * int) -> int, nParams = 2 (tuple expansion).
+       For unit -> int, nParams = 0.
+       For non-function types, nParams = 0 (value export). *)
+    fun computeExportSig (T.TypeScheme ([], ty)) : export_sig =
+          (case ty of
+             T.FnType (_, paramTy, _) =>
+               (case paramTy of
+                  T.RecordType (_, fields) =>
+                    if Syntax.LabelMap.isEmpty fields then
+                      {nParams = 0} (* unit -> ... *)
+                    else
+                      {nParams = Syntax.LabelMap.numItems fields} (* tuple *)
+                | _ => {nParams = 1}) (* single arg *)
+           | _ => {nParams = 0}) (* not a function *)
+      | computeExportSig _ = {nParams = 1} (* polymorphic: default to 1 *)
     fun addExport (ctx, tenv: Typing.Env, toFEnv: Env, decs) =
       case
         ( Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export")
@@ -4992,15 +5012,24 @@ struct
           )
       | (NONE, SOME ({valMap, ...}, T.MkLongStrId (strid0, strids))) =>
           let
-            val fields = Syntax.VIdMap.listItems
+            val fieldsWithSig = Syntax.VIdMap.listItems
               (Syntax.VIdMap.mapPartiali
-                 (fn (vid, _) =>
+                 (fn (vid, (tysc, _)) =>
                     let
                       val name = Syntax.getVIdName vid
+                      val sig_ = computeExportSig tysc
                     in
                       if isAlphaNumName name then
-                        SOME (name, #1 (LongVarExp
-                          (ctx, toFEnv, [], T.MkLongVId (strid0, strids, vid))))
+                        SOME
+                          ( name
+                          , #1 (LongVarExp
+                              ( ctx
+                              , toFEnv
+                              , []
+                              , T.MkLongVId (strid0, strids, vid)
+                              ))
+                          , sig_
+                          )
                       else if String.isSuffix "'" name then
                         let
                           val name' = String.substring
@@ -5013,22 +5042,29 @@ struct
                               (Syntax.VIdMap.inDomain
                                  (valMap, Syntax.MkVId name'))
                           then
-                            SOME (name', #1 (LongVarExp
-                              ( ctx
-                              , toFEnv
-                              , []
-                              , T.MkLongVId (strid0, strids, vid)
-                              )))
+                            SOME
+                              ( name'
+                              , #1 (LongVarExp
+                                  ( ctx
+                                  , toFEnv
+                                  , []
+                                  , T.MkLongVId (strid0, strids, vid)
+                                  ))
+                              , sig_
+                              )
                           else
                             NONE
                         end
                       else
                         NONE
                     end) valMap)
-            val fields' = Vector.fromList fields
+            val exportFields = Vector.fromList
+              (List.map (fn (name, exp, _) => (name, exp)) fieldsWithSig)
+            val exportNames = Vector.fromList
+              (List.map (fn (name, _, sig_) => (name, sig_)) fieldsWithSig)
           in
-            ( F.LetExp (decs, F.ExportModule fields')
-            , EXPORT_NAMED (Vector.map (fn (name, _) => name) fields')
+            ( F.LetExp (decs, F.ExportModule exportFields)
+            , EXPORT_NAMED exportNames
             )
           end
       | (SOME _, SOME _) =>

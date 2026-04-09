@@ -142,16 +142,18 @@ struct
     | encodeNumtype F32 = 0x7D
     | encodeNumtype F64 = 0x7C
 
-  fun encodeAbsHeapType FUNC = 0x70
-    | encodeAbsHeapType EXTERN = 0x6F
-    | encodeAbsHeapType ANY = 0x6E
-    | encodeAbsHeapType EQ = 0x6D
-    | encodeAbsHeapType I31 = 0x6C
-    | encodeAbsHeapType STRUCT = 0x6B
-    | encodeAbsHeapType ARRAY = 0x6A
-    | encodeAbsHeapType HEAP_NONE = 0x71
-    | encodeAbsHeapType NOFUNC = 0x73
-    | encodeAbsHeapType NOEXTERN = 0x72
+  (* Abstract heap types are encoded as negative SLEB128 values in Wasm binary format.
+     The unsigned byte values (0x70, 0x6F, etc.) map to signed values via 7-bit sign extension. *)
+  fun encodeAbsHeapType FUNC = ~16      (* 0x70 *)
+    | encodeAbsHeapType EXTERN = ~17    (* 0x6F *)
+    | encodeAbsHeapType ANY = ~18       (* 0x6E *)
+    | encodeAbsHeapType EQ = ~19        (* 0x6D *)
+    | encodeAbsHeapType I31 = ~20       (* 0x6C *)
+    | encodeAbsHeapType STRUCT = ~21    (* 0x6B *)
+    | encodeAbsHeapType ARRAY = ~22     (* 0x6A *)
+    | encodeAbsHeapType HEAP_NONE = ~15 (* 0x71 *)
+    | encodeAbsHeapType NOFUNC = ~13    (* 0x73 *)
+    | encodeAbsHeapType NOEXTERN = ~14  (* 0x72 *)
 
   (* Encode heaptype *)
   fun bufferOutputHeapType (buf, AbsHeapType aht) =

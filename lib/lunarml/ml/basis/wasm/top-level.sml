@@ -1,0 +1,22 @@
+val op <> : ''a * ''a -> bool = op <>;
+open General;
+datatype ref = datatype ref;
+datatype bool = datatype bool;
+datatype option = datatype Option.option;
+datatype list = datatype list;
+exception Empty = List.Empty
+exception Option = Option.Option;
+val op @ : ('a list * 'a list) -> 'a list = List.@
+val app : ('a -> unit) -> 'a list -> unit = List.app
+val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
+val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
+val getOpt : 'a option * 'a -> 'a = Option.getOpt
+val hd : 'a list -> 'a = List.hd
+val isSome : 'a option -> bool = Option.isSome
+val length : 'a list -> int = List.length
+val map : ('a -> 'b) -> 'a list -> 'b list = List.map
+val not : bool -> bool = Bool.not
+val null : 'a list -> bool = List.null
+val rev : 'a list -> 'a list = List.rev
+val tl : 'a list -> 'a list = List.tl
+val valOf : 'a option -> 'a = Option.valOf;

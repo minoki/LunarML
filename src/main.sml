@@ -311,13 +311,15 @@ struct
             | (Backend.DIRECT_STYLE, ToFSyntax.EXPORT_VALUE) =>
                 CodeGenJs.doProgramDirectDefaultExport jsctx cont nested
             | (Backend.DIRECT_STYLE, ToFSyntax.EXPORT_NAMED names) =>
-                CodeGenJs.doProgramDirectNamedExport jsctx cont nested names
+                CodeGenJs.doProgramDirectNamedExport jsctx cont nested
+                  (Vector.map #1 names)
             | (Backend.CPS, ToFSyntax.NO_EXPORT) =>
                 CodeGenJs.doProgramCPS jsctx cont nested
             | (Backend.CPS, ToFSyntax.EXPORT_VALUE) =>
                 CodeGenJs.doProgramCPSDefaultExport jsctx cont nested
             | (Backend.CPS, ToFSyntax.EXPORT_NAMED names) =>
-                CodeGenJs.doProgramCPSNamedExport jsctx cont nested names
+                CodeGenJs.doProgramCPSNamedExport jsctx cont nested
+                  (Vector.map #1 names)
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram {nextVId = nextId} js
@@ -372,13 +374,13 @@ struct
           ()
         end
     | emit (opts as {backend as BACKEND_WASM {output}, ...}: options) _ fileName
-        cont _ cexp _ =
+        cont _ cexp export =
         let
           val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
           val wasmCtx = CodeGenWasm.initContext ()
-          val wasmModule = CodeGenWasm.doProgram wasmCtx cont nested
+          val wasmModule = CodeGenWasm.doProgram wasmCtx cont nested export
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val () =
