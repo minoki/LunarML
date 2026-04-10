@@ -349,6 +349,7 @@ sig
     , funcs: func list
     , tables: table list
     , mems: memtype list
+    , tags: tagtype list
     , globals: global list
     , elems: elem list
     , datas: data list
@@ -626,6 +627,7 @@ struct
     , funcs: func list
     , tables: table list
     , mems: memtype list
+    , tags: tagtype list
     , globals: global list
     , elems: elem list
     , datas: data list
@@ -654,6 +656,7 @@ struct
     , funcs = []
     , tables = []
     , mems = []
+    , tags = []
     , globals = []
     , elems = []
     , datas = []

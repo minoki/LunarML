@@ -1018,6 +1018,10 @@ struct
         (print (message ^ "\n"); OS.Process.exit OS.Process.failure)
     | CodeGenJs.CodeGenError message =>
         (print (message ^ "\n"); OS.Process.exit OS.Process.failure)
+    | CodeGenWasm.CodeGenError message =>
+        ( print ("CodeGenWasm error: " ^ message ^ "\n")
+        ; OS.Process.exit OS.Process.failure
+        )
   fun handleInputFile opts [file] =
         if String.isSuffix ".sml" file then
           doCompile opts file (fn ctx =>

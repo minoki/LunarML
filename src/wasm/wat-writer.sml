@@ -21,6 +21,14 @@ struct
   fun outputLine (out, level, s) =
     (outputIndent (out, level); output (out, s); output (out, "\n"))
 
+  (* WAT uses '-' for negative, but SML's Int32.toString uses '~' *)
+  fun int32ToString (n: Int32.int) =
+    if n < 0 then "-" ^ String.extract (Int32.toString n, 1, NONE)
+    else Int32.toString n
+  fun int64ToString (n: Int64.int) =
+    if n < 0 then "-" ^ String.extract (Int64.toString n, 1, NONE)
+    else Int64.toString n
+
   fun sxToString S = "_s"
     | sxToString U = "_u"
 
@@ -250,8 +258,8 @@ struct
     | GLOBAL_SET idx =>
         outputLine (out, level, "global.set " ^ Int.toString idx)
     (* Numeric instructions *)
-    | I32_CONST n => outputLine (out, level, "i32.const " ^ Int32.toString n)
-    | I64_CONST n => outputLine (out, level, "i64.const " ^ Int64.toString n)
+    | I32_CONST n => outputLine (out, level, "i32.const " ^ int32ToString n)
+    | I64_CONST n => outputLine (out, level, "i64.const " ^ int64ToString n)
     | F32_CONST w => outputLine (out, level, "f32.const " ^ f32ToString w)
     | F64_CONST r => outputLine (out, level, "f64.const " ^ f64ToString r)
     | I32_UNOP opr => outputLine (out, level, "i32." ^ iunopToString opr)
@@ -623,6 +631,9 @@ struct
     ; output (out, ")\n")
     )
 
+  fun writeTag (out, level, {functype}) =
+    outputLine (out, level, "(tag (type " ^ Int.toString functype ^ "))")
+
   fun writeModule (out, m: module) =
     let
       val
@@ -630,6 +641,7 @@ struct
         , funcs
         , tables
         , mems
+        , tags
         , globals
         , elems
         , datas
@@ -644,6 +656,8 @@ struct
       List.app (fn rt => writeRectype (out, 1, typeCounter, rt)) types;
       (* Imports *)
       List.app (fn imp => writeImport (out, 1, imp)) imports;
+      (* Tags *)
+      List.app (fn t => writeTag (out, 1, t)) tags;
       (* Functions *)
       List.app (fn f => writeFunc (out, 1, f)) funcs;
       (* Tables *)

@@ -684,10 +684,20 @@ struct
       end
 
   (* Section 13: Tag section *)
-  fun writeTagSection (out, imports: import list, _: func list) =
-    (* Tags defined in the module (not imported) - we need to check if there are any tags used *)
-    (* For now, tags are only from imports; local tag definitions would need to be added to the module type *)
-    ()
+  fun writeTagSection (out, tags: tagtype list) =
+    if List.null tags then ()
+    else
+      let
+        val content = buildSection (fn buf =>
+          ( bufferOutputULEB128 (buf, List.length tags)
+          ; List.app (fn {functype} =>
+              ( bufferOutputByte (buf, 0wx00) (* attribute = exception *)
+              ; bufferOutputULEB128 (buf, functype)
+              )) tags
+          ))
+      in
+        outputSection (out, 13, content)
+      end
 
   (* Section 6: Global section *)
   fun writeGlobalSection (out, globals: global list) =
@@ -886,7 +896,7 @@ struct
 
   fun writeModule (out, m: module) =
     let
-      val {types, funcs, tables, mems, globals, elems, datas, start, imports, exports} = m
+      val {types, funcs, tables, mems, tags, globals, elems, datas, start, imports, exports} = m
     in
       (* Magic number: \0asm *)
       outputBytes (out, Word8Vector.fromList [0wx00, 0wx61, 0wx73, 0wx6D]);
@@ -898,6 +908,7 @@ struct
       writeFunctionSection (out, funcs);
       writeTableSection (out, tables);
       writeMemorySection (out, mems);
+      writeTagSection (out, tags);
       writeGlobalSection (out, globals);
       writeExportSection (out, exports);
       writeStartSection (out, start);

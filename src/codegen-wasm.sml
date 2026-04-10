@@ -15,6 +15,7 @@ sig
     , revImports: WasmSyntax.import list ref (* reversed *)
     , revExports: WasmSyntax.export list ref (* reversed *)
     , revDatas: WasmSyntax.data list ref (* reversed *)
+    , revTags: WasmSyntax.tagtype list ref (* reversed, module-defined tags *)
     , tupleTyIdxMap: int IntRedBlackMap.map ref (* field count -> typeidx *)
     , funcTypeMap:
         (WasmSyntax.valtype list * WasmSyntax.valtype list * int) list ref
@@ -22,6 +23,9 @@ sig
     , boxedI32TypeIdx: WasmSyntax.typeidx
     , boxedI64TypeIdx: WasmSyntax.typeidx
     , boxedF64TypeIdx: WasmSyntax.typeidx
+    , exnTagTypeIdx: WasmSyntax.typeidx
+    , smlExnTypeIdx: WasmSyntax.typeidx
+    , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
     }
 
   type FuncContext =
@@ -62,12 +66,16 @@ struct
     , revImports: W.import list ref
     , revExports: W.export list ref
     , revDatas: W.data list ref
+    , revTags: W.tagtype list ref
     , tupleTyIdxMap: int IntRedBlackMap.map ref
     , funcTypeMap: (W.valtype list * W.valtype list * int) list ref
     , closureBaseTypeIdx: W.typeidx
     , boxedI32TypeIdx: W.typeidx
     , boxedI64TypeIdx: W.typeidx
     , boxedF64TypeIdx: W.typeidx
+    , exnTagTypeIdx: W.typeidx
+    , smlExnTypeIdx: W.typeidx
+    , smlExnTagIdx: int
     }
 
   type FuncContext =
@@ -286,6 +294,21 @@ struct
   fun envWithCont (env: Env, k, repr) : Env =
     { vars = #vars env
     , continuations = C.CVarMap.insert (#continuations env, k, repr)
+    }
+
+  (* Bump all label indices in a cont_repr by n (for extra block nesting) *)
+  fun bumpContRepr _ RETURN = RETURN
+    | bumpContRepr n (BREAK_TO {label, params}) =
+        BREAK_TO {label = label + n, params = params}
+    | bumpContRepr n (CONTINUE_TO {label, which, params}) =
+        CONTINUE_TO {label = label + n, which = which, params = params}
+
+  (* Bump all continuation label indices in an Env by n.
+     Use this when entering a structured control instruction that adds a label
+     (e.g., if/block/loop/try_table) so that existing br targets stay correct. *)
+  fun bumpEnvConts n (env: Env) : Env =
+    { vars = #vars env
+    , continuations = C.CVarMap.map (bumpContRepr n) (#continuations env)
     }
 
   (* Allocate a new local variable with a specific type *)
@@ -545,7 +568,9 @@ struct
                 W.STRUCT_NEW tupleIdx :: acc'
               end
           end
-      | N.ExnTag _ => raise CodeGenError "doExp: ExnTag not yet implemented"
+      | N.ExnTag _ =>
+          (* Create a fresh ExnTagType struct instance for unique identity via ref.eq *)
+          W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
       | N.Projection {label, record, fieldTypes} =>
           let
             val n = Syntax.LabelMap.numItems fieldTypes
@@ -695,21 +720,76 @@ struct
         doApp fctx env (applied, cont, args, acc)
     | N.AppCont {applied, args} => doAppCont fctx env (applied, args, acc)
     | N.If {cond, thenCont, elseCont} =>
-        W.UNREACHABLE
-        ::
-        W.IF
-          ( W.BlockTypeNone
-          , List.rev (doStat fctx env (thenCont, []))
-          , List.rev (doStat fctx env (elseCont, []))
-          ) :: doExp fctx env (cond, acc)
+        (* The `if` instruction adds a label (level 0 inside the body).
+           Bump all continuation labels by 1 so existing `br` targets remain correct. *)
+        let
+          val bumpedEnv = bumpEnvConts 1 env
+        in
+          W.UNREACHABLE
+          ::
+          W.IF
+            ( W.BlockTypeNone
+            , List.rev (doStat fctx bumpedEnv (thenCont, []))
+            , List.rev (doStat fctx bumpedEnv (elseCont, []))
+            ) :: doExp fctx env (cond, acc)
+        end
     | N.Handle
         { body
         , handler = (e, h)
         , successfulExitIn
         , successfulExitOut
         , resultTy = _
-        } => raise CodeGenError "doStat: Handle not yet implemented"
-    | N.Raise (_, exp) => raise CodeGenError "doStat: Raise not yet implemented"
+        } =>
+        let
+          val ctx = #ctx fctx
+          (* Look up successfulExitOut continuation representation *)
+          val outRepr =
+            case C.CVarMap.find (#continuations env, successfulExitOut) of
+              SOME r => r
+            | NONE =>
+                raise CodeGenError
+                  "doStat: Handle: successfulExitOut not in env"
+          (* Inside try_table body we are 2 levels deeper:
+             - outer BLOCK (level +1)
+             - try_table itself (level +1)
+             So bump all break/continue labels by 2. *)
+          val innerOutRepr = bumpContRepr 2 outRepr
+          (* Allocate a local to hold the caught exception value *)
+          val eLocal = allocLocal fctx eqref
+          (* Env for body: add successfulExitIn → innerOutRepr *)
+          val bodyEnv = envWithCont (env, successfulExitIn, innerOutRepr)
+          (* Env for handler: bind exception variable e to eLocal *)
+          val handlerEnv = envWithVar (env, e, eLocal)
+          (* Generate body and handler code *)
+          val bodyCode = List.rev (doStat fctx bodyEnv (body, []))
+          val handlerCode = List.rev (doStat fctx handlerEnv (h, []))
+          val smlExnTagIdx = #smlExnTagIdx ctx
+          (* Structure:
+             block (result eqref)       ;; outerBlock: catch target (label 0 from try_table's outer context)
+               try_table (catch $sml_exn 0)  ;; 0 = outerBlock (immediately enclosing, counted from outside try_table)
+                 <body>                 ;; body uses bumpContRepr 2 labels (try_table=1, outerBlock=1)
+                 unreachable            ;; body always transfers control
+               end
+               unreachable              ;; never reached
+             end                        ;; exception (eqref) falls through here
+             local.set eLocal           ;; bind caught exception
+             <handlerCode>              ;; handler runs in original env *)
+          val outerBlock = W.BLOCK
+            ( W.BlockTypeVal eqref
+            , [ W.TRY_TABLE
+                  ( W.BlockTypeNone
+                  , [W.CATCH (smlExnTagIdx, 0)]
+                  , bodyCode @ [W.UNREACHABLE]
+                  )
+              , W.UNREACHABLE
+              ]
+            )
+        in
+          List.revAppend (handlerCode, W.LOCAL_SET eLocal :: outerBlock :: acc)
+        end
+    | N.Raise (_, exp) =>
+        (* Pop exception value (eqref = $SmlExn) from stack and throw *)
+        W.THROW (#smlExnTagIdx (#ctx fctx)) :: doExp fctx env (exp, acc)
     | N.Unreachable => W.UNREACHABLE :: acc
 
   (* ==================== Function application ==================== *)
@@ -1219,17 +1299,48 @@ struct
           W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
       | (F.DataTagAsString16Op _, _, [_]) =>
           W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
-      | (F.ExnPayloadOp, _, [arg]) =>
-          doExp fctx env (arg, acc) (* TODO: proper exn payload extraction *)
-      | (F.ConstructExnOp, _, [tag]) =>
-          doExp fctx env (tag, acc) (* TODO: proper exn construction *)
-      | (F.ConstructExnWithPayloadOp, _, [tag, payload]) =>
+      | (F.ExnPayloadOp, [payloadTy], [arg]) =>
+          (* Extract payload (field 1) from $SmlExn struct.
+             The payload is stored as eqref; if the caller expects an unboxed
+             type, emit unbox instructions after extracting.
+             NOTE: acc is a reversed accumulator; instructions are prepended in
+             reverse execution order. The desired execution order is:
+               arg → ref.cast($SmlExn) → struct.get(5,1) → [unbox] *)
           let
-            val tupleIdx = getTupleTypeIdx ctx 2
+            val smlExnTypeIdx = #smlExnTypeIdx ctx
+            (* Base: push arg, cast to $SmlExn, get payload field *)
+            val baseAcc =
+              W.STRUCT_GET (smlExnTypeIdx, 1)
+              ::
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx smlExnTypeIdx}
+              :: doExp fctx env (arg, acc)
+          in
+            case tyToUnboxedTy payloadTy of
+              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+            | NONE => baseAcc
+          end
+      | (F.ConstructExnOp, _, [tag]) =>
+          (* Build $SmlExn struct with tag and null payload *)
+          let
+            val smlExnTypeIdx = #smlExnTypeIdx ctx
+            val acc = doExp fctx env (tag, acc)
+            val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+          in
+            W.STRUCT_NEW smlExnTypeIdx :: acc
+          end
+      | (F.ConstructExnWithPayloadOp, [payloadTy], [tag, payload]) =>
+          (* Build $SmlExn struct with tag and payload (eqref).
+             If the payload is an unboxed type (e.g., int), box it first. *)
+          let
+            val smlExnTypeIdx = #smlExnTypeIdx ctx
             val acc = doExp fctx env (tag, acc)
             val acc = doExp fctx env (payload, acc)
+            val acc =
+              case tyToUnboxedTy payloadTy of
+                SOME ubt => List.revAppend (emitBox (ubt, ctx), acc)
+              | NONE => acc
           in
-            W.STRUCT_NEW tupleIdx :: acc
+            W.STRUCT_NEW smlExnTypeIdx :: acc
           end
       | (F.RaiseOp _, _, _) =>
           raise CodeGenError "doPrimOp: RaiseOp should not appear in NSyntax"
@@ -1623,6 +1734,22 @@ struct
       | Primitives.Word_EQUAL Primitives.WORD =>
           doBinary [W.I32_RELOP W.IEQ] args
 
+      (* ---- Exception operations ---- *)
+      | Primitives.Exception_instanceof =>
+          (* Check if exception e matches tag: cast e to $SmlExn, get tag field, ref.eq with tag arg *)
+          (case args of
+             [e, tag] =>
+               let
+                 val smlExnTypeIdx = #smlExnTypeIdx ctx
+               in
+                 W.REF_EQ :: W.STRUCT_GET (smlExnTypeIdx, 0)
+                 ::
+                 W.REF_CAST
+                   {nullable = false, heaptype = W.TypeIdx smlExnTypeIdx}
+                 :: doExp fctx env (e, doExp fctx env (tag, acc))
+               end
+           | _ => raise CodeGenError "Exception_instanceof: expected 2 args")
+
       (* ---- General exn name ---- *)
       | Primitives.General_exnName =>
           W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
@@ -1646,6 +1773,10 @@ struct
       val boxedI64TypeIdx = 1
       val boxedF64TypeIdx = 2
       val closureBaseTypeIdx = 3
+      val exnTagTypeIdx = 4
+      val smlExnTypeIdx = 5
+      val smlExnFuncTypeIdx = 6
+      val smlExnTagIdx = 0 (* first module-defined tag, no imported tags *)
       fun mkBoxedStruct numty =
         W.SubType
           { final = false
@@ -1666,21 +1797,53 @@ struct
                  (W.RefType {nullable = false, heaptype = W.AbsHeapType W.FUNC})
              }]
         }
+      (* ExnTagType: empty struct, used for exception tag identity via ref.eq *)
+      val exnTagType =
+        W.SubType {final = false, supertypes = [], body = W.StructType []}
+      (* SmlExnType: struct (field tag eqref) (field payload eqref) *)
+      val smlExnType = W.SubType
+        { final = false
+        , supertypes = []
+        , body = W.StructType
+            [ {mut = W.CONST, storagetype = W.ValStorageType eqref}
+            , {mut = W.CONST, storagetype = W.ValStorageType eqref}
+            ]
+        }
+      (* SmlExnFuncType: functype for the $sml_exn exception tag: (func (param eqref)) *)
+      val smlExnFuncType = W.SubType
+        { final = true
+        , supertypes = []
+        , body = W.FuncType {params = [eqref], results = []}
+        }
+      (* Module-defined tag for SML exceptions *)
+      val smlExnTag: W.tagtype = {functype = smlExnFuncTypeIdx}
     in
-      { nextTypeIdx = ref 4
+      { nextTypeIdx = ref 7
       , nextFuncIdx = ref 0
-      , revTypes = ref [[closureBase], [boxedF64], [boxedI64], [boxedI32]]
+      , revTypes = ref
+          [ [smlExnFuncType]
+          , [smlExnType]
+          , [exnTagType]
+          , [closureBase]
+          , [boxedF64]
+          , [boxedI64]
+          , [boxedI32]
+          ]
       , revFuncs = ref []
       , revGlobals = ref []
       , revImports = ref []
       , revExports = ref []
       , revDatas = ref []
+      , revTags = ref [smlExnTag]
       , tupleTyIdxMap = ref IntRedBlackMap.empty
       , funcTypeMap = ref []
       , closureBaseTypeIdx = closureBaseTypeIdx
       , boxedI32TypeIdx = boxedI32TypeIdx
       , boxedI64TypeIdx = boxedI64TypeIdx
       , boxedF64TypeIdx = boxedF64TypeIdx
+      , exnTagTypeIdx = exnTagTypeIdx
+      , smlExnTypeIdx = smlExnTypeIdx
+      , smlExnTagIdx = smlExnTagIdx
       }
     end
 
@@ -1887,6 +2050,7 @@ struct
       , funcs = List.rev (!(#revFuncs ctx))
       , tables = []
       , mems = []
+      , tags = List.rev (!(#revTags ctx))
       , globals = List.rev (!(#revGlobals ctx))
       , elems = elems
       , datas = List.rev (!(#revDatas ctx))
