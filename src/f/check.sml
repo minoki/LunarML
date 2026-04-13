@@ -506,6 +506,11 @@ struct
           (checkExp (env, dataTy, data); F.Types.string16)
       | inferExp
           ( env
+          , F.PrimExp (F.DataTagAsIntOp _, [dataTy], [data])
+          ) (* TODO: Check constructor info *) =
+          (checkExp (env, dataTy, data); F.Types.int)
+      | inferExp
+          ( env
           , F.PrimExp (F.DataPayloadOp _, [dataTy, payloadTy], [data])
           ) (* TODO: Check constructor info *) =
           (checkExp (env, dataTy, data); payloadTy)

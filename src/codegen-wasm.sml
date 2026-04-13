@@ -26,6 +26,7 @@ sig
     , exnTagTypeIdx: WasmSyntax.typeidx
     , smlExnTypeIdx: WasmSyntax.typeidx
     , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
+    , taggedDataTypeIdx: WasmSyntax.typeidx (* $TaggedData: (struct (field i32) (field eqref)) *)
     }
 
   type FuncContext =
@@ -76,6 +77,7 @@ struct
     , exnTagTypeIdx: W.typeidx
     , smlExnTypeIdx: W.typeidx
     , smlExnTagIdx: int
+    , taggedDataTypeIdx: W.typeidx
     }
 
   type FuncContext =
@@ -263,6 +265,23 @@ struct
           end
     end
 
+  (* ==================== Constructor Tag Index ==================== *)
+
+  (* Compute the 0-based integer index of a constructor in its datatype.
+     Constructors are indexed in sorted VId order (String.compare on the tag name). *)
+  fun constructorTagIndex (info: Syntax.ValueConstructorInfo) : int =
+    let
+      val target = Syntax.MkVId (#tag info)
+      val allCons = Syntax.VIdSet.listItems (#allConstructors info)
+      fun findIdx [] _ =
+            raise CodeGenError
+              ("constructorTagIndex: tag not found: " ^ #tag info)
+        | findIdx (vid :: rest) i =
+            if Syntax.eqVId (vid, target) then i else findIdx rest (i + 1)
+    in
+      findIdx allCons 0
+    end
+
   (* ==================== Environment ==================== *)
 
   (* Representation of a continuation in the environment *)
@@ -279,15 +298,15 @@ struct
       }
 
   type Env =
-    { vars: W.localidx TypedSyntax.VIdMap.map
+    { vars: (W.localidx * W.valtype) TypedSyntax.VIdMap.map
     , continuations: cont_repr C.CVarMap.map
     }
 
   val emptyEnv: Env =
     {vars = TypedSyntax.VIdMap.empty, continuations = C.CVarMap.empty}
 
-  fun envWithVar (env: Env, v, idx) : Env =
-    { vars = TypedSyntax.VIdMap.insert (#vars env, v, idx)
+  fun envWithVar (env: Env, v, idx, ty) : Env =
+    { vars = TypedSyntax.VIdMap.insert (#vars env, v, (idx, ty))
     , continuations = #continuations env
     }
 
@@ -505,7 +524,7 @@ struct
     case v of
       C.Var vid =>
         (case TypedSyntax.VIdMap.find (#vars env, vid) of
-           SOME idx => W.LOCAL_GET idx :: acc
+           SOME (idx, _) => W.LOCAL_GET idx :: acc
          | NONE =>
              raise CodeGenError
                ("doValue: unbound variable " ^ TypedSyntax.print_VId vid))
@@ -543,6 +562,39 @@ struct
 
   (* ==================== doExp ==================== *)
 
+  (* Evaluate an expression that must produce an eqref value.
+     If the expression produces an unboxed type (e.g., i32 constants),
+     emit boxing instructions so the result is eqref-compatible.
+     This is needed when storing values into record/tuple struct fields. *)
+  and doExpForEqref (fctx: FuncContext) (env: Env)
+    (exp: N.Exp, acc: W.instr list) : W.instr list =
+    let
+      val ctx = #ctx fctx
+      val ubtOpt =
+        case exp of
+          N.Value (C.IntConst (Primitives.I32, _)) => SOME F.UBTyInt32
+        | N.Value (C.IntConst (Primitives.I64, _)) => SOME F.UBTyInt64
+        | N.Value (C.WordConst (Primitives.W32, _)) => SOME F.UBTyWord32
+        | N.Value (C.WordConst (Primitives.W64, _)) => SOME F.UBTyWord64
+        | N.Value (C.BoolConst _) => SOME F.UBTyBool
+        | N.Value (C.CharConst (C.C8, _)) => SOME F.UBTyChar
+        | N.Value (C.CharConst (C.C16, _)) => SOME F.UBTyChar16
+        | N.Value (C.CharConst (C.C32, _)) => SOME F.UBTyChar32
+        (* Handle variables with unboxed types in the environment *)
+        | N.Value (C.Var vid) =>
+            (case TypedSyntax.VIdMap.find (#vars env, vid) of
+               SOME (_, W.NumType W.I32) => SOME F.UBTyInt32
+             | SOME (_, W.NumType W.I64) => SOME F.UBTyInt64
+             | SOME (_, W.NumType W.F64) => SOME F.UBTyReal
+             | _ => NONE)
+        | _ => NONE
+    in
+      case ubtOpt of
+        SOME ubt =>
+          List.revAppend (emitBox (ubt, ctx), doExp fctx env (exp, acc))
+      | NONE => doExp fctx env (exp, acc)
+    end
+
   and doExp (fctx: FuncContext) (env: Env) (exp: N.Exp, acc: W.instr list) :
     W.instr list =
     let
@@ -561,9 +613,11 @@ struct
             else
               let
                 val tupleIdx = getTupleTypeIdx ctx n
+                (* Use doExpForEqref to auto-box unboxed constant values
+                   (e.g., integer literals stored as record fields) *)
                 val acc' =
-                  Syntax.LabelMap.foldl (fn (e, a) => doExp fctx env (e, a)) acc
-                    fields
+                  Syntax.LabelMap.foldl
+                    (fn (e, a) => doExpForEqref fctx env (e, a)) acc fields
               in
                 W.STRUCT_NEW tupleIdx :: acc'
               end
@@ -648,32 +702,56 @@ struct
       val innerEnv = emptyEnv
       (* Add return continuation *)
       val innerEnv = envWithCont (innerEnv, contParam, RETURN)
-      (* Add params *)
+      (* Add params: in Wasm, all function params are eqref (boxed by CpsBoxing) *)
       val innerEnv =
-        ListPair.foldl (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx))
+        ListPair.foldl
+          (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx, eqref))
           innerEnv (params, paramLocals)
 
       (* Add free variables: extract from closure struct.
+       * Free vars with numeric types (i32/i64/f64) are stored boxed in the closure
+       * struct (eqref), so we need to unbox them when loading into the inner function.
        * Build preamble as reverse accumulator. *)
       val (revPreamble, innerEnv) =
         let
           fun go ([], _, revAcc, e) = (revAcc, e)
             | go (fv :: rest, fieldIdx, revAcc, e) =
                 let
-                  val localIdx = allocLocal innerFctx eqref
-                  val e' = envWithVar (e, fv, localIdx)
+                  (* Look up the outer type of this free variable *)
+                  val outerTy =
+                    case TypedSyntax.VIdMap.find (#vars env, fv) of
+                      SOME (_, ty) => ty
+                    | NONE => eqref
+                  val localIdx = allocLocal innerFctx outerTy
+                  val e' = envWithVar (e, fv, localIdx, outerTy)
+                  (* Base: load the (boxed) free variable from the closure struct *)
+                  val baseInstrs =
+                    W.STRUCT_GET (closureTypeIdx, fieldIdx)
+                    ::
+                    W.REF_CAST
+                      {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
+                    :: W.LOCAL_GET selfLocal :: revAcc
+                  (* If numeric, unbox it; otherwise store eqref directly *)
+                  val fullInstrs =
+                    case outerTy of
+                      W.NumType W.I32 =>
+                        W.LOCAL_SET localIdx
+                        :: W.STRUCT_GET (0, 0) (* IntBox field 0 -> i32 *)
+                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 0}
+                        :: baseInstrs
+                    | W.NumType W.I64 =>
+                        W.LOCAL_SET localIdx
+                        :: W.STRUCT_GET (1, 0) (* I64Box field 0 -> i64 *)
+                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 1}
+                        :: baseInstrs
+                    | W.NumType W.F64 =>
+                        W.LOCAL_SET localIdx
+                        :: W.STRUCT_GET (2, 0) (* F64Box field 0 -> f64 *)
+                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 2}
+                        :: baseInstrs
+                    | _ => W.LOCAL_SET localIdx :: baseInstrs
                 in
-                  go
-                    ( rest
-                    , fieldIdx + 1
-                    , W.LOCAL_SET localIdx
-                      :: W.STRUCT_GET (closureTypeIdx, fieldIdx)
-                      ::
-                      W.REF_CAST
-                        {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
-                      :: W.LOCAL_GET selfLocal :: revAcc
-                    , e'
-                    )
+                  go (rest, fieldIdx + 1, fullInstrs, e')
                 end
         in
           go (freeVars, 1, [], innerEnv) (* field 0 is the code pointer *)
@@ -695,13 +773,21 @@ struct
         {typeidx = funcTypeIdx, locals = localTypes, body = bodyInstrs}
       val () = #revFuncs ctx := func :: !(#revFuncs ctx)
 
-      (* At call site: create the closure struct *)
+      (* At call site: create the closure struct.
+       * If a free variable has numeric type (stored unboxed in outer scope),
+       * box it before storing in the closure struct (field type = eqref). *)
       val acc = W.REF_FUNC funcIdx :: acc
       val acc =
         List.foldl
           (fn (fv, a) =>
              case TypedSyntax.VIdMap.find (#vars env, fv) of
-               SOME idx => W.LOCAL_GET idx :: a
+               SOME (idx, W.NumType W.I32) =>
+                 W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a (* box as IntBox *)
+             | SOME (idx, W.NumType W.I64) =>
+                 W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a (* box as I64Box *)
+             | SOME (idx, W.NumType W.F64) =>
+                 W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a (* box as F64Box *)
+             | SOME (idx, _) => W.LOCAL_GET idx :: a
              | NONE =>
                  raise CodeGenError
                    ("doAbs: free var not in scope: " ^ TypedSyntax.print_VId fv))
@@ -759,7 +845,7 @@ struct
           (* Env for body: add successfulExitIn → innerOutRepr *)
           val bodyEnv = envWithCont (env, successfulExitIn, innerOutRepr)
           (* Env for handler: bind exception variable e to eLocal *)
-          val handlerEnv = envWithVar (env, e, eLocal)
+          val handlerEnv = envWithVar (env, e, eLocal, eqref)
           (* Generate body and handler code *)
           val bodyCode = List.rev (doStat fctx bodyEnv (body, []))
           val handlerCode = List.rev (doStat fctx handlerEnv (h, []))
@@ -903,11 +989,16 @@ struct
           end
       | SOME (CONTINUE_TO {label, which, params}) =>
           let
+            (* Push all args first (evaluate in order using original param values),
+               then store in reverse order. This avoids the parallel assignment
+               problem where storing param[i] before evaluating arg[i+1] would
+               clobber a param value that a later arg depends on. *)
             val acc =
-              ListPair.foldl
-                (fn (SOME p, arg, a) => W.LOCAL_SET p :: doExp fctx env (arg, a)
-                  | (NONE, arg, a) => W.DROP :: doExp fctx env (arg, a)) acc
-                (params, args)
+              List.foldl (fn (arg, a) => doExp fctx env (arg, a)) acc args
+            val acc =
+              List.foldl
+                (fn (SOME p, a) => W.LOCAL_SET p :: a | (NONE, a) => W.DROP :: a)
+                acc (List.rev params)
             val acc =
               case which of
                 NONE => acc
@@ -948,7 +1039,8 @@ struct
           (* Build env for continuation body with param locals *)
           val bodyEnv =
             ListPair.foldl
-              (fn ((SOME v, _), SOME localIdx, e) => envWithVar (e, v, localIdx)
+              (fn ((SOME v, ty), SOME localIdx, e) =>
+                 envWithVar (e, v, localIdx, tyToWasmType ty)
                 | (_, _, e) => e) env (params, paramLocals)
           val contBodyCode = List.rev (doStat fctx bodyEnv (body, []))
         in
@@ -957,8 +1049,170 @@ struct
             (contBodyCode, W.BLOCK (W.BlockTypeNone, innerCode) :: acc)
         end
     | N.RecContDec defs :: restDecs =>
-        let val (env', acc') = doRecContDec fctx env (defs, acc)
-        in doLetDecs fctx env' (restDecs, finalCont, acc')
+        (* RecContDec: mutually-recursive tail-recursive continuations.
+           Common case: no more declarations, finalCont is initial AppCont to one of the defs.
+           Generate:
+             1. Set param locals from initial args
+             2. LOOP containing each continuation body
+                (AppCont to a rec cont = set params + BR 0 = loop back)
+           Multiple continuations use a `which` local for dispatch. *)
+        let
+          (* Step 1: allocate locals (label=0 inside the loop is correct) *)
+          val (env', _) = doRecContDec fctx env (defs, [])
+
+          (* Helper: get param locals for a continuation by name *)
+          fun getParamLocals k =
+            case C.CVarMap.find (#continuations env', k) of
+              SOME (CONTINUE_TO {params = pl, ...}) => pl
+            | _ => raise CodeGenError "RecContDec: getParamLocals"
+
+          (* Step 2: detect initial call pattern:
+             restDecs = [], finalCont = AppCont k args for k in defs *)
+          val initOpt =
+            case (restDecs, finalCont) of
+              ([], N.AppCont {applied = k, args = initArgs}) =>
+                (case List.find (fn (name, _, _) => name = k) defs of
+                   SOME (_, params, _) => SOME (k, params, initArgs)
+                 | NONE => NONE)
+            | _ => NONE
+        in
+          case initOpt of
+            SOME (initK, initParams, initArgs) =>
+              let
+                val initParamLocals = getParamLocals initK
+                (* Emit initial param assignments (fold over 3 lists simultaneously) *)
+                val acc =
+                  let
+                    fun go ([], [], [], a) = a
+                      | go (lOpt :: lRest, (_, ty) :: pRest, arg :: aRest, a) =
+                          let
+                            val a' =
+                              case lOpt of
+                                SOME lIdx =>
+                                  W.LOCAL_SET lIdx
+                                  ::
+                                  (case tyToWasmType ty of
+                                     W.NumType W.I32 => doExp fctx env (arg, a)
+                                   | W.NumType W.I64 => doExp fctx env (arg, a)
+                                   | W.NumType W.F64 => doExp fctx env (arg, a)
+                                   | _ => doExpForEqref fctx env (arg, a))
+                              | NONE => W.DROP :: doExp fctx env (arg, a)
+                          in
+                            go (lRest, pRest, aRest, a')
+                          end
+                      | go _ =
+                          raise CodeGenError "RecContDec: param list mismatch"
+                  in
+                    go (initParamLocals, initParams, initArgs, acc)
+                  end
+
+                (* Generate which-local for multiple defs; for single def no dispatch *)
+                val numDefs = List.length defs
+                val whichLocalOpt =
+                  case C.CVarMap.find (#continuations env', initK) of
+                    SOME (CONTINUE_TO {which = SOME (wl, _), ...}) =>
+                      if numDefs > 1 then SOME wl else NONE
+                  | _ => NONE
+                val acc =
+                  case whichLocalOpt of
+                    NONE => acc
+                  | SOME wl =>
+                      let
+                        val initIdx =
+                          case C.CVarMap.find (#continuations env', initK) of
+                            SOME (CONTINUE_TO {which = SOME (_, idx), ...}) =>
+                              idx
+                          | _ =>
+                              raise CodeGenError
+                                "RecContDec: no which idx for initK"
+                      in
+                        W.LOCAL_SET wl :: W.I32_CONST (Int32.fromInt initIdx)
+                        :: acc
+                      end
+
+                (* Build loop body: for each continuation body, generate code.
+                   loopEnv: outer continuations bumped by 1 (for the LOOP block depth),
+                   but this RecContDec's own CONTINUE_TOs stay at label=0 (BR 0 = loop back).
+                   Also add params as vars so the loop body can read them. *)
+                val loopEnv =
+                  let
+                    val bumpedBase = bumpEnvConts 1 env
+                    (* Re-add CONTINUE_TO entries (label=0 = the LOOP) *)
+                    val withConts =
+                      List.foldl
+                        (fn ((name, _, _), e) =>
+                           let
+                             val repr = valOf
+                               (C.CVarMap.find (#continuations env', name))
+                           in
+                             envWithCont (e, name, repr)
+                           end) bumpedBase defs
+                    (* Add param vars: each def's params are in locals allocated by doRecContDec *)
+                    val withParams =
+                      List.foldl
+                        (fn ((name, params, _), e) =>
+                           let
+                             val paramLocals = getParamLocals name
+                           in
+                             ListPair.foldl
+                               (fn ((SOME v, ty), SOME idx, e) =>
+                                  envWithVar (e, v, idx, tyToWasmType ty)
+                                 | (_, _, e) => e) e (params, paramLocals)
+                           end) withConts defs
+                  in
+                    withParams
+                  end
+
+                val loopBodyCode =
+                  if numDefs = 1 then
+                    let val (_, _, body) = List.hd defs
+                    in List.rev (doStat fctx loopEnv (body, []))
+                    end
+                  else
+                    (* Multiple defs: dispatch on which local *)
+                    let
+                      val whichLocal =
+                        case C.CVarMap.find (#continuations env', initK) of
+                          SOME (CONTINUE_TO {which = SOME (wl, _), ...}) => wl
+                        | _ => raise CodeGenError "RecContDec: no which local"
+                      (* Generate body for each def, wrapped in blocks for dispatch *)
+                      (* For now, use nested if-else dispatch *)
+                      fun genDispatch [] = [W.UNREACHABLE]
+                        | genDispatch [(name, _, body)] =
+                            List.rev (doStat fctx loopEnv (body, []))
+                        | genDispatch ((name, _, body) :: rest) =
+                            let
+                              val idx =
+                                case C.CVarMap.find (#continuations env', name) of
+                                  SOME (CONTINUE_TO {which = SOME (_, i), ...}) =>
+                                    i
+                                | _ =>
+                                    raise CodeGenError
+                                      "RecContDec: no which idx"
+                              val bodyCode = List.rev
+                                (doStat fctx loopEnv (body, []))
+                              val restCode = genDispatch rest
+                            in
+                              [ W.UNREACHABLE (* simplified: dispatch not fully implemented *)
+                              , W.IF (W.BlockTypeNone, bodyCode, restCode)
+                              , W.I32_CONST (Int32.fromInt idx)
+                              , W.LOCAL_GET whichLocal
+                              , W.I32_RELOP W.IEQ
+                              ]
+                            end
+                    in
+                      genDispatch defs
+                    end
+
+                val acc = W.LOOP (W.BlockTypeNone, loopBodyCode) :: acc
+              in
+                acc
+              end
+          | NONE =>
+              (* Fallback: just register continuations and continue with restDecs *)
+              let val (env'', acc'') = doRecContDec fctx env (defs, acc)
+              in doLetDecs fctx env'' (restDecs, finalCont, acc'')
+              end
         end
     | dec :: restDecs =>
         let val (env', acc') = doDec fctx env (dec, acc)
@@ -985,9 +1239,10 @@ struct
     case results of
       [(SOME v, ty)] =>
         let
-          val localIdx = allocLocal fctx (tyToWasmType ty)
+          val wasmTy = tyToWasmType ty
+          val localIdx = allocLocal fctx wasmTy
           val acc = W.LOCAL_SET localIdx :: doExp fctx env (exp, acc)
-          val env' = envWithVar (env, v, localIdx)
+          val env' = envWithVar (env, v, localIdx, wasmTy)
         in
           (env', acc)
         end
@@ -1050,27 +1305,49 @@ struct
             val innerEnv = envWithCont (innerEnv, contParam, RETURN)
             val innerEnv =
               ListPair.foldl
-                (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx))
+                (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx, eqref))
                 innerEnv (params, paramLocals)
 
-            (* Extract free vars from closure into reverse preamble *)
+            (* Extract free vars from closure into reverse preamble.
+             * Numeric free vars are stored boxed in the struct; unbox them. *)
             val (revPreamble, innerEnv, _) =
               List.foldl
                 (fn (fv, (revAcc, e, fi)) =>
                    let
-                     val localIdx = allocLocal innerFctx eqref
-                   in
-                     ( W.LOCAL_SET localIdx :: W.STRUCT_GET (closureTypeIdx, fi)
+                     val outerTy =
+                       case TypedSyntax.VIdMap.find (#vars env, fv) of
+                         SOME (_, ty) => ty
+                       | NONE => eqref
+                     val localIdx = allocLocal innerFctx outerTy
+                     val baseInstrs =
+                       W.STRUCT_GET (closureTypeIdx, fi)
                        ::
                        W.REF_CAST
                          {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
                        :: W.LOCAL_GET selfLocal :: revAcc
-                     , envWithVar (e, fv, localIdx)
-                     , fi + 1
-                     )
+                     val fullInstrs =
+                       case outerTy of
+                         W.NumType W.I32 =>
+                           W.LOCAL_SET localIdx :: W.STRUCT_GET (0, 0)
+                           ::
+                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 0}
+                           :: baseInstrs
+                       | W.NumType W.I64 =>
+                           W.LOCAL_SET localIdx :: W.STRUCT_GET (1, 0)
+                           ::
+                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 1}
+                           :: baseInstrs
+                       | W.NumType W.F64 =>
+                           W.LOCAL_SET localIdx :: W.STRUCT_GET (2, 0)
+                           ::
+                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 2}
+                           :: baseInstrs
+                       | _ => W.LOCAL_SET localIdx :: baseInstrs
+                   in
+                     (fullInstrs, envWithVar (e, fv, localIdx, outerTy), fi + 1)
                    end) ([], innerEnv, 1) freeVars
 
-            (* If self is used as free var, extract it too *)
+            (* If self is used as free var, extract it too (always eqref) *)
             val (revPreamble, innerEnv) =
               if selfIsUsed then
                 let
@@ -1082,7 +1359,7 @@ struct
                     W.REF_CAST
                       {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
                     :: W.LOCAL_GET selfLocal :: revPreamble
-                  , envWithVar (innerEnv, name, localIdx)
+                  , envWithVar (innerEnv, name, localIdx, eqref)
                   )
                 end
               else
@@ -1102,14 +1379,21 @@ struct
               {typeidx = funcTypeIdx, locals = localTypes, body = bodyInstrs}
             val () = #revFuncs ctx := func :: !(#revFuncs ctx)
 
-            (* Create closure at call site *)
+            (* Create closure at call site.
+             * Box numeric free vars before storing in closure struct. *)
             val closureLocal = allocLocal fctx eqref
             val acc = W.REF_FUNC funcIdx :: acc
             val acc =
               List.foldl
                 (fn (fv, a) =>
                    case TypedSyntax.VIdMap.find (#vars env, fv) of
-                     SOME idx => W.LOCAL_GET idx :: a
+                     SOME (idx, W.NumType W.I32) =>
+                       W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a
+                   | SOME (idx, W.NumType W.I64) =>
+                       W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a
+                   | SOME (idx, W.NumType W.F64) =>
+                       W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a
+                   | SOME (idx, _) => W.LOCAL_GET idx :: a
                    | NONE =>
                        raise CodeGenError "doRecDec: free var not in scope") acc
                 freeVars
@@ -1131,7 +1415,7 @@ struct
               else
                 acc
 
-            val env' = envWithVar (env, name, closureLocal)
+            val env' = envWithVar (env, name, closureLocal, eqref)
           in
             (env', acc)
           end
@@ -1257,26 +1541,41 @@ struct
       | (F.ConstructValOp info, _, []) =>
           (case #representation info of
              Syntax.REP_BOXED =>
-               W.REF_I31 :: W.I32_CONST 0
-               :: acc (* placeholder: use tag string hash or index *)
+               (* No-payload boxed constructor: TaggedData{tag=idx, payload=null} *)
+               let
+                 val taggedDataIdx = #taggedDataTypeIdx ctx
+                 val tagIdx = constructorTagIndex info
+                 val acc = W.I32_CONST (Int32.fromInt tagIdx) :: acc
+                 val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+               in
+                 W.STRUCT_NEW taggedDataIdx :: acc
+               end
            | Syntax.REP_ENUM =>
-               W.REF_I31 :: W.I32_CONST 0 :: acc (* TODO: proper tag encoding *)
+               (* Enum constructor: encode as i31ref with integer tag index *)
+               let val tagIdx = constructorTagIndex info
+               in W.REF_I31 :: W.I32_CONST (Int32.fromInt tagIdx) :: acc
+               end
            | Syntax.REP_UNIT => W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
            | Syntax.REP_BOOL =>
                W.I32_CONST 0 :: acc (* Should not happen normally *)
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for ConstructValOp")
-      | (F.ConstructValWithPayloadOp info, _, [payload]) =>
+      | (F.ConstructValWithPayloadOp info, [_, payloadTy], [payload]) =>
           (case #representation info of
              Syntax.REP_BOXED =>
+               (* Boxed constructor with payload: TaggedData{tag=idx, payload=boxed} *)
                let
-                 val tupleIdx = getTupleTypeIdx ctx 2
-                 val acc = W.I32_CONST 0 :: acc
-                 val acc = W.REF_I31 :: acc (* tag as i31ref *)
+                 val taggedDataIdx = #taggedDataTypeIdx ctx
+                 val tagIdx = constructorTagIndex info
+                 val acc = W.I32_CONST (Int32.fromInt tagIdx) :: acc
                  val acc = doExp fctx env (payload, acc)
+                 val acc =
+                   case tyToUnboxedTy payloadTy of
+                     SOME ubt => List.revAppend (emitBox (ubt, ctx), acc)
+                   | NONE => acc
                in
-                 W.STRUCT_NEW tupleIdx :: acc
+                 W.STRUCT_NEW taggedDataIdx :: acc
                end
            | Syntax.REP_ALIAS => doExp fctx env (payload, acc)
            | Syntax.REP_LIST =>
@@ -1285,20 +1584,52 @@ struct
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for ConstructValWithPayloadOp")
-      | (F.DataPayloadOp info, _, [arg]) =>
+      | (F.DataPayloadOp info, [_, payloadTy], [arg]) =>
           (case #representation info of
              Syntax.REP_BOXED =>
-               let val tupleIdx = getTupleTypeIdx ctx 2
-               in W.STRUCT_GET (tupleIdx, 1) :: doExp fctx env (arg, acc)
+               (* Extract payload from TaggedData: cast + struct.get(1) + optional unbox *)
+               let
+                 val taggedDataIdx = #taggedDataTypeIdx ctx
+                 val baseAcc =
+                   W.STRUCT_GET (taggedDataIdx, 1)
+                   ::
+                   W.REF_CAST
+                     {nullable = false, heaptype = W.TypeIdx taggedDataIdx}
+                   :: doExp fctx env (arg, acc)
+               in
+                 case tyToUnboxedTy payloadTy of
+                   SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+                 | NONE => baseAcc
                end
            | Syntax.REP_ALIAS => doExp fctx env (arg, acc)
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for DataPayloadOp")
+      | (F.DataTagAsIntOp info, _, [arg]) =>
+          (case #representation info of
+             Syntax.REP_ENUM =>
+               (* Enum: i31ref encodes tag index; cast to i31 + i31.get_u *)
+               W.I31_GET W.U
+               :: W.REF_CAST {nullable = false, heaptype = W.AbsHeapType W.I31}
+               :: doExp fctx env (arg, acc)
+           | Syntax.REP_BOXED =>
+               (* Boxed: cast to $TaggedData + struct.get(0) to get i32 tag *)
+               let
+                 val taggedDataIdx = #taggedDataTypeIdx ctx
+               in
+                 W.STRUCT_GET (taggedDataIdx, 0)
+                 ::
+                 W.REF_CAST
+                   {nullable = false, heaptype = W.TypeIdx taggedDataIdx}
+                 :: doExp fctx env (arg, acc)
+               end
+           | _ =>
+               raise CodeGenError
+                 "doPrimOp: unexpected representation for DataTagAsIntOp")
       | (F.DataTagAsStringOp _, _, [_]) =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
+          raise CodeGenError "DataTagAsStringOp not supported for Wasm target"
       | (F.DataTagAsString16Op _, _, [_]) =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
+          raise CodeGenError "DataTagAsString16Op not supported for Wasm target"
       | (F.ExnPayloadOp, [payloadTy], [arg]) =>
           (* Extract payload (field 1) from $SmlExn struct.
              The payload is stored as eqref; if the caller expects an unboxed
@@ -1346,14 +1677,77 @@ struct
           raise CodeGenError "doPrimOp: RaiseOp should not appear in NSyntax"
 
       (* ---- List operations ---- *)
+      | (F.ListOp, [elemTy], []) =>
+          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
       | (F.ListOp, _, []) => W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
-      | (F.ListOp, _, _) =>
-          raise CodeGenError
-            "doPrimOp: ListOp with elements not yet implemented"
+      | (F.ListOp, [elemTy], elems) =>
+          (* Build a cons-cell chain from left to right, using element type for boxing. *)
+          let
+            val tupleIdx = getTupleTypeIdx ctx 2
+            val doElem =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  (fn (e, a) =>
+                     List.revAppend (emitBox (ubt, ctx), doExp fctx env (e, a)))
+              | NONE => doExpForEqref fctx env
+            val acc = List.foldl doElem acc elems
+            val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+            val acc =
+              List.foldl (fn (_, a) => W.STRUCT_NEW tupleIdx :: a) acc elems
+          in
+            acc
+          end
+      | (F.ListOp, _, elems) =>
+          (* Fallback: element type not available, use doExpForEqref for auto-boxing. *)
+          let
+            val tupleIdx = getTupleTypeIdx ctx 2
+            val acc =
+              List.foldl (fn (elem, a) => doExpForEqref fctx env (elem, a)) acc
+                elems
+            val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+            val acc =
+              List.foldl (fn (_, a) => W.STRUCT_NEW tupleIdx :: a) acc elems
+          in
+            acc
+          end
 
       (* ---- Vector operations ---- *)
       | (F.VectorOp, _, _) =>
           raise CodeGenError "doPrimOp: VectorOp not yet implemented"
+
+      (* ---- PrimCall (type-aware overrides) ---- *)
+      | (F.PrimCall Primitives.List_cons, [elemTy], [hd, tl]) =>
+          let
+            val tupleIdx = getTupleTypeIdx ctx 2
+            val hdAcc =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (hd, acc))
+              | NONE => doExpForEqref fctx env (hd, acc)
+            val tlAcc = doExp fctx env (tl, hdAcc)
+          in
+            W.STRUCT_NEW tupleIdx :: tlAcc
+          end
+      | (F.PrimCall Primitives.List_unsafeHead, [elemTy], [lst]) =>
+          let
+            val tupleIdx = getTupleTypeIdx ctx 2
+            val baseAcc =
+              W.STRUCT_GET (tupleIdx, 0)
+              :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
+              :: doExp fctx env (lst, acc)
+          in
+            case tyToUnboxedTy elemTy of
+              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+            | NONE => baseAcc
+          end
+      | (F.PrimCall Primitives.List_unsafeTail, [_], [lst]) =>
+          let
+            val tupleIdx = getTupleTypeIdx ctx 2
+          in
+            W.STRUCT_GET (tupleIdx, 1)
+            :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
+            :: doExp fctx env (lst, acc)
+          end
 
       (* ---- PrimCall ---- *)
       | (F.PrimCall prim, _, args) => doPrimCall fctx env (prim, args, acc)
@@ -1677,7 +2071,8 @@ struct
              [hd, tl] =>
                let
                  val tupleIdx = getTupleTypeIdx ctx 2
-                 val acc = doExp fctx env (hd, acc)
+                 (* Box head if it's an unboxed constant (e.g., integer literal) *)
+                 val acc = doExpForEqref fctx env (hd, acc)
                  val acc = doExp fctx env (tl, acc)
                in
                  W.STRUCT_NEW tupleIdx :: acc
@@ -1687,15 +2082,23 @@ struct
       | Primitives.List_unsafeHead =>
           (case args of
              [lst] =>
-               let val tupleIdx = getTupleTypeIdx ctx 2
-               in W.STRUCT_GET (tupleIdx, 0) :: doExp fctx env (lst, acc)
+               let
+                 val tupleIdx = getTupleTypeIdx ctx 2
+               in
+                 W.STRUCT_GET (tupleIdx, 0)
+                 :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
+                 :: doExp fctx env (lst, acc)
                end
            | _ => raise CodeGenError "List_unsafeHead: expected 1 arg")
       | Primitives.List_unsafeTail =>
           (case args of
              [lst] =>
-               let val tupleIdx = getTupleTypeIdx ctx 2
-               in W.STRUCT_GET (tupleIdx, 1) :: doExp fctx env (lst, acc)
+               let
+                 val tupleIdx = getTupleTypeIdx ctx 2
+               in
+                 W.STRUCT_GET (tupleIdx, 1)
+                 :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
+                 :: doExp fctx env (lst, acc)
                end
            | _ => raise CodeGenError "List_unsafeTail: expected 1 arg")
 
@@ -1817,11 +2220,24 @@ struct
         }
       (* Module-defined tag for SML exceptions *)
       val smlExnTag: W.tagtype = {functype = smlExnFuncTypeIdx}
+      val taggedDataTypeIdx = 7
+      (* TaggedData: (struct (field i32) (field (ref null eq)))
+         field 0: integer constructor tag index
+         field 1: nullable eqref payload (null for no-payload constructors) *)
+      val taggedDataType = W.SubType
+        { final = false
+        , supertypes = []
+        , body = W.StructType
+            [ {mut = W.CONST, storagetype = W.ValStorageType (W.NumType W.I32)}
+            , {mut = W.CONST, storagetype = W.ValStorageType eqref}
+            ]
+        }
     in
-      { nextTypeIdx = ref 7
+      { nextTypeIdx = ref 8
       , nextFuncIdx = ref 0
       , revTypes = ref
-          [ [smlExnFuncType]
+          [ [taggedDataType]
+          , [smlExnFuncType]
           , [smlExnType]
           , [exnTagType]
           , [closureBase]
@@ -1844,6 +2260,7 @@ struct
       , exnTagTypeIdx = exnTagTypeIdx
       , smlExnTypeIdx = smlExnTypeIdx
       , smlExnTagIdx = smlExnTagIdx
+      , taggedDataTypeIdx = taggedDataTypeIdx
       }
     end
 
@@ -1952,8 +2369,34 @@ struct
       (* Set up environment with return continuation *)
       val env = envWithCont (emptyEnv, returnCont, RETURN)
 
+      (* Initialize pre-defined exception values (Match, Bind, Div, Overflow, Size, Subscript).
+         These appear as free variables in pattern-match failure closures. Each is initialized
+         as a SmlExn struct: {tag = new ExnTagType(), payload = null}.
+         The instructions go at the END of initAcc (= BEGINNING of execution order after reversal). *)
+      val predefExns =
+        [ InitialEnv.VId_Match
+        , InitialEnv.VId_Bind
+        , InitialEnv.VId_Div
+        , InitialEnv.VId_Overflow
+        , InitialEnv.VId_Size
+        , InitialEnv.VId_Subscript
+        ]
+      val (env, initAcc) =
+        List.foldl
+          (fn (vid, (e, acc)) =>
+             let
+               val localIdx = allocLocal startCtx eqref
+               (* Instructions in reverse (prepend last-first): set local, then create SmlExn, then null payload, then create tag *)
+               val acc =
+                 W.LOCAL_SET localIdx :: W.STRUCT_NEW (#smlExnTypeIdx ctx)
+                 :: W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                 :: W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
+             in
+               (envWithVar (e, vid, localIdx, eqref), acc)
+             end) (env, []) predefExns
+
       (* Generate body instructions with return suffix *)
-      val revBody = doStat startCtx env (program, [])
+      val revBody = doStat startCtx env (program, initAcc)
       val revBody = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: revBody
       val revBody = W.RETURN :: revBody
       val bodyInstrs = List.rev revBody

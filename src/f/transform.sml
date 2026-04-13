@@ -32,6 +32,20 @@ struct
     let val n = !(#nextVId ctx)
     in #nextVId ctx := n + 1; TypedSyntax.MkVId (name, n)
     end
+  (* Return the 0-based integer index of a constructor within its datatype.
+     The index is determined by the sorted order of allConstructors (VIdSet). *)
+  fun constructorTagIndex (info: Syntax.ValueConstructorInfo) : int =
+    let
+      val target = Syntax.MkVId (#tag info)
+      val allCons = Syntax.VIdSet.listItems (#allConstructors info)
+      fun findIdx [] _ =
+            raise DesugarError
+              ([], "constructorTagIndex: tag not found: " ^ #tag info)
+        | findIdx (vid :: rest) i =
+            if Syntax.eqVId (vid, target) then i else findIdx rest (i + 1)
+    in
+      findIdx allCons 0
+    end
   (* Check if the pattern is exhaustive and binds no variable *)
   fun isWildcardPat (F.WildcardPat _) = true
     | isWildcardPat (F.SConPat _) = false
@@ -314,23 +328,38 @@ struct
                      genMatcher
                        (F.PrimExp (F.DataPayloadOp info, [ty, payloadTy], [exp]))
                        payloadTy payloadPat
-                   val (dataTagOp, equalTag) =
+                   val tagTest =
                      case #datatypeTag (#targetInfo ctx) of
                        TargetInfo.STRING8 =>
-                         (F.DataTagAsStringOp, Primitives.String_EQUAL)
+                         F.PrimExp
+                           ( F.PrimCall Primitives.String_EQUAL
+                           , []
+                           , [ F.PrimExp (F.DataTagAsStringOp info, [ty], [exp])
+                             , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
+                             ]
+                           )
                      | TargetInfo.STRING16 =>
-                         (F.DataTagAsString16Op, Primitives.String16_EQUAL)
+                         F.PrimExp
+                           ( F.PrimCall Primitives.String16_EQUAL
+                           , []
+                           , [ F.PrimExp
+                                 (F.DataTagAsString16Op info, [ty], [exp])
+                             , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
+                             ]
+                           )
+                     | TargetInfo.INTEGER =>
+                         F.PrimExp
+                           ( F.PrimCall (Primitives.Int_EQUAL Primitives.INT)
+                           , []
+                           , [ F.PrimExp (F.DataTagAsIntOp info, [ty], [exp])
+                             , F.IntConstExp
+                                 ( Int.toLarge (constructorTagIndex info)
+                                 , F.Types.int
+                                 )
+                             ]
+                           )
                  in
-                   F.SimplifyingAndalsoExp
-                     ( F.PrimExp
-                         ( F.PrimCall equalTag
-                         , []
-                         , [ F.PrimExp (dataTagOp info, [ty], [exp])
-                           , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
-                           ]
-                         )
-                     , payload
-                     )
+                   F.SimplifyingAndalsoExp (tagTest, payload)
                  end)
         | genMatcher exp ty (F.ValConPat {sourceSpan, info, payload = NONE}) =
             (case info of
@@ -353,22 +382,34 @@ struct
              | {representation = Syntax.REP_UNIT, ...} =>
                  F.VarExp InitialEnv.VId_true
              | {representation = _, tag, ...} => (* REP_BOXED or REP_ENUM *)
-                 let
-                   val (dataTagOp, equalTag) =
-                     case #datatypeTag (#targetInfo ctx) of
-                       TargetInfo.STRING8 =>
-                         (F.DataTagAsStringOp, Primitives.String_EQUAL)
-                     | TargetInfo.STRING16 =>
-                         (F.DataTagAsString16Op, Primitives.String16_EQUAL)
-                 in
-                   F.PrimExp
-                     ( F.PrimCall equalTag
-                     , []
-                     , [ F.PrimExp (dataTagOp info, [ty], [exp])
-                       , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
-                       ]
-                     )
-                 end)
+                 (case #datatypeTag (#targetInfo ctx) of
+                    TargetInfo.STRING8 =>
+                      F.PrimExp
+                        ( F.PrimCall Primitives.String_EQUAL
+                        , []
+                        , [ F.PrimExp (F.DataTagAsStringOp info, [ty], [exp])
+                          , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
+                          ]
+                        )
+                  | TargetInfo.STRING16 =>
+                      F.PrimExp
+                        ( F.PrimCall Primitives.String16_EQUAL
+                        , []
+                        , [ F.PrimExp (F.DataTagAsString16Op info, [ty], [exp])
+                          , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
+                          ]
+                        )
+                  | TargetInfo.INTEGER =>
+                      F.PrimExp
+                        ( F.PrimCall (Primitives.Int_EQUAL Primitives.INT)
+                        , []
+                        , [ F.PrimExp (F.DataTagAsIntOp info, [ty], [exp])
+                          , F.IntConstExp
+                              ( Int.toLarge (constructorTagIndex info)
+                              , F.Types.int
+                              )
+                          ]
+                        )))
         | genMatcher exp _
             (F.ExnConPat
                { sourceSpan = _
@@ -700,6 +741,7 @@ struct
     | isDiscardablePrimOp F.VectorOp = true
     | isDiscardablePrimOp (F.DataTagAsStringOp _) = true
     | isDiscardablePrimOp (F.DataTagAsString16Op _) = true
+    | isDiscardablePrimOp (F.DataTagAsIntOp _) = true
     | isDiscardablePrimOp (F.DataPayloadOp _) = true
     | isDiscardablePrimOp F.ExnPayloadOp = true
     | isDiscardablePrimOp (F.ConstructValOp _) = true

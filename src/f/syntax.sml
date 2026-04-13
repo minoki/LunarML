@@ -53,6 +53,8 @@ sig
       Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataTagAsString16Op of
       Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
+  | DataTagAsIntOp of
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data; returns int *)
   | DataPayloadOp of
       Syntax.ValueConstructorInfo (* type argument: data type, payload, value argument: the data *)
   | ExnPayloadOp (* type argument: payload, value argument: the data *)
@@ -311,6 +313,8 @@ struct
       Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
   | DataTagAsString16Op of
       Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data *)
+  | DataTagAsIntOp of
+      Syntax.ValueConstructorInfo (* type argument: data type, value argument: the data; returns int *)
   | DataPayloadOp of
       Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: the data *)
   | ExnPayloadOp (* type argument: payload, value argument: the data *)
@@ -552,7 +556,10 @@ struct
        TargetInfo.STRING8 => PrimExp (String8ConstOp s, [Types.string], [])
      | TargetInfo.STRING16 =>
          PrimExp
-           (String16ConstOp (StringElement.encodeAscii s), [Types.string16], []))
+           (String16ConstOp (StringElement.encodeAscii s), [Types.string16], [])
+     | TargetInfo.INTEGER =>
+         raise Fail
+           "AsciiStringAsDatatypeTag: not applicable for INTEGER tag type")
   fun strIdToVId (TypedSyntax.MkStrId (name, n)) =
     TypedSyntax.MkVId (Syntax.SourceName.fromString name, n)
   fun AndalsoExp (a, b) =
@@ -1720,6 +1727,7 @@ struct
       | print_PrimOp VectorOp = "VectorOp"
       | print_PrimOp (DataTagAsStringOp _) = "DataTagAsStringOp"
       | print_PrimOp (DataTagAsString16Op _) = "DataTagAsString16Op"
+      | print_PrimOp (DataTagAsIntOp _) = "DataTagAsIntOp"
       | print_PrimOp (DataPayloadOp _) = "DataPayloadOp"
       | print_PrimOp ExnPayloadOp = "ExnPayloadOp"
       | print_PrimOp (ConstructValOp _) = "ConstructValOp"

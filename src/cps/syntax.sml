@@ -268,6 +268,7 @@ struct
       | isDiscardable (PrimOp {primOp = F.VectorOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.DataTagAsStringOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.DataTagAsString16Op _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.DataTagAsIntOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.DataPayloadOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.ExnPayloadOp, ...}) = true
       | isDiscardable (PrimOp {primOp = F.ConstructValOp _, ...}) = true
@@ -648,6 +649,7 @@ struct
            | F.VectorOp => "PrimOp(VectorOp)"
            | F.DataTagAsStringOp _ => "PrimOp(DataTagAsStringOp)"
            | F.DataTagAsString16Op _ => "PrimOp(DataTagAsString16Op)"
+           | F.DataTagAsIntOp _ => "PrimOp(DataTagAsIntOp)"
            | F.DataPayloadOp _ => "PrimOp(DataPayloadOp)"
            | F.ExnPayloadOp => "PrimOp(ExnPayloadOp)"
            | F.ConstructValOp _ => "PrimOp(ConstructValOp)"
@@ -985,6 +987,8 @@ struct
                   ([dataTy], [FSyntax.Types.string])
               | (F.DataTagAsString16Op _, [dataTy]) =>
                   ([dataTy], [FSyntax.Types.string16])
+              | (F.DataTagAsIntOp _, [dataTy]) =>
+                  ([dataTy], [FSyntax.Types.int])
               | (F.DataPayloadOp _, [dataTy, payloadTy]) =>
                   ([dataTy], [payloadTy])
               | (F.ExnPayloadOp, [payloadTy]) =>

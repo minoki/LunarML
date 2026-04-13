@@ -4,7 +4,7 @@
  *)
 structure TargetInfo :>
 sig
-  datatype datatype_tag_type = STRING8 | STRING16
+  datatype datatype_tag_type = STRING8 | STRING16 | INTEGER
   type target_info =
     { defaultInt: Primitives.int_width
     , defaultWord: Primitives.word_width
@@ -21,7 +21,7 @@ sig
   val maxInt32: IntInf.int
 end =
 struct
-  datatype datatype_tag_type = STRING8 | STRING16
+  datatype datatype_tag_type = STRING8 | STRING16 | INTEGER
   type target_info =
     { defaultInt: Primitives.int_width
     , defaultWord: Primitives.word_width
