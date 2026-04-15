@@ -1420,8 +1420,236 @@ struct
             (env', acc)
           end
       | _ =>
-          (* Multiple recursive functions: more complex, use mutable closures *)
-          raise CodeGenError "doRecDec: mutual recursion not yet implemented"
+          (* Multiple recursive functions: use mutable closures with cross-backpatching.
+           *
+           * Each function fi gets a closure struct:
+           *   field 0      : funcref for fi (CONST)
+           *   fields 1..ki : outer free vars of fi (mutable, boxed as needed)
+           *   fields ki+1..ki+n : sibling closures f1..fn (mutable, initially null)
+           *
+           * After all closures are created we backpatch every sibling slot
+           * in every closure with the actual closure reference.
+           *)
+          let
+            val allNames = List.map #name decs
+            val nameSet =
+              List.foldl (fn (v, s) => TypedSyntax.VIdSet.add (s, v))
+                TypedSyntax.VIdSet.empty allNames
+            val nSiblings = List.length decs
+
+            (* Compute outer free vars for each function
+               (body FVs minus own params minus all mutual-rec names) *)
+            val decsWithFV =
+              List.map
+                (fn dec =>
+                   let
+                     val {params, body, ...} = dec
+                     val bodyFV = freeVarsStat (body, TypedSyntax.VIdSet.empty)
+                     val paramSet =
+                       List.foldl
+                         (fn ((v, _), s) => TypedSyntax.VIdSet.add (s, v))
+                         TypedSyntax.VIdSet.empty params
+                     val freeVars =
+                       TypedSyntax.VIdSet.listItems
+                         (TypedSyntax.VIdSet.difference
+                            ( TypedSyntax.VIdSet.difference (bodyFV, paramSet)
+                            , nameSet
+                            ))
+                   in
+                     (dec, freeVars)
+                   end) decs
+
+            (* Build each inner Wasm function and collect closure metadata *)
+            val funcInfos =
+              List.map
+                (fn (dec, freeVars) =>
+                   let
+                     val {name, contParam, params, body, resultTy = _, attr = _} =
+                       dec
+                     val nParams = List.length params
+                     val nOuterFV = List.length freeVars
+                     val nFreeVarsTotal = nOuterFV + nSiblings
+                     val funcTypeIdx = getClosureFuncTypeIdx ctx nParams
+                     val closureTypeIdx =
+                       getMutClosureTypeIdx ctx nFreeVarsTotal funcTypeIdx
+
+                     val innerFctx = newFuncContext ctx
+                     val selfLocal = allocLocal innerFctx eqref
+                     val paramLocals =
+                       List.map (fn _ => allocLocal innerFctx eqref) params
+
+                     val innerEnv = emptyEnv
+                     val innerEnv = envWithCont (innerEnv, contParam, RETURN)
+                     val innerEnv =
+                       ListPair.foldl
+                         (fn ((v, _), localIdx, e) =>
+                            envWithVar (e, v, localIdx, eqref)) innerEnv
+                         (params, paramLocals)
+
+                     (* Extract outer free vars from closure fields 1..nOuterFV *)
+                     val (revPreamble, innerEnv, _) =
+                       List.foldl
+                         (fn (fv, (revAcc, e, fi)) =>
+                            let
+                              val outerTy =
+                                case TypedSyntax.VIdMap.find (#vars env, fv) of
+                                  SOME (_, ty) => ty
+                                | NONE => eqref
+                              val localIdx = allocLocal innerFctx outerTy
+                              val baseInstrs =
+                                W.STRUCT_GET (closureTypeIdx, fi)
+                                ::
+                                W.REF_CAST
+                                  { nullable = false
+                                  , heaptype = W.TypeIdx closureTypeIdx
+                                  } :: W.LOCAL_GET selfLocal :: revAcc
+                              val fullInstrs =
+                                case outerTy of
+                                  W.NumType W.I32 =>
+                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (0, 0)
+                                    ::
+                                    W.REF_CAST
+                                      {nullable = false, heaptype = W.TypeIdx 0}
+                                    :: baseInstrs
+                                | W.NumType W.I64 =>
+                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (1, 0)
+                                    ::
+                                    W.REF_CAST
+                                      {nullable = false, heaptype = W.TypeIdx 1}
+                                    :: baseInstrs
+                                | W.NumType W.F64 =>
+                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (2, 0)
+                                    ::
+                                    W.REF_CAST
+                                      {nullable = false, heaptype = W.TypeIdx 2}
+                                    :: baseInstrs
+                                | _ => W.LOCAL_SET localIdx :: baseInstrs
+                            in
+                              ( fullInstrs
+                              , envWithVar (e, fv, localIdx, outerTy)
+                              , fi + 1
+                              )
+                            end) ([], innerEnv, 1) freeVars
+
+                     (* Extract sibling closures from fields nOuterFV+1..nOuterFV+nSiblings *)
+                     val (revPreamble, innerEnv) =
+                       let
+                         fun extractSiblings ([], _, revAcc, e) = (revAcc, e)
+                           | extractSiblings (sibName :: rest, fi, revAcc, e) =
+                               let
+                                 val localIdx = allocLocal innerFctx eqref
+                                 val instrs =
+                                   W.LOCAL_SET localIdx
+                                   :: W.STRUCT_GET (closureTypeIdx, fi)
+                                   ::
+                                   W.REF_CAST
+                                     { nullable = false
+                                     , heaptype = W.TypeIdx closureTypeIdx
+                                     } :: W.LOCAL_GET selfLocal :: revAcc
+                               in
+                                 extractSiblings
+                                   ( rest
+                                   , fi + 1
+                                   , instrs
+                                   , envWithVar (e, sibName, localIdx, eqref)
+                                   )
+                               end
+                       in
+                         extractSiblings
+                           (allNames, 1 + nOuterFV, revPreamble, innerEnv)
+                       end
+
+                     val bodyInstrs = List.rev
+                       (doStat innerFctx innerEnv (body, revPreamble))
+                     val allLocalTypes = List.rev (!(#revLocalTypes innerFctx))
+                     val nWasmParams = 1 + nParams
+                     val localTypes = List.drop (allLocalTypes, nWasmParams)
+
+                     val funcIdx = allocFuncIdx ctx
+                     val func: W.func =
+                       { typeidx = funcTypeIdx
+                       , locals = localTypes
+                       , body = bodyInstrs
+                       }
+                     val () = #revFuncs ctx := func :: !(#revFuncs ctx)
+
+                     val closureLocal = allocLocal fctx eqref
+                   in
+                     { name = name
+                     , freeVars = freeVars
+                     , nOuterFV = nOuterFV
+                     , closureTypeIdx = closureTypeIdx
+                     , funcIdx = funcIdx
+                     , closureLocal = closureLocal
+                     }
+                   end) decsWithFV
+
+            (* Create all closure structs (sibling slots initially null) *)
+            val acc =
+              List.foldl
+                (fn ({freeVars, closureTypeIdx, funcIdx, closureLocal, ...}, a) =>
+                   let
+                     val a = W.REF_FUNC funcIdx :: a
+                     val a =
+                       List.foldl
+                         (fn (fv, a') =>
+                            case TypedSyntax.VIdMap.find (#vars env, fv) of
+                              SOME (idx, W.NumType W.I32) =>
+                                W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a'
+                            | SOME (idx, W.NumType W.I64) =>
+                                W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a'
+                            | SOME (idx, W.NumType W.F64) =>
+                                W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a'
+                            | SOME (idx, _) => W.LOCAL_GET idx :: a'
+                            | NONE =>
+                                raise CodeGenError
+                                  "doRecDec: free var not in scope") a freeVars
+                     (* Null placeholders for sibling closure slots *)
+                     val a =
+                       List.foldl
+                         (fn (_, a') =>
+                            W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: a') a
+                         (List.tabulate (nSiblings, fn i => i))
+                     val a = W.STRUCT_NEW closureTypeIdx :: a
+                     val a = W.LOCAL_SET closureLocal :: a
+                   in
+                     a
+                   end) acc funcInfos
+
+            (* Backpatch: for each closure fi, set its nSiblings sibling fields
+               to point to each fj's closure *)
+            val acc =
+              List.foldl
+                (fn ({nOuterFV, closureTypeIdx, closureLocal, ...}, a) =>
+                   let
+                     fun backpatch ([], _, a') = a'
+                       | backpatch
+                           ({closureLocal = sibLocal, ...} :: rest, j, a') =
+                           let
+                             val fieldIdx = 1 + nOuterFV + j
+                             val a' =
+                               W.STRUCT_SET (closureTypeIdx, fieldIdx)
+                               :: W.LOCAL_GET sibLocal
+                               ::
+                               W.REF_CAST
+                                 { nullable = false
+                                 , heaptype = W.TypeIdx closureTypeIdx
+                                 } :: W.LOCAL_GET closureLocal :: a'
+                           in
+                             backpatch (rest, j + 1, a')
+                           end
+                   in
+                     backpatch (funcInfos, 0, a)
+                   end) acc funcInfos
+
+            (* Add all names to the outer environment *)
+            val env' =
+              List.foldl
+                (fn ({name, closureLocal, ...}, e) =>
+                   envWithVar (e, name, closureLocal, eqref)) env funcInfos
+          in
+            (env', acc)
+          end
     end
 
   (* ==================== ContDec (continuation) ==================== *)
@@ -2289,29 +2517,34 @@ struct
      For call_ref, the stack order is: [param1, param2, ..., funcref] (funcref on top).
      closureInstrs: instructions to put the closure (ref eq) on the stack
      nParams: number of i32 params for the wrapper *)
+  (* Wasm valtype and unbox instructions for an exported result type.
+     All unboxable types currently map to i32 at the Wasm boundary except
+     i64 (→ i64) and f64 (→ f64). *)
+  fun exportResultWasmTy (ubt: F.UnboxedTy) : W.valtype =
+    case ubt of
+      F.UBTyInt64 => W.NumType W.I64
+    | F.UBTyWord64 => W.NumType W.I64
+    | F.UBTyReal => W.NumType W.F64
+    | _ => W.NumType W.I32
+
   fun genExportWrapper (ctx: Context)
     { name: string
     , closureInstrs:
         W.instr list (* instructions to put the closure on the stack *)
     , nParams: int (* number of i32 params for the wrapper *)
+    , resultUnboxedTy: F.UnboxedTy option (* how to unbox the eqref result *)
     } =
     let
       val funcTypeIdx = getClosureFuncTypeIdx ctx 1
-      (* The wrapper needs 2 locals: one for closure (eqref), one for funcref *)
       val closureLocalTy = eqref
-      val funcrefTy =
-        W.RefType {nullable = false, heaptype = W.AbsHeapType W.FUNC}
-      val nWrapperParams = nParams (* i32 params from the wrapper signature *)
-      val closureLocalIdx = nWrapperParams (* first local after params *)
-      val funcrefLocalIdx = nWrapperParams + 1 (* second local after params *)
+      val nWrapperParams = nParams
+      val closureLocalIdx = nWrapperParams
 
       (* Instructions to save closure to local *)
       val setupInstrs = closureInstrs @ [W.LOCAL_SET closureLocalIdx]
 
       (* Box i32 → (ref eq) using the internal convention (BoxedI32 struct) *)
       val boxI32Instrs = emitBox (F.UBTyInt32, ctx)
-      (* Unbox (ref eq) → i32 using the internal convention *)
-      val unboxI32Instrs = emitUnbox (F.UBTyInt32, ctx)
 
       val argInstrs =
         if nParams = 0 then
@@ -2327,16 +2560,20 @@ struct
             List.concat boxArgs @ [W.STRUCT_NEW tupleTypeIdx]
           end
 
+      (* Determine result Wasm type and unboxing instructions *)
+      val (resultWasmTy, unboxInstrs) =
+        case resultUnboxedTy of
+          SOME ubt => (exportResultWasmTy ubt, emitUnbox (ubt, ctx))
+        | NONE => (W.NumType W.I32, emitUnbox (F.UBTyInt32, ctx))
+
       (* Stack order for call_ref: (ref $ClosureBase), arg, funcref *)
       val body =
         setupInstrs
-        (* First param: closure cast to (ref $ClosureBase) *)
         @
         [ W.LOCAL_GET closureLocalIdx
         , W.REF_CAST
             {nullable = false, heaptype = W.TypeIdx (#closureBaseTypeIdx ctx)}
-        ] @ argInstrs (* second param: arg (boxed) *)
-        (* Push funcref last: extract from closure, cast to specific func type *)
+        ] @ argInstrs
         @
         [ W.LOCAL_GET closureLocalIdx
         , W.REF_CAST
@@ -2344,10 +2581,10 @@ struct
         , W.STRUCT_GET (#closureBaseTypeIdx ctx, 0)
         , W.REF_CAST {nullable = false, heaptype = W.TypeIdx funcTypeIdx}
         , W.CALL_REF funcTypeIdx
-        ] @ unboxI32Instrs
+        ] @ unboxInstrs
 
       val wrapperFuncTypeIdx = getFuncTypeIdx ctx
-        (List.tabulate (nParams, fn _ => W.NumType W.I32), [W.NumType W.I32])
+        (List.tabulate (nParams, fn _ => W.NumType W.I32), [resultWasmTy])
       val wrapperFuncIdx = allocFuncIdx ctx
       val wrapperFunc: W.func =
         {typeidx = wrapperFuncTypeIdx, locals = [closureLocalTy], body = body}
@@ -2457,7 +2694,8 @@ struct
               (* The field index in the struct corresponds to position in the sorted list *)
               val closureInstrs = [W.CALL initFuncIdx, W.GLOBAL_GET globalIdx]
               fun genWrappers _ [] = ()
-                | genWrappers fieldIdx ((_, name, {nParams}) :: rest) =
+                | genWrappers fieldIdx
+                    ((_, name, {nParams, resultUnboxedTy}) :: rest) =
                     ( genExportWrapper ctx
                         { name = name
                         , closureInstrs =
@@ -2470,6 +2708,7 @@ struct
                             , W.STRUCT_GET (tupleTypeIdx, fieldIdx)
                             ]
                         , nParams = nParams
+                        , resultUnboxedTy = resultUnboxedTy
                         }
                     ; genWrappers (fieldIdx + 1) rest
                     )

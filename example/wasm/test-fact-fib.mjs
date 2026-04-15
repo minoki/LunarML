@@ -28,6 +28,16 @@ check("fib(5)", exports.fib(5), 5);
 check("fib(10)", exports.fib(10), 55);
 check("fib(20)", exports.fib(20), 6765);
 
+// even/odd
+check("even(0)", exports.even(0), 1);
+check("even(1)", exports.even(1), 0);
+check("even(2)", exports.even(2), 1);
+check("even(3)", exports.even(3), 0);
+check("odd(0)", exports.odd(0), 0);
+check("odd(1)", exports.odd(1), 1);
+check("odd(2)", exports.odd(2), 0);
+check("odd(3)", exports.odd(3), 1);
+
 if (ok) {
   console.log("All tests passed.");
 } else {

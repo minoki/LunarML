@@ -1975,8 +1975,8 @@ sig
     }
   val programToFDecs: Context * Env * TypedSyntax.TopDec list
                       -> Env * FSyntax.Dec list
-  (* Wasm export signature: number of i32 params *)
-  type export_sig = {nParams: int}
+  (* Wasm export signature: number of i32 params and result unboxed type *)
+  type export_sig = {nParams: int, resultUnboxedTy: FSyntax.UnboxedTy option}
   datatype export_entity =
     NO_EXPORT
   | EXPORT_VALUE
@@ -4981,28 +4981,66 @@ struct
           end
     fun isAlphaNumName name =
       List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
-    type export_sig = {nParams: int}
+    type export_sig = {nParams: int, resultUnboxedTy: FSyntax.UnboxedTy option}
     datatype export_entity =
       NO_EXPORT
     | EXPORT_VALUE
     | EXPORT_NAMED of (string * export_sig) vector
-    (* Compute the number of i32 params for a Wasm export wrapper.
-       For int -> int, nParams = 1.
+    (* Map a TypedSyntax result type to an UnboxedTy for Wasm export unboxing.
+       Returns NONE for types that are not directly exportable as a numeric Wasm value. *)
+    fun resultTyToUnboxedTy (ty: T.Ty) : FSyntax.UnboxedTy option =
+      case ty of
+        T.TyCon (_, [], tyname) =>
+          if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int) then
+            SOME FSyntax.UBTyInt32
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int32) then
+            SOME FSyntax.UBTyInt32
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word) then
+            SOME FSyntax.UBTyWord32
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word32) then
+            SOME FSyntax.UBTyWord32
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.bool) then
+            SOME FSyntax.UBTyBool
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.char) then
+            SOME FSyntax.UBTyChar
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.char16) then
+            SOME FSyntax.UBTyChar16
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.char32) then
+            SOME FSyntax.UBTyChar32
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.int64) then
+            SOME FSyntax.UBTyInt64
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.word64) then
+            SOME FSyntax.UBTyWord64
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.real) then
+            SOME FSyntax.UBTyReal
+          else
+            NONE
+      | _ => NONE
+    (* Compute nParams and resultUnboxedTy for a Wasm export wrapper.
+       For int -> int, nParams = 1, resultUnboxedTy = SOME UBTyInt32.
        For (int * int) -> int, nParams = 2 (tuple expansion).
        For unit -> int, nParams = 0.
        For non-function types, nParams = 0 (value export). *)
     fun computeExportSig (T.TypeScheme ([], ty)) : export_sig =
           (case ty of
-             T.FnType (_, paramTy, _) =>
-               (case paramTy of
-                  T.RecordType (_, fields) =>
-                    if Syntax.LabelMap.isEmpty fields then
-                      {nParams = 0} (* unit -> ... *)
-                    else
-                      {nParams = Syntax.LabelMap.numItems fields} (* tuple *)
-                | _ => {nParams = 1}) (* single arg *)
-           | _ => {nParams = 0}) (* not a function *)
-      | computeExportSig _ = {nParams = 1} (* polymorphic: default to 1 *)
+             T.FnType (_, paramTy, resultTy) =>
+               let
+                 val nParams =
+                   case paramTy of
+                     T.RecordType (_, fields) =>
+                       if Syntax.LabelMap.isEmpty fields then 0
+                       else Syntax.LabelMap.numItems fields
+                   | _ => 1
+               in
+                 { nParams = nParams
+                 , resultUnboxedTy = resultTyToUnboxedTy resultTy
+                 }
+               end
+           | _ => {nParams = 0, resultUnboxedTy = NONE}) (* not a function *)
+      | computeExportSig _ =
+          { nParams = 1
+          , resultUnboxedTy = SOME FSyntax.UBTyInt32
+          } (* polymorphic: default *)
     fun addExport (ctx, tenv: Typing.Env, toFEnv: Env, decs) =
       case
         ( Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export")
