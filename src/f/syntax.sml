@@ -1976,13 +1976,11 @@ sig
   val programToFDecs: Context * Env * TypedSyntax.TopDec list
                       -> Env * FSyntax.Dec list
   (* Wasm export signature: per-param unboxed types and result unboxed type.
-     paramUnboxedTys: SOME ubt = primitive param (i32/i64/f64), NONE = eqref param.
-     resultUnboxedTy: SOME ubt = unbox result to primitive, NONE = return as ref.
-     resultIsAnyRef: true = return as anyref (polymorphic), false = return as eqref. *)
+     paramUnboxedTys: SOME ubt = primitive param (i32/i64/f64), NONE = anyref param.
+     resultUnboxedTy: SOME ubt = unbox result to primitive, NONE = return as anyref. *)
   type export_sig =
     { paramUnboxedTys: FSyntax.UnboxedTy option list
     , resultUnboxedTy: FSyntax.UnboxedTy option
-    , resultIsAnyRef: bool
     }
   datatype export_entity =
     NO_EXPORT
@@ -4991,7 +4989,6 @@ struct
     type export_sig =
       { paramUnboxedTys: FSyntax.UnboxedTy option list
       , resultUnboxedTy: FSyntax.UnboxedTy option
-      , resultIsAnyRef: bool
       }
     datatype export_entity =
       NO_EXPORT
@@ -5048,19 +5045,12 @@ struct
                in
                  { paramUnboxedTys = paramUnboxedTys
                  , resultUnboxedTy = resultTyToUnboxedTy resultTy
-                 , resultIsAnyRef = false
                  }
                end
            | _ =>
-               { paramUnboxedTys = []
-               , resultUnboxedTy = resultTyToUnboxedTy ty
-               , resultIsAnyRef = false
-               }) (* not a function *)
+               {paramUnboxedTys = [], resultUnboxedTy = resultTyToUnboxedTy ty}) (* not a function *)
       | computeExportSig _ =
-          { paramUnboxedTys = [NONE]
-          , resultUnboxedTy = NONE
-          , resultIsAnyRef = true
-          } (* polymorphic: use anyref *)
+          {paramUnboxedTys = [NONE], resultUnboxedTy = NONE} (* polymorphic *)
     fun addExport (ctx, tenv: Typing.Env, toFEnv: Env, decs) =
       case
         ( Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export")
