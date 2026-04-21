@@ -535,12 +535,14 @@ struct
     | C.IntConst (Primitives.I32, n) => W.I32_CONST (Int32.fromLarge n) :: acc
     | C.IntConst (Primitives.I64, n) => W.I64_CONST (Int64.fromLarge n) :: acc
     | C.IntConst (Primitives.I54, n) => W.I32_CONST (Int32.fromLarge n) :: acc
-    | C.IntConst (Primitives.INT, n) => W.I32_CONST (Int32.fromLarge n) :: acc
+    | C.IntConst (Primitives.INT, _) =>
+        raise CodeGenError "doValue: INT should have been lowered to I32"
     | C.IntConst (Primitives.INT_INF, _) =>
         raise CodeGenError "doValue: INT_INF not supported in Wasm"
     | C.WordConst (Primitives.W32, n) => W.I32_CONST (Int32.fromLarge n) :: acc
     | C.WordConst (Primitives.W64, n) => W.I64_CONST (Int64.fromLarge n) :: acc
-    | C.WordConst (Primitives.WORD, n) => W.I32_CONST (Int32.fromLarge n) :: acc
+    | C.WordConst (Primitives.WORD, _) =>
+        raise CodeGenError "doValue: WORD should have been lowered to W32"
     | C.CharConst (_, c) => W.I32_CONST (Int32.fromInt c) :: acc
     | C.StringConst s => doStringConst (fctx, s, acc)
     | C.String7Const s => doStringConst (fctx, s, acc)
@@ -2344,26 +2346,6 @@ struct
            | (Primitives.I64, Primitives.I64) => doUnary [] args
            | _ =>
                raise CodeGenError "Int_toInt_unchecked: unsupported width pair")
-
-      (* ---- Default int/word (mapped to I32/W32 for Wasm) ---- *)
-      | Primitives.Int_PLUS Primitives.INT => doBinary [W.I32_BINOP W.ADD] args
-      | Primitives.Int_MINUS Primitives.INT => doBinary [W.I32_BINOP W.SUB] args
-      | Primitives.Int_TIMES Primitives.INT => doBinary [W.I32_BINOP W.MUL] args
-      | Primitives.Int_div Primitives.INT => doBinary [W.I32_BINOP W.DIV_S] args
-      | Primitives.Int_mod Primitives.INT => doBinary [W.I32_BINOP W.REM_S] args
-      | Primitives.Int_EQUAL Primitives.INT => doBinary [W.I32_RELOP W.IEQ] args
-      | Primitives.Int_LT Primitives.INT => doBinary [W.I32_RELOP W.LT_S] args
-      | Primitives.Int_LE Primitives.INT => doBinary [W.I32_RELOP W.LE_S] args
-      | Primitives.Int_GT Primitives.INT => doBinary [W.I32_RELOP W.GT_S] args
-      | Primitives.Int_GE Primitives.INT => doBinary [W.I32_RELOP W.GE_S] args
-      | Primitives.Word_PLUS Primitives.WORD =>
-          doBinary [W.I32_BINOP W.ADD] args
-      | Primitives.Word_MINUS Primitives.WORD =>
-          doBinary [W.I32_BINOP W.SUB] args
-      | Primitives.Word_TIMES Primitives.WORD =>
-          doBinary [W.I32_BINOP W.MUL] args
-      | Primitives.Word_EQUAL Primitives.WORD =>
-          doBinary [W.I32_RELOP W.IEQ] args
 
       (* ---- Exception operations ---- *)
       | Primitives.Exception_instanceof =>
