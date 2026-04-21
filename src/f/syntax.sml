@@ -1975,8 +1975,15 @@ sig
     }
   val programToFDecs: Context * Env * TypedSyntax.TopDec list
                       -> Env * FSyntax.Dec list
-  (* Wasm export signature: number of i32 params and result unboxed type *)
-  type export_sig = {nParams: int, resultUnboxedTy: FSyntax.UnboxedTy option}
+  (* Wasm export signature: per-param unboxed types and result unboxed type.
+     paramUnboxedTys: SOME ubt = primitive param (i32/i64/f64), NONE = eqref param.
+     resultUnboxedTy: SOME ubt = unbox result to primitive, NONE = return as ref.
+     resultIsAnyRef: true = return as anyref (polymorphic), false = return as eqref. *)
+  type export_sig =
+    { paramUnboxedTys: FSyntax.UnboxedTy option list
+    , resultUnboxedTy: FSyntax.UnboxedTy option
+    , resultIsAnyRef: bool
+    }
   datatype export_entity =
     NO_EXPORT
   | EXPORT_VALUE
@@ -4981,7 +4988,11 @@ struct
           end
     fun isAlphaNumName name =
       List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
-    type export_sig = {nParams: int, resultUnboxedTy: FSyntax.UnboxedTy option}
+    type export_sig =
+      { paramUnboxedTys: FSyntax.UnboxedTy option list
+      , resultUnboxedTy: FSyntax.UnboxedTy option
+      , resultIsAnyRef: bool
+      }
     datatype export_entity =
       NO_EXPORT
     | EXPORT_VALUE
@@ -5016,31 +5027,40 @@ struct
           else
             NONE
       | _ => NONE
-    (* Compute nParams and resultUnboxedTy for a Wasm export wrapper.
-       For int -> int, nParams = 1, resultUnboxedTy = SOME UBTyInt32.
-       For (int * int) -> int, nParams = 2 (tuple expansion).
-       For unit -> int, nParams = 0.
-       For non-function types, nParams = 0 (value export). *)
+    (* Compute paramUnboxedTys and resultUnboxedTy for a Wasm export wrapper.
+       For int -> int, paramUnboxedTys = [SOME UBTyInt32], resultUnboxedTy = SOME UBTyInt32.
+       For (int * int64) -> real, paramUnboxedTys = [SOME UBTyInt32, SOME UBTyInt64], resultUnboxedTy = SOME UBTyReal.
+       For unit -> int, paramUnboxedTys = [], resultUnboxedTy = SOME UBTyInt32.
+       For non-function types, paramUnboxedTys = [] (value export). *)
     fun computeExportSig (T.TypeScheme ([], ty)) : export_sig =
           (case ty of
              T.FnType (_, paramTy, resultTy) =>
                let
-                 val nParams =
+                 val paramUnboxedTys =
                    case paramTy of
                      T.RecordType (_, fields) =>
-                       if Syntax.LabelMap.isEmpty fields then 0
-                       else Syntax.LabelMap.numItems fields
-                   | _ => 1
+                       if Syntax.LabelMap.isEmpty fields then
+                         []
+                       else
+                         List.map (fn t => resultTyToUnboxedTy t)
+                           (Syntax.LabelMap.listItems fields)
+                   | _ => [resultTyToUnboxedTy paramTy]
                in
-                 { nParams = nParams
+                 { paramUnboxedTys = paramUnboxedTys
                  , resultUnboxedTy = resultTyToUnboxedTy resultTy
+                 , resultIsAnyRef = false
                  }
                end
-           | _ => {nParams = 0, resultUnboxedTy = NONE}) (* not a function *)
+           | _ =>
+               { paramUnboxedTys = []
+               , resultUnboxedTy = resultTyToUnboxedTy ty
+               , resultIsAnyRef = false
+               }) (* not a function *)
       | computeExportSig _ =
-          { nParams = 1
-          , resultUnboxedTy = SOME FSyntax.UBTyInt32
-          } (* polymorphic: default *)
+          { paramUnboxedTys = [NONE]
+          , resultUnboxedTy = NONE
+          , resultIsAnyRef = true
+          } (* polymorphic: use anyref *)
     fun addExport (ctx, tenv: Typing.Env, toFEnv: Env, decs) =
       case
         ( Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export")

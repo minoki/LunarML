@@ -2494,59 +2494,73 @@ struct
       sorted
     end
 
-  (* Generate a wrapper function for an exported int->int function.
-     The wrapper takes i32 args and returns i32, converting via ref.i31/i31.get_s.
-     For call_ref, the stack order is: [param1, param2, ..., funcref] (funcref on top).
-     closureInstrs: instructions to put the closure (ref eq) on the stack
-     nParams: number of i32 params for the wrapper *)
-  (* Wasm valtype and unbox instructions for an exported result type.
-     All unboxable types currently map to i32 at the Wasm boundary except
-     i64 (→ i64) and f64 (→ f64). *)
-  fun exportResultWasmTy (ubt: F.UnboxedTy) : W.valtype =
+  (* Wasm valtype for an exported param or result unboxed type. *)
+  fun exportPrimWasmTy (ubt: F.UnboxedTy) : W.valtype =
     case ubt of
       F.UBTyInt64 => W.NumType W.I64
     | F.UBTyWord64 => W.NumType W.I64
     | F.UBTyReal => W.NumType W.F64
     | _ => W.NumType W.I32
 
+  (* Wasm valtype for an export param: NONE = eqref (boxed), SOME ubt = primitive. *)
+  fun exportParamWasmTy (ubtOpt: F.UnboxedTy option) : W.valtype =
+    case ubtOpt of
+      NONE => eqref
+    | SOME ubt => exportPrimWasmTy ubt
+
+  (* Box an export param (already on stack) into eqref. NONE = already eqref. *)
+  fun boxExportParam (ubtOpt: F.UnboxedTy option) (ctx: Context) : W.instr list =
+    case ubtOpt of
+      NONE => []
+    | SOME ubt => emitBox (ubt, ctx)
+
   fun genExportWrapper (ctx: Context)
     { name: string
     , closureInstrs:
         W.instr list (* instructions to put the closure on the stack *)
-    , nParams: int (* number of i32 params for the wrapper *)
-    , resultUnboxedTy: F.UnboxedTy option (* how to unbox the eqref result *)
+    , paramUnboxedTys: F.UnboxedTy option list
+    (* per-param: NONE = eqref, SOME ubt = primitive *)
+    , resultUnboxedTy: F.UnboxedTy option
+    (* SOME ubt = unbox to primitive; NONE = return as ref *)
+    , resultIsAnyRef: bool
+    (* true = return anyref (polymorphic); false = return eqref *)
     } =
     let
       val funcTypeIdx = getClosureFuncTypeIdx ctx 1
       val closureLocalTy = eqref
-      val nWrapperParams = nParams
-      val closureLocalIdx = nWrapperParams
+      val nParams = List.length paramUnboxedTys
+      val closureLocalIdx = nParams
 
       (* Instructions to save closure to local *)
       val setupInstrs = closureInstrs @ [W.LOCAL_SET closureLocalIdx]
 
-      (* Box i32 → (ref eq) using the internal convention (BoxedI32 struct) *)
-      val boxI32Instrs = emitBox (F.UBTyInt32, ctx)
-
       val argInstrs =
-        if nParams = 0 then
-          [W.REF_NULL (W.AbsHeapType W.HEAP_NONE)]
-        else if nParams = 1 then
-          [W.LOCAL_GET 0] @ boxI32Instrs
-        else
-          let
-            val tupleTypeIdx = getTupleTypeIdx ctx nParams
-            val boxArgs = List.tabulate (nParams, fn i =>
-              [W.LOCAL_GET i] @ boxI32Instrs)
-          in
-            List.concat boxArgs @ [W.STRUCT_NEW tupleTypeIdx]
-          end
+        case paramUnboxedTys of
+          [] => [W.REF_NULL (W.AbsHeapType W.HEAP_NONE)]
+        | [ubtOpt] => [W.LOCAL_GET 0] @ boxExportParam ubtOpt ctx
+        | _ =>
+            let
+              val tupleTypeIdx = getTupleTypeIdx ctx nParams
+              val (_, boxArgs) =
+                List.foldl
+                  (fn (ubtOpt, (i, acc)) =>
+                     ( i + 1
+                     , ([W.LOCAL_GET i] @ boxExportParam ubtOpt ctx) :: acc
+                     )) (0, []) paramUnboxedTys
+              val boxArgs = List.rev boxArgs
+            in
+              List.concat boxArgs @ [W.STRUCT_NEW tupleTypeIdx]
+            end
 
       (* Determine result Wasm type and unboxing instructions *)
       val (resultWasmTy, unboxInstrs) =
         case resultUnboxedTy of
-          SOME ubt => (exportResultWasmTy ubt, emitUnbox (ubt, ctx))
-        | NONE => (W.NumType W.I32, emitUnbox (F.UBTyInt32, ctx))
+          SOME ubt => (exportPrimWasmTy ubt, emitUnbox (ubt, ctx))
+        | NONE =>
+            if resultIsAnyRef then
+              (W.RefType {nullable = true, heaptype = W.AbsHeapType W.ANY}, [])
+            else
+              (eqref, [])
 
       (* Stack order for call_ref: (ref $ClosureBase), arg, funcref *)
       val body =
@@ -2566,7 +2580,7 @@ struct
         ] @ unboxInstrs
 
       val wrapperFuncTypeIdx = getFuncTypeIdx ctx
-        (List.tabulate (nParams, fn _ => W.NumType W.I32), [resultWasmTy])
+        (List.map exportParamWasmTy paramUnboxedTys, [resultWasmTy])
       val wrapperFuncIdx = allocFuncIdx ctx
       val wrapperFunc: W.func =
         {typeidx = wrapperFuncTypeIdx, locals = [closureLocalTy], body = body}
@@ -2677,7 +2691,10 @@ struct
               val closureInstrs = [W.CALL initFuncIdx, W.GLOBAL_GET globalIdx]
               fun genWrappers _ [] = ()
                 | genWrappers fieldIdx
-                    ((_, name, {nParams, resultUnboxedTy}) :: rest) =
+                    (( _
+                     , name
+                     , {paramUnboxedTys, resultUnboxedTy, resultIsAnyRef}
+                     ) :: rest) =
                     ( genExportWrapper ctx
                         { name = name
                         , closureInstrs =
@@ -2689,8 +2706,9 @@ struct
                                 }
                             , W.STRUCT_GET (tupleTypeIdx, fieldIdx)
                             ]
-                        , nParams = nParams
+                        , paramUnboxedTys = paramUnboxedTys
                         , resultUnboxedTy = resultUnboxedTy
+                        , resultIsAnyRef = resultIsAnyRef
                         }
                     ; genWrappers (fieldIdx + 1) rest
                     )
