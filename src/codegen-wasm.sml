@@ -379,8 +379,10 @@ struct
       idx
     end
 
-  (* Create a mutable closure struct type (for recursive closures that need backpatching) *)
-  fun getMutClosureTypeIdx (ctx: Context) (nFreeVars: int)
+  (* Create a mutable closure struct type (for recursive closures that need backpatching).
+   * nConstFreeVars outer free variable fields are CONST; nVarSlots self/sibling
+   * reference fields are VAR (backpatched after construction). *)
+  fun getMutClosureTypeIdx (ctx: Context) (nConstFreeVars: int) (nVarSlots: int)
     (funcTypeIdx: W.typeidx) =
     let
       val idx = allocTypeIdx ctx
@@ -389,12 +391,14 @@ struct
         , storagetype = W.ValStorageType
             (W.RefType {nullable = false, heaptype = W.TypeIdx funcTypeIdx})
         }
-      val freeVarFields = List.tabulate (nFreeVars, fn _ =>
+      val constFreeVarFields = List.tabulate (nConstFreeVars, fn _ =>
+        {mut = W.CONST, storagetype = W.ValStorageType anyref})
+      val varSlotFields = List.tabulate (nVarSlots, fn _ =>
         {mut = W.VAR, storagetype = W.ValStorageType anyref})
       val subtype = W.SubType
         { final = false
         , supertypes = [#closureBaseTypeIdx ctx]
-        , body = W.StructType (codeField :: freeVarFields)
+        , body = W.StructType (codeField :: constFreeVarFields @ varSlotFields)
         }
       val () = #revTypes ctx := [subtype] :: !(#revTypes ctx)
     in
@@ -1291,10 +1295,12 @@ struct
             val selfIsUsed = TypedSyntax.VIdSet.member (allFreeVars, name)
 
             val nParams = List.length params
-            val nFreeVars = List.length freeVars + (if selfIsUsed then 1 else 0)
+            val nOuterFV = List.length freeVars
+            val nVarSlots = if selfIsUsed then 1 else 0
 
             val funcTypeIdx = getClosureFuncTypeIdx ctx nParams
-            val closureTypeIdx = getMutClosureTypeIdx ctx nFreeVars funcTypeIdx
+            val closureTypeIdx =
+              getMutClosureTypeIdx ctx nOuterFV nVarSlots funcTypeIdx
 
             (* Create a new context for the inner function *)
             val innerFctx = newFuncContext ctx
@@ -1470,10 +1476,9 @@ struct
                        dec
                      val nParams = List.length params
                      val nOuterFV = List.length freeVars
-                     val nFreeVarsTotal = nOuterFV + nSiblings
                      val funcTypeIdx = getClosureFuncTypeIdx ctx nParams
                      val closureTypeIdx =
-                       getMutClosureTypeIdx ctx nFreeVarsTotal funcTypeIdx
+                       getMutClosureTypeIdx ctx nOuterFV nSiblings funcTypeIdx
 
                      val innerFctx = newFuncContext ctx
                      val selfLocal = allocLocal innerFctx anyref
