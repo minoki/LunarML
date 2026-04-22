@@ -20,3 +20,7 @@ val null : 'a list -> bool = List.null
 val rev : 'a list -> 'a list = List.rev
 val tl : 'a list -> 'a list = List.tl
 val valOf : 'a option -> 'a = Option.valOf;
+val op ^ : string * string -> string = String.^;
+val concat : string list -> string = String.concat;
+val size : string -> int = String.size;
+val str : char -> string = String.str;

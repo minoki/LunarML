@@ -27,6 +27,7 @@ sig
     , smlExnTypeIdx: WasmSyntax.typeidx
     , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
     , taggedDataTypeIdx: WasmSyntax.typeidx (* $TaggedData: (struct (field i32) (field anyref)) *)
+    , stringTypeIdx: WasmSyntax.typeidx (* $String: (array (mut i8)) *)
     }
 
   type FuncContext =
@@ -78,6 +79,7 @@ struct
     , smlExnTypeIdx: W.typeidx
     , smlExnTagIdx: int
     , taggedDataTypeIdx: W.typeidx
+    , stringTypeIdx: W.typeidx
     }
 
   type FuncContext =
@@ -558,13 +560,30 @@ struct
     | C.Cast {value, ...} => doValue fctx env (value, acc)
     | C.Pack {value, ...} => doValue fctx env (value, acc)
 
-  (* String constants: store in data segment and create array *)
-  and doStringConst ((_: FuncContext), s: string, acc: W.instr list) =
-    if String.size s = 0 then
-      W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
-    else
-      (* TODO: proper string representation *)
-      W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+  (* String constants: store in data segment and create (array (mut i8)) via array.new_data.
+     Instructions are prepended to acc in reverse execution order (since List.rev is applied later). *)
+  and doStringConst ((fctx: FuncContext), s: string, acc: W.instr list) =
+    let
+      val ctx = #ctx fctx
+      val strTypeIdx = #stringTypeIdx ctx
+    in
+      if String.size s = 0 then
+        (* array.new_default needs size on stack; produces a zero-length i8 array *)
+        W.ARRAY_NEW_DEFAULT strTypeIdx :: W.I32_CONST 0 :: acc
+      else
+        let
+          val bytes = Word8Vector.tabulate (String.size s, fn i =>
+            Word8.fromInt (Char.ord (String.sub (s, i))))
+          val dataIdx = List.length (!(#revDatas ctx))
+          val () =
+            #revDatas ctx
+            := {init = bytes, mode = W.DataPassive} :: !(#revDatas ctx)
+        in
+          (* array.new_data $T $D: pops offset (i32) then length (i32) *)
+          W.ARRAY_NEW_DATA (strTypeIdx, dataIdx) :: W.I32_CONST (String.size s)
+          :: W.I32_CONST 0 :: acc
+        end
+    end
 
   (* ==================== doExp ==================== *)
 
@@ -763,8 +782,11 @@ struct
           go (freeVars, 1, [], innerEnv) (* field 0 is the code pointer *)
         end
 
-      (* Generate body with preamble as initial accumulator *)
-      val bodyInstrs = List.rev (doStat innerFctx innerEnv (body, revPreamble))
+      (* Generate body with preamble as initial accumulator.
+         Append UNREACHABLE so functions that always exit via explicit RETURN
+         (e.g., loops with internal returns) satisfy the validator. *)
+      val bodyInstrs = List.rev
+        (W.UNREACHABLE :: doStat innerFctx innerEnv (body, revPreamble))
 
       val totalLocals = !(#nextLocalIdx innerFctx)
       (* Params don't count as locals in Wasm func - they are separate *)
@@ -1374,7 +1396,7 @@ struct
                 (revPreamble, innerEnv)
 
             val bodyInstrs = List.rev
-              (doStat innerFctx innerEnv (body, revPreamble))
+              (W.UNREACHABLE :: doStat innerFctx innerEnv (body, revPreamble))
 
             val totalLocals = !(#nextLocalIdx innerFctx)
             val nWasmParams = 1 + nParams
@@ -1567,7 +1589,8 @@ struct
                        end
 
                      val bodyInstrs = List.rev
-                       (doStat innerFctx innerEnv (body, revPreamble))
+                       (W.UNREACHABLE
+                        :: doStat innerFctx innerEnv (body, revPreamble))
                      val allLocalTypes = List.rev (!(#revLocalTypes innerFctx))
                      val nWasmParams = 1 + nParams
                      val localTypes = List.drop (allLocalTypes, nWasmParams)
@@ -1757,10 +1780,8 @@ struct
       | (F.Char16ConstOp c, _, _) => W.I32_CONST (Int32.fromInt c) :: acc
       | (F.Char32ConstOp c, _, _) => W.I32_CONST (Int32.fromInt c) :: acc
       | (F.UCharConstOp c, _, _) => W.I32_CONST (Int32.fromInt c) :: acc
-      | (F.String7ConstOp _, _, _) =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
-      | (F.String8ConstOp _, _, _) =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
+      | (F.String7ConstOp s, _, _) => doStringConst (fctx, s, acc)
+      | (F.String8ConstOp s, _, _) => doStringConst (fctx, s, acc)
       | (F.String16ConstOp _, _, _) =>
           raise CodeGenError "doPrimOp: String16ConstOp not yet implemented"
       | (F.String32ConstOp _, _, _) =>
@@ -2274,6 +2295,104 @@ struct
       | Primitives.Char32_ord _ => doUnary [] args
       | Primitives.Char32_chr_unchecked _ => doUnary [] args
 
+      (* ---- String operations ---- *)
+
+      | Primitives.String_size _ =>
+          (case args of
+             [str] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+               in
+                 W.ARRAY_LEN
+                 ::
+                 W.REF_CAST {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+                 :: doExp fctx env (str, acc)
+               end
+           | _ => raise CodeGenError "String_size: expected 1 arg")
+
+      | Primitives.String_str =>
+          (case args of
+             [charArg] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+                 val strRefNullTy =
+                   W.RefType {nullable = true, heaptype = W.TypeIdx strTypeIdx}
+                 val tmpLocal = allocLocal fctx strRefNullTy
+               in
+                 W.LOCAL_GET tmpLocal :: W.ARRAY_SET strTypeIdx
+                 ::
+                 doExp fctx env
+                   ( charArg
+                   , W.I32_CONST 0 :: W.LOCAL_TEE tmpLocal
+                     :: W.ARRAY_NEW_DEFAULT strTypeIdx :: W.I32_CONST 1 :: acc
+                   )
+               end
+           | _ => raise CodeGenError "String_str: expected 1 arg")
+
+      | Primitives.String_fromString7 => doUnary [] args
+
+      (* Low-level string/CharArray primitives for SML-side implementation *)
+
+      | Primitives.Unsafe_CharVector_sub Primitives.I32 =>
+          (case args of
+             [str, idx] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+               in
+                 W.ARRAY_GET_U strTypeIdx
+                 ::
+                 doExp fctx env
+                   ( idx
+                   , W.REF_CAST
+                       {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+                     :: doExp fctx env (str, acc)
+                   )
+               end
+           | _ => raise CodeGenError "Unsafe_CharVector_sub: expected 2 args")
+
+      | Primitives.CharArray_alloc Primitives.I32 =>
+          doUnary [W.ARRAY_NEW_DEFAULT (#stringTypeIdx ctx)] args
+
+      | Primitives.Unsafe_CharArray_update Primitives.I32 =>
+          (case args of
+             [arr, idx, charArg] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+               in
+                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                 :: W.ARRAY_SET strTypeIdx
+                 ::
+                 doExp fctx env (charArg, doExp fctx env
+                   ( idx
+                   , W.REF_CAST
+                       {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+                     :: doExp fctx env (arr, acc)
+                   ))
+               end
+           | _ => raise CodeGenError "Unsafe_CharArray_update: expected 3 args")
+
+      | Primitives.String_copyBytes Primitives.I32 =>
+          (case args of
+             [dst, dstOff, src, srcOff, len] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+                 val castStr =
+                   W.REF_CAST
+                     {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+               in
+                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                 :: W.ARRAY_COPY (strTypeIdx, strTypeIdx)
+                 ::
+                 doExp fctx env (len, doExp fctx env
+                   ( srcOff
+                   , castStr
+                     ::
+                     doExp fctx env (src, doExp fctx env
+                       (dstOff, castStr :: doExp fctx env (dst, acc)))
+                   ))
+               end
+           | _ => raise CodeGenError "String_copyBytes: expected 5 args")
+
       (* ---- Ref cells ---- *)
       | Primitives.Ref_ref =>
           (* Create a 1-field mutable struct *)
@@ -2460,11 +2579,20 @@ struct
             , {mut = W.CONST, storagetype = W.ValStorageType anyref}
             ]
         }
+      val stringTypeIdx = 8
+      (* String: (array (mut i8)) — shared representation for string and CharArray *)
+      val stringType = W.SubType
+        { final = false
+        , supertypes = []
+        , body =
+            W.ArrayType {mut = W.VAR, storagetype = W.PackedStorageType W.I8}
+        }
     in
-      { nextTypeIdx = ref 8
+      { nextTypeIdx = ref 9
       , nextFuncIdx = ref 0
       , revTypes = ref
-          [ [taggedDataType]
+          [ [stringType]
+          , [taggedDataType]
           , [smlExnFuncType]
           , [smlExnType]
           , [exnTagType]
@@ -2489,6 +2617,7 @@ struct
       , smlExnTypeIdx = smlExnTypeIdx
       , smlExnTagIdx = smlExnTagIdx
       , taggedDataTypeIdx = taggedDataTypeIdx
+      , stringTypeIdx = stringTypeIdx
       }
     end
 

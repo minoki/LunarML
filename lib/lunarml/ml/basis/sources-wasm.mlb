@@ -19,6 +19,7 @@ list.sml
 unsafe-basic.sml
 bool.sml
 lunarml.sml
+wasm/string-prim.sml
 end
 in
 signature OPTION
@@ -27,5 +28,10 @@ structure Option
 structure Bool
 structure List
 structure LunarML
+structure Char
+structure String
+structure CharArray
+structure UnsafeCharVector
+structure UnsafeCharArray
 wasm/top-level.sml
 end
