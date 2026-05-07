@@ -2,7 +2,7 @@ local
     structure Word8Sequence :> sig
                   structure Word8Vector : MONO_VECTOR where type elem = Word8.word
                   structure Word8VectorSlice : MONO_VECTOR_SLICE where type elem = Word8.word where type vector = Word8Vector.vector
-                  structure Word8Array : MONO_ARRAY where type elem = Word8.word
+                  structure Word8Array : MONO_ARRAY_NOEQTYPE where type elem = Word8.word
                   structure Word8ArraySlice : MONO_ARRAY_SLICE where type elem = Word8.word
                   structure ByteImpl : sig
                                 val bytesToString : Word8Vector.vector -> string
@@ -16,12 +16,13 @@ local
                   sharing type Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector = UnsafeWord8Vector.vector
                   sharing type Word8Array.array = Word8ArraySlice.array = UnsafeWord8Array.array
                   sharing type Word8VectorSlice.slice = Word8ArraySlice.vector_slice
+                  val arrayEq : Word8Array.array * Word8Array.array -> bool
               end = struct
     local
         structure Prim : MONO_SEQUENCE_PRIM = struct
         type elem = Word8.word
         type vector = String.string
-        type array = Word8.word Array.array
+        type array = JavaScript.value
         structure MonoVector = struct
         val maxLen = String.maxSize
         val length = String.size
@@ -34,15 +35,22 @@ local
         val shallowSliceToVector = sliceToVector
         end
         structure MonoArray = struct
-        val maxLen = Array.maxLen
-        val eq = op = : array * array -> bool
-        val length = Array.length
-        fun unsafeCreateWithZero n = Array.array (n, 0w0 : Word8.word) (* TODO *)
-        val unsafeCreate = Array.array (* TODO *)
-        val fromList = Array.fromList
-        fun unsafeFromListN (n, xs) = fromList xs (* TODO *)
-        val unsafeSub = Unsafe.Array.sub
-        val unsafeUpdate = Unsafe.Array.update
+        val maxLen = 0x7fffffff
+        val eq = JavaScript.===
+        fun length v : int = JavaScript.unsafeFromValue (JavaScript.field (v, "length"))
+        fun unsafeCreateWithZero n = JavaScript.new JavaScript.Lib.Uint8Array #[JavaScript.fromInt n]
+        fun unsafeCreate (n, x : elem) = let val a = JavaScript.new JavaScript.Lib.Uint8Array #[JavaScript.fromInt n]
+                                         in JavaScript.method (a, "fill") #[JavaScript.unsafeToValue x]
+                                          ; a
+                                         end
+        fun unsafeFromListN (n, xs : elem list) = let val v = JavaScript.new JavaScript.Lib.Uint8Array #[JavaScript.fromInt n]
+                                                      fun go (i, []) = v
+                                                        | go (i, x :: xs) = (JavaScript.set (v, JavaScript.fromInt i, JavaScript.unsafeToValue x); go (i + 1, xs))
+                                                  in go (0, xs)
+                                                  end
+        fun fromList xs = unsafeFromListN (List.length xs, xs)
+        fun unsafeSub (v, i) : elem = JavaScript.unsafeFromValue (JavaScript.sub (v, JavaScript.fromInt i))
+        fun unsafeUpdate (a, i, x : elem) = JavaScript.set (a, JavaScript.fromInt i, JavaScript.unsafeToValue x)
         end
         end
         structure Base = MonoSequence (Prim)
@@ -57,21 +65,20 @@ local
     fun bytesToString x = x
     fun stringToBytes x = x
     fun unpackStringVec { base, start, length } = String.substring (base, start, length)
-    fun unpackString { base, start, length } = CharVector.tabulate (length, fn i => Char.chr (Word8.toInt (Unsafe.Array.sub (base, start + i))))
+    fun unpackString { base, start, length } = CharVector.tabulate (length, fn i => Char.chr (Word8.toInt (UnsafeWord8Array.sub (base, start + i)))) (* TODO: TypedArray.subarray(begin, end) *)
     fun packString (arr, i, s) = let val length = Substring.size s
-                                 in if i < 0 orelse length + i > Array.length arr then
+                                 in if i < 0 orelse length + i > Word8Array.length arr then
                                         raise Subscript
                                     else
-                                        let fun go j = if j < length then
-                                                           ( Unsafe.Array.update (arr, i + j, Word8.fromInt (Char.ord (Substring.sub (s, i)))); go (j + 1) )
-                                                       else
-                                                           ()
-                                        in go 0
+                                        let val ss = Substring.string s (* TODO: shallow clone *)
+                                        in ignore (JavaScript.method (arr, "set") #[JavaScript.unsafeToValue ss])
                                         end
                                  end
     end (* structure Word8VectorExtra *)
+    val arrayEq = Prim.MonoArray.eq
     end (* local *)
     end (* structure Word8Sequence *)
 in
 open Word8Sequence
+_equality Word8Array.array = Word8Sequence.arrayEq
 end;
