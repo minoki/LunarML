@@ -566,6 +566,7 @@ struct
     let
       val ctx = #ctx fctx
       val strTypeIdx = #stringTypeIdx ctx
+      val n = Int32.fromInt (String.size s)
     in
       if String.size s = 0 then
         (* array.new_default needs size on stack; produces a zero-length i8 array *)
@@ -580,7 +581,7 @@ struct
             := {init = bytes, mode = W.DataPassive} :: !(#revDatas ctx)
         in
           (* array.new_data $T $D: pops offset (i32) then length (i32) *)
-          W.ARRAY_NEW_DATA (strTypeIdx, dataIdx) :: W.I32_CONST (String.size s)
+          W.ARRAY_NEW_DATA (strTypeIdx, dataIdx) :: W.I32_CONST n
           :: W.I32_CONST 0 :: acc
         end
     end
