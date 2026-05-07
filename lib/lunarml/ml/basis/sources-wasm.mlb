@@ -14,7 +14,7 @@ in
 wasm/general-prim.sml
 general.sml
 option.sml
-js-common/int-prim.sml
+wasm/int-prim.sml
 list.sml
 unsafe-basic.sml
 bool.sml
@@ -33,5 +33,6 @@ structure String
 structure CharArray
 structure UnsafeCharVector
 structure UnsafeCharArray
+structure Int
 wasm/top-level.sml
 end

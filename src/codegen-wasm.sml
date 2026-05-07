@@ -2062,18 +2062,11 @@ struct
       | Primitives.Int_TIMES Primitives.I32 => doBinary [W.I32_BINOP W.MUL] args
       | Primitives.Int_TIMES_wrapping Primitives.I32 =>
           doBinary [W.I32_BINOP W.MUL] args
-      | Primitives.Int_div Primitives.I32 => doBinary [W.I32_BINOP W.DIV_S] args
-      | Primitives.Int_div_unchecked Primitives.I32 =>
-          doBinary [W.I32_BINOP W.DIV_S] args
-      | Primitives.Int_mod Primitives.I32 => doBinary [W.I32_BINOP W.REM_S] args
-      | Primitives.Int_mod_unchecked Primitives.I32 =>
-          doBinary [W.I32_BINOP W.REM_S] args
-      | Primitives.Int_quot Primitives.I32 =>
-          doBinary [W.I32_BINOP W.DIV_S] args
       | Primitives.Int_quot_unchecked Primitives.I32 =>
+          (* division by zero, overflow: trap *)
           doBinary [W.I32_BINOP W.DIV_S] args
-      | Primitives.Int_rem Primitives.I32 => doBinary [W.I32_BINOP W.REM_S] args
       | Primitives.Int_rem_unchecked Primitives.I32 =>
+          (* division by zero: trap *)
           doBinary [W.I32_BINOP W.REM_S] args
       | Primitives.Int_TILDE Primitives.I32 =>
           (* 0 - x *)
@@ -2127,18 +2120,11 @@ struct
       | Primitives.Int_TIMES Primitives.I64 => doBinary [W.I64_BINOP W.MUL] args
       | Primitives.Int_TIMES_wrapping Primitives.I64 =>
           doBinary [W.I64_BINOP W.MUL] args
-      | Primitives.Int_div Primitives.I64 => doBinary [W.I64_BINOP W.DIV_S] args
-      | Primitives.Int_div_unchecked Primitives.I64 =>
-          doBinary [W.I64_BINOP W.DIV_S] args
-      | Primitives.Int_mod Primitives.I64 => doBinary [W.I64_BINOP W.REM_S] args
-      | Primitives.Int_mod_unchecked Primitives.I64 =>
-          doBinary [W.I64_BINOP W.REM_S] args
-      | Primitives.Int_quot Primitives.I64 =>
-          doBinary [W.I64_BINOP W.DIV_S] args
       | Primitives.Int_quot_unchecked Primitives.I64 =>
+          (* division by zero, overflow: trap *)
           doBinary [W.I64_BINOP W.DIV_S] args
-      | Primitives.Int_rem Primitives.I64 => doBinary [W.I64_BINOP W.REM_S] args
       | Primitives.Int_rem_unchecked Primitives.I64 =>
+          (* division by zero: trap *)
           doBinary [W.I64_BINOP W.REM_S] args
       | Primitives.Int_TILDE Primitives.I64 =>
           (case args of
@@ -2175,13 +2161,11 @@ struct
           doBinary [W.I32_BINOP W.SUB] args
       | Primitives.Word_TIMES Primitives.W32 =>
           doBinary [W.I32_BINOP W.MUL] args
-      | Primitives.Word_div Primitives.W32 =>
-          doBinary [W.I32_BINOP W.DIV_U] args
       | Primitives.Word_div_unchecked Primitives.W32 =>
+          (* division by zero: trap *)
           doBinary [W.I32_BINOP W.DIV_U] args
-      | Primitives.Word_mod Primitives.W32 =>
-          doBinary [W.I32_BINOP W.REM_U] args
       | Primitives.Word_mod_unchecked Primitives.W32 =>
+          (* division by zero: trap *)
           doBinary [W.I32_BINOP W.REM_U] args
       | Primitives.Word_TILDE Primitives.W32 =>
           (case args of
@@ -2216,13 +2200,11 @@ struct
           doBinary [W.I64_BINOP W.SUB] args
       | Primitives.Word_TIMES Primitives.W64 =>
           doBinary [W.I64_BINOP W.MUL] args
-      | Primitives.Word_div Primitives.W64 =>
-          doBinary [W.I64_BINOP W.DIV_U] args
       | Primitives.Word_div_unchecked Primitives.W64 =>
+          (* division by zero: trap *)
           doBinary [W.I64_BINOP W.DIV_U] args
-      | Primitives.Word_mod Primitives.W64 =>
-          doBinary [W.I64_BINOP W.REM_U] args
       | Primitives.Word_mod_unchecked Primitives.W64 =>
+          (* division by zero: trap *)
           doBinary [W.I64_BINOP W.REM_U] args
 
       (* ---- Word64 comparison ---- *)

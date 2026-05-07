@@ -1,0 +1,17 @@
+import { div, mod, quot, rem } from "./int-divmod.mjs";
+console.log(div([7, 3]));
+console.log(div([7, -3]));
+console.log(div([-7, 3]));
+console.log(div([-7, -3]));
+console.log(mod([7, 3]));
+console.log(mod([7, -3]));
+console.log(mod([-7, 3]));
+console.log(mod([-7, -3]));
+console.log(quot([7, 3]));
+console.log(quot([7, -3]));
+console.log(quot([-7, 3]));
+console.log(quot([-7, -3]));
+console.log(rem([7, 3]));
+console.log(rem([7, -3]));
+console.log(rem([-7, 3]));
+console.log(rem([-7, -3]));
