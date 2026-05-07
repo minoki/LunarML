@@ -112,6 +112,7 @@ structure JavaScript :> sig
                                           val tanh : value
                                           val trunc : value
                                       end
+                            val RegExp : value
                             val BigInt : value
                             structure BigInt : sig
                                           val asIntN : value
@@ -259,6 +260,7 @@ val tan = fieldWithEffect (Math, "tan", _Prim.PrimEffect.discardable)
 val tanh = fieldWithEffect (Math, "tanh", _Prim.PrimEffect.discardable)
 val trunc = fieldWithEffect (Math, "trunc", _Prim.PrimEffect.discardable)
 end
+val RegExp = global "RegExp"
 val BigInt = global "BigInt"
 structure BigInt = struct
 val asIntN = fieldWithEffect (BigInt, "asIntN", _Prim.PrimEffect.discardable)

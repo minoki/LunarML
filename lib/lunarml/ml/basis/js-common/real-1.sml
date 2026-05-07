@@ -286,6 +286,7 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                         "~inf"
                                     else
                                         let val result = JavaScript.method (JavaScript.fromReal r, "toPrecision") #[JavaScript.fromInt prec] (* TODO: Is this OK? *)
+                                            val result = JavaScript.method (result, "replace") #[JavaScript.new JavaScript.Lib.RegExp #[JavaScript.fromString16 "\\.?0+(e[+-]\\d+)?$"], JavaScript.fromString16 "$1"]
                                             val result = JavaScript.method (result, "replaceAll") #[JavaScript.fromString16 "-", JavaScript.fromString16 "~"]
                                             val result = JavaScript.method (result, "toUpperCase") #[]
                                         in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue result : String16.string)
