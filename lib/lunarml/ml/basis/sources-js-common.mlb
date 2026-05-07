@@ -59,6 +59,8 @@ large-int-is-int-inf.sml
 js-common/int.sml
 js-common/mono-sequence.sml
 real.sml
+pack-real.sml
+js-common/pack-real.sml
 byte.sml
 pack-word.sml
 scan-bool.sml
@@ -94,6 +96,7 @@ signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
+signature PACK_REAL
 signature PACK_WORD
 signature REAL
 signature STRING
@@ -178,6 +181,8 @@ structure List
 structure ListPair
 structure Math
 structure Option
+structure PackRealBig
+structure PackRealLittle
 structure PackWord16Big
 structure PackWord16Little
 structure PackWord32Big

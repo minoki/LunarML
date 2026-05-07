@@ -128,6 +128,8 @@ structure JavaScript :> sig
                             val BigUint64Array : value
                             val Float32Array : value
                             val Float64Array : value
+                            val ArrayBuffer : value
+                            val DataView : value
                             val Date : value
                             structure Date : sig
                                           val now : value
@@ -276,6 +278,8 @@ val Uint32Array = global "Uint32Array"
 val BigUint64Array = global "BigUint64Array"
 val Float32Array = global "Float32Array"
 val Float64Array = global "Float64Array"
+val ArrayBuffer = global "ArrayBuffer"
+val DataView = global "DataView"
 val Date = global "Date"
 structure Date = struct
 val now = fieldWithEffect (Date, "now", _Prim.PrimEffect.discardable)

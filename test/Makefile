@@ -220,6 +220,7 @@ should_run += $(addprefix mlbasis/should_run/,\
   string32-issubstring.mlb \
   substring32.mlb \
   unicode.mlb \
+  pack-real.sml \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)

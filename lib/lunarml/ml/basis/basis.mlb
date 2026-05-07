@@ -18,6 +18,7 @@ signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
+signature PACK_REAL
 signature PACK_WORD
 signature REAL
 signature STRING
@@ -83,6 +84,8 @@ structure ListPair
 structure Math
 structure OS
 structure Option
+structure PackRealBig
+structure PackRealLittle
 structure PackWord16Big
 structure PackWord16Little
 structure PackWord32Big

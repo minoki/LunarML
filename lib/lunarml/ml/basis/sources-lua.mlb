@@ -72,6 +72,8 @@ lua/text16.sml
 lua/text32.sml
 widetext-8.sml
 unsafe-mono-sequence.sml
+pack-real.sml
+lua/pack-real.sml
 lua/time.sml
 timer.sig
 lua/timer.sml
@@ -112,6 +114,7 @@ signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
 signature OS_PATH
+signature PACK_REAL
 signature PACK_WORD
 signature PRIM_IO
 signature REAL
@@ -205,6 +208,8 @@ structure ListPair
 structure Math
 structure OS
 structure Option
+structure PackRealBig
+structure PackRealLittle
 structure PackWord16Big
 structure PackWord16Little
 structure PackWord32Big
