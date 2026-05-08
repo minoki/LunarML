@@ -15,6 +15,8 @@ wasm/general-prim.sml
 general.sml
 option.sml
 wasm/int-prim.sml
+wasm/int-1.sml
+wasm/int.sml
 list.sml
 unsafe-basic.sml
 bool.sml
@@ -22,6 +24,7 @@ lunarml.sml
 wasm/string-prim.sml
 end
 in
+signature INTEGER
 signature OPTION
 structure General
 structure Option
@@ -34,5 +37,11 @@ structure CharArray
 structure UnsafeCharVector
 structure UnsafeCharArray
 structure Int
+structure Int8
+structure Int16
+structure Int32
+structure Int54
+structure Int64
+structure Position
 wasm/top-level.sml
 end

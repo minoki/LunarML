@@ -1,11 +1,11 @@
 _equality int = fn (x, y) => _primCall "Int.=" (x, y);
 structure Int = struct
 type int = int
-fun ~ x = _primCall "Int.~" (x)
-fun abs x = _primCall "Int.abs" (x)
-fun x + y = _primCall "Int.+" (x, y)
-fun x - y = _primCall "Int.-" (x, y)
-fun x * y = _primCall "Int.*" (x, y)
+fun ~ x = _primCall "Int.~" (x) (* TODO: check overflow *)
+fun abs x = _primCall "Int.abs" (x) (* TODO: check overflow *)
+fun x + y = _primCall "Int.+" (x, y) (* TODO: check overflow *)
+fun x - y = _primCall "Int.-" (x, y) (* TODO: check overflow *)
+fun x * y = _primCall "Int.*" (x, y) (* TODO: check overflow *)
 fun x < y = _primCall "Int.<" (x, y)
 fun x <= y = _primCall "Int.<=" (x, y)
 fun x > y = _primCall "Int.>" (x, y)
