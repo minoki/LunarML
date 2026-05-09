@@ -3,10 +3,9 @@ MLB/
 src/syntax.grm.desc
 src/syntax.grm.sig
 src/syntax.grm.sml
-test/*/*.lua
-test/*/*/*.lua
-test/*/*.mjs
-test/*/*/*.mjs
+test/**/*.lua
+test/**/*.nodejs.mjs
+test/**/*.nodejs-cps.mjs
 test/**/*.output
 test/wasm/fact-fib
 test/wasm/fact-fib.wasm
@@ -23,3 +22,5 @@ package/npm/lunarml.mjs
 package/npm/lib/
 docs/_build/
 *.bak
+*.wasm
+*.wat
