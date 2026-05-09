@@ -516,6 +516,16 @@ struct
         ; bufferOutputULEB128 (buf, align)
         ; bufferOutputULEB128 (buf, offset)
         )
+    | I32_LOAD16_U {align, offset} =>
+        ( bufferOutputByte (buf, 0wx2F)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I64_LOAD {align, offset} =>
+        ( bufferOutputByte (buf, 0wx29)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
     | I32_STORE {align, offset} =>
         ( bufferOutputByte (buf, 0wx36)
         ; bufferOutputULEB128 (buf, align)
@@ -523,6 +533,16 @@ struct
         )
     | I32_STORE8 {align, offset} =>
         ( bufferOutputByte (buf, 0wx3A)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I32_STORE16 {align, offset} =>
+        ( bufferOutputByte (buf, 0wx3B)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I64_STORE {align, offset} =>
+        ( bufferOutputByte (buf, 0wx37)
         ; bufferOutputULEB128 (buf, align)
         ; bufferOutputULEB128 (buf, offset)
         )

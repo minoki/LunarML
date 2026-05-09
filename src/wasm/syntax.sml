@@ -260,8 +260,12 @@ sig
   | MEMORY_GROW
   | I32_LOAD of memarg
   | I32_LOAD8_U of memarg
+  | I32_LOAD16_U of memarg
+  | I64_LOAD of memarg
   | I32_STORE of memarg
   | I32_STORE8 of memarg
+  | I32_STORE16 of memarg
+  | I64_STORE of memarg
   (* Reference instructions *)
   | REF_NULL of heaptype
   | REF_IS_NULL
@@ -566,8 +570,12 @@ struct
   | MEMORY_GROW
   | I32_LOAD of memarg
   | I32_LOAD8_U of memarg
+  | I32_LOAD16_U of memarg
+  | I64_LOAD of memarg
   | I32_STORE of memarg
   | I32_STORE8 of memarg
+  | I32_STORE16 of memarg
+  | I64_STORE of memarg
   | REF_NULL of heaptype
   | REF_IS_NULL
   | REF_FUNC of funcidx

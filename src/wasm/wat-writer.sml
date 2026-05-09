@@ -315,7 +315,7 @@ struct
           val s =
             (if offset = 0 then "" else " offset=" ^ Int.toString offset)
             ^
-            (if align = 0 then
+            (if align = 2 then
                ""
              else
                " align="
@@ -336,12 +336,38 @@ struct
         in
           outputLine (out, level, "i32.load8_u" ^ s)
         end
+    | I32_LOAD16_U {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 1 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.load16_u" ^ s)
+        end
+    | I64_LOAD {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 3 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i64.load" ^ s)
+        end
     | I32_STORE {align, offset} =>
         let
           val s =
             (if offset = 0 then "" else " offset=" ^ Int.toString offset)
             ^
-            (if align = 0 then
+            (if align = 2 then
                ""
              else
                " align="
@@ -361,6 +387,32 @@ struct
                ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
         in
           outputLine (out, level, "i32.store8" ^ s)
+        end
+    | I32_STORE16 {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 1 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.store16" ^ s)
+        end
+    | I64_STORE {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 3 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i64.store" ^ s)
         end
     (* Reference instructions *)
     | REF_NULL ht => outputLine (out, level, "ref.null " ^ heaptypeToString ht)

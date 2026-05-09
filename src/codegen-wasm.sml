@@ -2544,47 +2544,97 @@ struct
       | Primitives.call3 => raise CodeGenError "call3: not yet implemented"
 
       (* Wasm linear memory operations *)
-      | Primitives.Wasm_memory_load32 =>
-          ( #needsLinearMemory (#ctx fctx) := true
-          ; case args of
-              [ptr] =>
-                W.I32_LOAD {align = 2, offset = 0} :: doExp fctx env (ptr, acc)
-            | _ => raise CodeGenError "Wasm_memory_load32: expected 1 arg"
-          )
-      | Primitives.Wasm_memory_load8_u =>
+      | Primitives.Wasm_memory_loadWord8 Primitives.W32 =>
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr] =>
                 W.I32_LOAD8_U {align = 0, offset = 0}
                 :: doExp fctx env (ptr, acc)
-            | _ => raise CodeGenError "Wasm_memory_load8_u: expected 1 arg"
+            | _ => raise CodeGenError "Wasm_memory_loadWord8: expected 1 arg"
           )
-      | Primitives.Wasm_memory_store32 =>
+      | Primitives.Wasm_memory_loadWord16 Primitives.W32 =>
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
-              [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE {align = 2, offset = 0}
-                :: doExp fctx env (v, doExp fctx env (ptr, acc))
-            | _ => raise CodeGenError "Wasm_memory_store32: expected 2 args"
+              [ptr] =>
+                W.I32_LOAD16_U {align = 1, offset = 0}
+                :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_loadWord16: expected 1 arg"
           )
-      | Primitives.Wasm_memory_store8 =>
+      | Primitives.Wasm_memory_loadWord32 Primitives.W32 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr] =>
+                W.I32_LOAD {align = 2, offset = 0} :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_loadWord32: expected 1 arg"
+          )
+      | Primitives.Wasm_memory_loadWord64 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr] =>
+                W.I64_LOAD {align = 3, offset = 0} :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_loadWord64: expected 1 arg"
+          )
+      | Primitives.Wasm_memory_loadChar8 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr] =>
+                W.I32_LOAD8_U {align = 0, offset = 0}
+                :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_loadChar8: expected 1 arg"
+          )
+      | Primitives.Wasm_memory_storeWord8 Primitives.W32 =>
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
                 :: W.I32_STORE8 {align = 0, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
-            | _ => raise CodeGenError "Wasm_memory_store8: expected 2 args"
+            | _ => raise CodeGenError "Wasm_memory_storeWord8: expected 2 args"
           )
-      | Primitives.Wasm_ptr_add =>
+      | Primitives.Wasm_memory_storeWord16 Primitives.W32 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE16 {align = 1, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_storeWord16: expected 2 args"
+          )
+      | Primitives.Wasm_memory_storeWord32 Primitives.W32 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE {align = 2, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_storeWord32: expected 2 args"
+          )
+      | Primitives.Wasm_memory_storeWord64 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE {align = 3, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_storeWord64: expected 2 args"
+          )
+      | Primitives.Wasm_memory_storeChar8 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE8 {align = 0, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_storeChar8: expected 2 args"
+          )
+      | Primitives.Wasm_ptr_add Primitives.W32 =>
           (case args of
              [ptr, off] =>
                W.I32_BINOP W.ADD
                :: doExp fctx env (off, doExp fctx env (ptr, acc))
            | _ => raise CodeGenError "Wasm_ptr_add: expected 2 args")
-      | Primitives.Wasm_ptr_of_word32 => doUnary [] args
-      | Primitives.Wasm_ptr_to_word32 => doUnary [] args
+      | Primitives.Wasm_ptr_ofWord Primitives.W32 => doUnary [] args
+      | Primitives.Wasm_ptr_toWord Primitives.W32 => doUnary [] args
 
       | _ =>
           raise CodeGenError

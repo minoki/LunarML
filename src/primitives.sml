@@ -277,13 +277,19 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_encodeUtf8 (* JavaScript.encodeUtf8 *)
                 | JavaScript_decodeUtf8 (* JavaScript.decodeUtf8 *)
                 | JavaScript_codePointAt of int_width (* JavaScript.codePointAt{.i} *)
-                | Wasm_memory_load8_u (* Wasm.memory.load8_u *)
-                | Wasm_memory_load32 (* Wasm.memory.load32 *)
-                | Wasm_memory_store8 (* Wasm.memory.store8 *)
-                | Wasm_memory_store32 (* Wasm.memory.store32 *)
-                | Wasm_ptr_add (* Wasm.ptr.add *)
-                | Wasm_ptr_of_word32 (* Wasm.ptr.ofWord32 *)
-                | Wasm_ptr_to_word32 (* Wasm.ptr.toWord32 *)
+                | Wasm_memory_loadWord8 of word_width (* Wasm.memory.loadWord8AsWord{w} *)
+                | Wasm_memory_loadWord16 of word_width (* Wasm.memory.loadWord16AsWord{w} *)
+                | Wasm_memory_loadWord32 of word_width (* Wasm.memory.loadWord32AsWord{w} *)
+                | Wasm_memory_loadWord64 (* Wasm.memory.loadWord64 *)
+                | Wasm_memory_loadChar8 (* Wasm.memory.loadChar8 *)
+                | Wasm_memory_storeWord8 of word_width (* Wasm.memory.storeWord{w}AsWord8 *)
+                | Wasm_memory_storeWord16 of word_width (* Wasm.memory.storeWord{w}AsWord16 *)
+                | Wasm_memory_storeWord32 of word_width (* Wasm.memory.storeWord{w}AsWord32 *)
+                | Wasm_memory_storeWord64 (* Wasm.memory.storeWord64 *)
+                | Wasm_memory_storeChar8 (* Wasm.memory.storeChar8 *)
+                | Wasm_ptr_add of word_width (* Wasm.ptr.add{.w} *)
+                | Wasm_ptr_ofWord of word_width (* Wasm.ptr.ofWord{w} *)
+                | Wasm_ptr_toWord of word_width (* Wasm.ptr.toWord{w} *)
 fun toString EQUAL = "="
   | toString mkFn2 = "mkFn2"
   | toString mkFn3 = "mkFn3"
@@ -905,13 +911,37 @@ fun toString EQUAL = "="
   | toString (JavaScript_codePointAt I54) = "JavaScript.codePointAt.i54"
   | toString (JavaScript_codePointAt I64) = "JavaScript.codePointAt.i64"
   | toString (JavaScript_codePointAt INT_INF) = "JavaScript.codePointAt.intInf"
-  | toString Wasm_memory_load8_u = "Wasm.memory.load8_u"
-  | toString Wasm_memory_load32 = "Wasm.memory.load32"
-  | toString Wasm_memory_store8 = "Wasm.memory.store8"
-  | toString Wasm_memory_store32 = "Wasm.memory.store32"
-  | toString Wasm_ptr_add = "Wasm.ptr.add"
-  | toString Wasm_ptr_of_word32 = "Wasm.ptr.ofWord32"
-  | toString Wasm_ptr_to_word32 = "Wasm.ptr.toWord32"
+  | toString (Wasm_memory_loadWord8 WORD) = "Wasm.memory.loadWord8AsWord"
+  | toString (Wasm_memory_loadWord8 W32) = "Wasm.memory.loadWord8AsWord32"
+  | toString (Wasm_memory_loadWord8 W64) = "Wasm.memory.loadWord8AsWord64"
+  | toString (Wasm_memory_loadWord16 WORD) = "Wasm.memory.loadWord16AsWord"
+  | toString (Wasm_memory_loadWord16 W32) = "Wasm.memory.loadWord16AsWord32"
+  | toString (Wasm_memory_loadWord16 W64) = "Wasm.memory.loadWord16AsWord64"
+  | toString (Wasm_memory_loadWord32 WORD) = "Wasm.memory.loadWord32AsWord"
+  | toString (Wasm_memory_loadWord32 W32) = "Wasm.memory.loadWord32AsWord32"
+  | toString (Wasm_memory_loadWord32 W64) = "Wasm.memory.loadWord32AsWord64"
+  | toString Wasm_memory_loadWord64 = "Wasm.memory.loadWord64"
+  | toString Wasm_memory_loadChar8 = "Wasm.memory.loadChar8"
+  | toString (Wasm_memory_storeWord8 WORD) = "Wasm.memory.storeWordAsWord8"
+  | toString (Wasm_memory_storeWord8 W32) = "Wasm.memory.storeWord32AsWord8"
+  | toString (Wasm_memory_storeWord8 W64) = "Wasm.memory.storeWord64AsWord8"
+  | toString (Wasm_memory_storeWord16 WORD) = "Wasm.memory.storeWordAsWord16"
+  | toString (Wasm_memory_storeWord16 W32) = "Wasm.memory.storeWord32AsWord16"
+  | toString (Wasm_memory_storeWord16 W64) = "Wasm.memory.storeWord64AsWord16"
+  | toString (Wasm_memory_storeWord32 WORD) = "Wasm.memory.storeWordAsWord32"
+  | toString (Wasm_memory_storeWord32 W32) = "Wasm.memory.storeWord32AsWord32"
+  | toString (Wasm_memory_storeWord32 W64) = "Wasm.memory.storeWord64AsWord32"
+  | toString Wasm_memory_storeWord64 = "Wasm.memory.storeWord64"
+  | toString Wasm_memory_storeChar8 = "Wasm.memory.storeChar8"
+  | toString (Wasm_ptr_add WORD) = "Wasm.ptr.add"
+  | toString (Wasm_ptr_add W32) = "Wasm.ptr.add.w32"
+  | toString (Wasm_ptr_add W64) = "Wasm.ptr.add.w64"
+  | toString (Wasm_ptr_ofWord WORD) = "Wasm.ptr.ofWord"
+  | toString (Wasm_ptr_ofWord W32) = "Wasm.ptr.ofWord32"
+  | toString (Wasm_ptr_ofWord W64) = "Wasm.ptr.ofWord64"
+  | toString (Wasm_ptr_toWord WORD) = "Wasm.ptr.toWord"
+  | toString (Wasm_ptr_toWord W32) = "Wasm.ptr.toWord32"
+  | toString (Wasm_ptr_toWord W64) = "Wasm.ptr.toWord64"
 fun fromString "=" = SOME EQUAL
   | fromString "mkFn2" = SOME mkFn2
   | fromString "mkFn3" = SOME mkFn3
@@ -1533,13 +1563,37 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.codePointAt.i54" = SOME (JavaScript_codePointAt I54)
   | fromString "JavaScript.codePointAt.i64" = SOME (JavaScript_codePointAt I64)
   | fromString "JavaScript.codePointAt.intInf" = SOME (JavaScript_codePointAt INT_INF)
-  | fromString "Wasm.memory.load8_u" = SOME Wasm_memory_load8_u
-  | fromString "Wasm.memory.load32" = SOME Wasm_memory_load32
-  | fromString "Wasm.memory.store8" = SOME Wasm_memory_store8
-  | fromString "Wasm.memory.store32" = SOME Wasm_memory_store32
-  | fromString "Wasm.ptr.add" = SOME Wasm_ptr_add
-  | fromString "Wasm.ptr.ofWord32" = SOME Wasm_ptr_of_word32
-  | fromString "Wasm.ptr.toWord32" = SOME Wasm_ptr_to_word32
+  | fromString "Wasm.memory.loadWord8AsWord" = SOME (Wasm_memory_loadWord8 WORD)
+  | fromString "Wasm.memory.loadWord8AsWord32" = SOME (Wasm_memory_loadWord8 W32)
+  | fromString "Wasm.memory.loadWord8AsWord64" = SOME (Wasm_memory_loadWord8 W64)
+  | fromString "Wasm.memory.loadWord16AsWord" = SOME (Wasm_memory_loadWord16 WORD)
+  | fromString "Wasm.memory.loadWord16AsWord32" = SOME (Wasm_memory_loadWord16 W32)
+  | fromString "Wasm.memory.loadWord16AsWord64" = SOME (Wasm_memory_loadWord16 W64)
+  | fromString "Wasm.memory.loadWord32AsWord" = SOME (Wasm_memory_loadWord32 WORD)
+  | fromString "Wasm.memory.loadWord32AsWord32" = SOME (Wasm_memory_loadWord32 W32)
+  | fromString "Wasm.memory.loadWord32AsWord64" = SOME (Wasm_memory_loadWord32 W64)
+  | fromString "Wasm.memory.loadWord64" = SOME Wasm_memory_loadWord64
+  | fromString "Wasm.memory.loadChar8" = SOME Wasm_memory_loadChar8
+  | fromString "Wasm.memory.storeWordAsWord8" = SOME (Wasm_memory_storeWord8 WORD)
+  | fromString "Wasm.memory.storeWord32AsWord8" = SOME (Wasm_memory_storeWord8 W32)
+  | fromString "Wasm.memory.storeWord64AsWord8" = SOME (Wasm_memory_storeWord8 W64)
+  | fromString "Wasm.memory.storeWordAsWord16" = SOME (Wasm_memory_storeWord16 WORD)
+  | fromString "Wasm.memory.storeWord32AsWord16" = SOME (Wasm_memory_storeWord16 W32)
+  | fromString "Wasm.memory.storeWord64AsWord16" = SOME (Wasm_memory_storeWord16 W64)
+  | fromString "Wasm.memory.storeWordAsWord32" = SOME (Wasm_memory_storeWord32 WORD)
+  | fromString "Wasm.memory.storeWord32AsWord32" = SOME (Wasm_memory_storeWord32 W32)
+  | fromString "Wasm.memory.storeWord64AsWord32" = SOME (Wasm_memory_storeWord32 W64)
+  | fromString "Wasm.memory.storeWord64" = SOME Wasm_memory_storeWord64
+  | fromString "Wasm.memory.storeChar8" = SOME Wasm_memory_storeChar8
+  | fromString "Wasm.ptr.add" = SOME (Wasm_ptr_add WORD)
+  | fromString "Wasm.ptr.add.w32" = SOME (Wasm_ptr_add W32)
+  | fromString "Wasm.ptr.add.w64" = SOME (Wasm_ptr_add W64)
+  | fromString "Wasm.ptr.ofWord" = SOME (Wasm_ptr_ofWord WORD)
+  | fromString "Wasm.ptr.ofWord32" = SOME (Wasm_ptr_ofWord W32)
+  | fromString "Wasm.ptr.ofWord64" = SOME (Wasm_ptr_ofWord W64)
+  | fromString "Wasm.ptr.toWord" = SOME (Wasm_ptr_toWord WORD)
+  | fromString "Wasm.ptr.toWord32" = SOME (Wasm_ptr_toWord W32)
+  | fromString "Wasm.ptr.toWord64" = SOME (Wasm_ptr_toWord W64)
   | fromString _ = NONE
 fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Int_MINUS INT_INF) = false
@@ -1819,13 +1873,19 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise JavaScript_encodeUtf8 = true
   | mayRaise JavaScript_decodeUtf8 = true
   | mayRaise (JavaScript_codePointAt _) = false
-  | mayRaise Wasm_memory_load8_u = false
-  | mayRaise Wasm_memory_load32 = false
-  | mayRaise Wasm_memory_store8 = false
-  | mayRaise Wasm_memory_store32 = false
-  | mayRaise Wasm_ptr_add = false
-  | mayRaise Wasm_ptr_of_word32 = false
-  | mayRaise Wasm_ptr_to_word32 = false
+  | mayRaise (Wasm_memory_loadWord8 _) = false
+  | mayRaise (Wasm_memory_loadWord16 _) = false
+  | mayRaise (Wasm_memory_loadWord32 _) = false
+  | mayRaise Wasm_memory_loadWord64 = false
+  | mayRaise Wasm_memory_loadChar8 = false
+  | mayRaise (Wasm_memory_storeWord8 _) = false
+  | mayRaise (Wasm_memory_storeWord16 _) = false
+  | mayRaise (Wasm_memory_storeWord32 _) = false
+  | mayRaise Wasm_memory_storeWord64 = false
+  | mayRaise Wasm_memory_storeChar8 = false
+  | mayRaise (Wasm_ptr_add _) = false
+  | mayRaise (Wasm_ptr_ofWord _) = false
+  | mayRaise (Wasm_ptr_toWord _) = false
 fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Int_MINUS INT_INF) = true
   | isDiscardable (Int_TIMES INT_INF) = true
@@ -2104,13 +2164,19 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable JavaScript_encodeUtf8 = true
   | isDiscardable JavaScript_decodeUtf8 = true
   | isDiscardable (JavaScript_codePointAt _) = true
-  | isDiscardable Wasm_memory_load8_u = true
-  | isDiscardable Wasm_memory_load32 = true
-  | isDiscardable Wasm_memory_store8 = false
-  | isDiscardable Wasm_memory_store32 = false
-  | isDiscardable Wasm_ptr_add = true
-  | isDiscardable Wasm_ptr_of_word32 = true
-  | isDiscardable Wasm_ptr_to_word32 = true
+  | isDiscardable (Wasm_memory_loadWord8 _) = true
+  | isDiscardable (Wasm_memory_loadWord16 _) = true
+  | isDiscardable (Wasm_memory_loadWord32 _) = true
+  | isDiscardable Wasm_memory_loadWord64 = true
+  | isDiscardable Wasm_memory_loadChar8 = true
+  | isDiscardable (Wasm_memory_storeWord8 _) = false
+  | isDiscardable (Wasm_memory_storeWord16 _) = false
+  | isDiscardable (Wasm_memory_storeWord32 _) = false
+  | isDiscardable Wasm_memory_storeWord64 = false
+  | isDiscardable Wasm_memory_storeChar8 = false
+  | isDiscardable (Wasm_ptr_add _) = true
+  | isDiscardable (Wasm_ptr_ofWord _) = true
+  | isDiscardable (Wasm_ptr_toWord _) = true
 fun isDiscardablePE PURE = true
   | isDiscardablePE DISCARDABLE = true
   | isDiscardablePE IMPURE = false
@@ -2392,13 +2458,19 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (JavaScript_encodeUtf8, [_]) = true
   | isDiscardableWithArgs (JavaScript_decodeUtf8, [_]) = true
   | isDiscardableWithArgs (JavaScript_codePointAt _, [_, _]) = true
-  | isDiscardableWithArgs (Wasm_memory_load8_u, [_]) = true
-  | isDiscardableWithArgs (Wasm_memory_load32, [_]) = true
-  | isDiscardableWithArgs (Wasm_memory_store8, [_, _]) = false
-  | isDiscardableWithArgs (Wasm_memory_store32, [_, _]) = false
-  | isDiscardableWithArgs (Wasm_ptr_add, [_, _]) = true
-  | isDiscardableWithArgs (Wasm_ptr_of_word32, [_]) = true
-  | isDiscardableWithArgs (Wasm_ptr_to_word32, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_loadWord8 _, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_loadWord16 _, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_loadWord32 _, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_loadWord64, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_loadChar8, [_]) = true
+  | isDiscardableWithArgs (Wasm_memory_storeWord8 _, [_, _]) = false
+  | isDiscardableWithArgs (Wasm_memory_storeWord16 _, [_, _]) = false
+  | isDiscardableWithArgs (Wasm_memory_storeWord32 _, [_, _]) = false
+  | isDiscardableWithArgs (Wasm_memory_storeWord64, [_, _]) = false
+  | isDiscardableWithArgs (Wasm_memory_storeChar8, [_, _]) = false
+  | isDiscardableWithArgs (Wasm_ptr_add _, [_, _]) = true
+  | isDiscardableWithArgs (Wasm_ptr_ofWord _, [_]) = true
+  | isDiscardableWithArgs (Wasm_ptr_toWord _, [_]) = true
   | isDiscardableWithArgs _ = false (* should not occur *)
 fun fixIntWord { int, word }
   = let fun fixInt INT = int
@@ -2484,6 +2556,15 @@ fun fixIntWord { int, word }
         | UTF16_codePointAt a1 => UTF16_codePointAt (fixInt a1)
         | UTF16_size a1 => UTF16_size (fixInt a1)
         | JavaScript_codePointAt a1 => JavaScript_codePointAt (fixInt a1)
+        | Wasm_memory_loadWord8 a1 => Wasm_memory_loadWord8 (fixWord a1)
+        | Wasm_memory_loadWord16 a1 => Wasm_memory_loadWord16 (fixWord a1)
+        | Wasm_memory_loadWord32 a1 => Wasm_memory_loadWord32 (fixWord a1)
+        | Wasm_memory_storeWord8 a1 => Wasm_memory_storeWord8 (fixWord a1)
+        | Wasm_memory_storeWord16 a1 => Wasm_memory_storeWord16 (fixWord a1)
+        | Wasm_memory_storeWord32 a1 => Wasm_memory_storeWord32 (fixWord a1)
+        | Wasm_ptr_add a1 => Wasm_ptr_add (fixWord a1)
+        | Wasm_ptr_ofWord a1 => Wasm_ptr_ofWord (fixWord a1)
+        | Wasm_ptr_toWord a1 => Wasm_ptr_toWord (fixWord a1)
         | p => p
     end
 fun returnArity EQUAL = 1
@@ -2759,13 +2840,19 @@ fun returnArity EQUAL = 1
   | returnArity JavaScript_encodeUtf8 = 1
   | returnArity JavaScript_decodeUtf8 = 1
   | returnArity (JavaScript_codePointAt _) = 1
-  | returnArity Wasm_memory_load8_u = 1
-  | returnArity Wasm_memory_load32 = 1
-  | returnArity Wasm_memory_store8 = 0
-  | returnArity Wasm_memory_store32 = 0
-  | returnArity Wasm_ptr_add = 1
-  | returnArity Wasm_ptr_of_word32 = 1
-  | returnArity Wasm_ptr_to_word32 = 1
+  | returnArity (Wasm_memory_loadWord8 _) = 1
+  | returnArity (Wasm_memory_loadWord16 _) = 1
+  | returnArity (Wasm_memory_loadWord32 _) = 1
+  | returnArity Wasm_memory_loadWord64 = 1
+  | returnArity Wasm_memory_loadChar8 = 1
+  | returnArity (Wasm_memory_storeWord8 _) = 0
+  | returnArity (Wasm_memory_storeWord16 _) = 0
+  | returnArity (Wasm_memory_storeWord32 _) = 0
+  | returnArity Wasm_memory_storeWord64 = 0
+  | returnArity Wasm_memory_storeChar8 = 0
+  | returnArity (Wasm_ptr_add _) = 1
+  | returnArity (Wasm_ptr_ofWord _) = 1
+  | returnArity (Wasm_ptr_toWord _) = 1
 end;
 
 functor TypeOfPrimitives (type ty
@@ -3444,11 +3531,35 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.JavaScript_codePointAt Primitives.I54) = { vars = [], args = vector [string16, int54], results = [char32] }
   | typeOf (Primitives.JavaScript_codePointAt Primitives.I64) = { vars = [], args = vector [string16, int64], results = [char32] }
   | typeOf (Primitives.JavaScript_codePointAt Primitives.INT_INF) = { vars = [], args = vector [string16, intInf], results = [char32] }
-  | typeOf Primitives.Wasm_memory_load8_u = { vars = [], args = vector [wasm_ptr], results = [word] }
-  | typeOf Primitives.Wasm_memory_load32 = { vars = [], args = vector [wasm_ptr], results = [word32] }
-  | typeOf Primitives.Wasm_memory_store8 = { vars = [], args = vector [wasm_ptr, word], results = [] }
-  | typeOf Primitives.Wasm_memory_store32 = { vars = [], args = vector [wasm_ptr, word32], results = [] }
-  | typeOf Primitives.Wasm_ptr_add = { vars = [], args = vector [wasm_ptr, word32], results = [wasm_ptr] }
-  | typeOf Primitives.Wasm_ptr_of_word32 = { vars = [], args = vector [word32], results = [wasm_ptr] }
-  | typeOf Primitives.Wasm_ptr_to_word32 = { vars = [], args = vector [wasm_ptr], results = [word32] }
+  | typeOf (Primitives.Wasm_memory_loadWord8 Primitives.WORD) = { vars = [], args = vector [wasm_ptr], results = [word] }
+  | typeOf (Primitives.Wasm_memory_loadWord8 Primitives.W32) = { vars = [], args = vector [wasm_ptr], results = [word32] }
+  | typeOf (Primitives.Wasm_memory_loadWord8 Primitives.W64) = { vars = [], args = vector [wasm_ptr], results = [word64] }
+  | typeOf (Primitives.Wasm_memory_loadWord16 Primitives.WORD) = { vars = [], args = vector [wasm_ptr], results = [word] }
+  | typeOf (Primitives.Wasm_memory_loadWord16 Primitives.W32) = { vars = [], args = vector [wasm_ptr], results = [word32] }
+  | typeOf (Primitives.Wasm_memory_loadWord16 Primitives.W64) = { vars = [], args = vector [wasm_ptr], results = [word64] }
+  | typeOf (Primitives.Wasm_memory_loadWord32 Primitives.WORD) = { vars = [], args = vector [wasm_ptr], results = [word] }
+  | typeOf (Primitives.Wasm_memory_loadWord32 Primitives.W32) = { vars = [], args = vector [wasm_ptr], results = [word32] }
+  | typeOf (Primitives.Wasm_memory_loadWord32 Primitives.W64) = { vars = [], args = vector [wasm_ptr], results = [word64] }
+  | typeOf Primitives.Wasm_memory_loadWord64 = { vars = [], args = vector [wasm_ptr], results = [word64] }
+  | typeOf Primitives.Wasm_memory_loadChar8 = { vars = [], args = vector [wasm_ptr], results = [char] }
+  | typeOf (Primitives.Wasm_memory_storeWord8 Primitives.WORD) = { vars = [], args = vector [wasm_ptr, word], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord8 Primitives.W32) = { vars = [], args = vector [wasm_ptr, word32], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord8 Primitives.W64) = { vars = [], args = vector [wasm_ptr, word64], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord16 Primitives.WORD) = { vars = [], args = vector [wasm_ptr, word], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord16 Primitives.W32) = { vars = [], args = vector [wasm_ptr, word32], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord16 Primitives.W64) = { vars = [], args = vector [wasm_ptr, word64], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord32 Primitives.WORD) = { vars = [], args = vector [wasm_ptr, word], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord32 Primitives.W32) = { vars = [], args = vector [wasm_ptr, word32], results = [] }
+  | typeOf (Primitives.Wasm_memory_storeWord32 Primitives.W64) = { vars = [], args = vector [wasm_ptr, word64], results = [] }
+  | typeOf Primitives.Wasm_memory_storeWord64 = { vars = [], args = vector [wasm_ptr, word64], results = [] }
+  | typeOf Primitives.Wasm_memory_storeChar8 = { vars = [], args = vector [wasm_ptr, char], results = [] }
+  | typeOf (Primitives.Wasm_ptr_add Primitives.WORD) = { vars = [], args = vector [wasm_ptr, word], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_add Primitives.W32) = { vars = [], args = vector [wasm_ptr, word32], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_add Primitives.W64) = { vars = [], args = vector [wasm_ptr, word64], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_ofWord Primitives.WORD) = { vars = [], args = vector [word], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_ofWord Primitives.W32) = { vars = [], args = vector [word32], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_ofWord Primitives.W64) = { vars = [], args = vector [word64], results = [wasm_ptr] }
+  | typeOf (Primitives.Wasm_ptr_toWord Primitives.WORD) = { vars = [], args = vector [wasm_ptr], results = [word] }
+  | typeOf (Primitives.Wasm_ptr_toWord Primitives.W32) = { vars = [], args = vector [wasm_ptr], results = [word32] }
+  | typeOf (Primitives.Wasm_ptr_toWord Primitives.W64) = { vars = [], args = vector [wasm_ptr], results = [word64] }
 end;
