@@ -2205,6 +2205,8 @@ struct
           doBinary [W.I32_BINOP W.SHL] args
       | Primitives.Word_RSHIFT_unchecked (Primitives.W32, _) =>
           doBinary [W.I32_BINOP W.SHR_U] args
+      | Primitives.Word_ARSHIFT_unchecked (Primitives.W32, _) =>
+          doBinary [W.I32_BINOP W.SHR_S] args
 
       (* ---- Word64 arithmetic ---- *)
       | Primitives.Word_PLUS Primitives.W64 => doBinary [W.I64_BINOP W.ADD] args
@@ -2239,6 +2241,42 @@ struct
           doBinary [W.I64_BINOP W.SHL] args
       | Primitives.Word_RSHIFT_unchecked (Primitives.W64, _) =>
           doBinary [W.I64_BINOP W.SHR_U] args
+      | Primitives.Word_ARSHIFT_unchecked (Primitives.W64, _) =>
+          doBinary [W.I64_BINOP W.SHR_S] args
+
+      (* ---- Word conversion ---- *)
+      | Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.I32) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.I64) =>
+          doUnary [W.I64_EXTEND_I32 W.U] args
+      | Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.I32) =>
+          doUnary [W.I32_WRAP_I64] args
+      | Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.I64) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.I32) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.I64) =>
+          doUnary [W.I64_EXTEND_I32 W.S] args
+      | Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.I32) =>
+          doUnary [W.I32_WRAP_I64] args
+      | Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.I64) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_fromInt (Primitives.W32, Primitives.I32) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_fromInt (Primitives.W32, Primitives.I64) =>
+          doUnary [W.I32_WRAP_I64] args
+      | Primitives.Word_fromInt (Primitives.W64, Primitives.I32) =>
+          doUnary [W.I64_EXTEND_I32 W.S] args
+      | Primitives.Word_fromInt (Primitives.W64, Primitives.I64) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_toWord (Primitives.W32, Primitives.W32) =>
+          doUnary [] args (* no-op *)
+      | Primitives.Word_toWord (Primitives.W32, Primitives.W64) =>
+          doUnary [W.I64_EXTEND_I32 W.U] args
+      | Primitives.Word_toWord (Primitives.W64, Primitives.W32) =>
+          doUnary [W.I32_WRAP_I64] args
+      | Primitives.Word_toWord (Primitives.W64, Primitives.W64) =>
+          doUnary [] args (* no-op *)
 
       (* ---- Real (F64) arithmetic ---- *)
       | Primitives.Real_PLUS => doBinary [W.F64_BINOP W.FADD] args

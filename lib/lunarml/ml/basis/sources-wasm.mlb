@@ -17,6 +17,9 @@ option.sml
 wasm/int-prim.sml
 wasm/int-1.sml
 wasm/int.sml
+wasm/word-prim.sml
+wasm/word-1.sml
+wasm/word.sml
 list.sml
 unsafe-basic.sml
 bool.sml
@@ -27,23 +30,30 @@ end
 in
 signature INTEGER
 signature OPTION
-structure General
-structure Option
+signature WORD
 structure Bool
-structure List
-structure LunarML
 structure Char
-structure String
 structure CharArray
-structure UnsafeCharVector
-structure UnsafeCharArray
+structure General
 structure Int
-structure Int8
 structure Int16
 structure Int32
 structure Int54
 structure Int64
+structure Int8
+structure LargeWord
+structure List
+structure LunarML
+structure Option
 structure Position
+structure String
+structure UnsafeCharArray
+structure UnsafeCharVector
 structure WasmMemory
+structure Word
+structure Word16
+structure Word32
+structure Word64
+structure Word8
 wasm/top-level.sml
 end

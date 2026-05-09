@@ -63,6 +63,11 @@ datatype PrimOp = EQUAL (* = *)
                 | Word_xorb of word_width (* Word{w}.xorb *)
                 | Word_LSHIFT_unchecked of word_width * word_width (* Word{w}.<<.unchecked{.w} *)
                 | Word_RSHIFT_unchecked of word_width * word_width (* Word{w}.>>.unchecked{.w} *)
+                | Word_ARSHIFT_unchecked of word_width * word_width (* Word{w}.~>>.unchecked{.w} *)
+                | Word_toInt_unchecked of word_width * int_width (* Word{w}.toInt{i}.unchecked *)
+                | Word_toIntX_unchecked of word_width * int_width (* Word{w}.toIntX{i}.unchecked *)
+                | Word_fromInt of word_width * int_width (* Word{w}.fromInt{i} *)
+                | Word_toWord of word_width * word_width (* Word{w}.toWord{w} *)
                 | Real_PLUS (* Real.+ *)
                 | Real_MINUS (* Real.- *)
                 | Real_TIMES (* Real.* *)
@@ -504,6 +509,69 @@ fun toString EQUAL = "="
   | toString (Word_RSHIFT_unchecked (W64, WORD)) = "Word64.>>.unchecked"
   | toString (Word_RSHIFT_unchecked (W64, W32)) = "Word64.>>.unchecked.w32"
   | toString (Word_RSHIFT_unchecked (W64, W64)) = "Word64.>>.unchecked.w64"
+  | toString (Word_ARSHIFT_unchecked (WORD, WORD)) = "Word.~>>.unchecked"
+  | toString (Word_ARSHIFT_unchecked (WORD, W32)) = "Word.~>>.unchecked.w32"
+  | toString (Word_ARSHIFT_unchecked (WORD, W64)) = "Word.~>>.unchecked.w64"
+  | toString (Word_ARSHIFT_unchecked (W32, WORD)) = "Word32.~>>.unchecked"
+  | toString (Word_ARSHIFT_unchecked (W32, W32)) = "Word32.~>>.unchecked.w32"
+  | toString (Word_ARSHIFT_unchecked (W32, W64)) = "Word32.~>>.unchecked.w64"
+  | toString (Word_ARSHIFT_unchecked (W64, WORD)) = "Word64.~>>.unchecked"
+  | toString (Word_ARSHIFT_unchecked (W64, W32)) = "Word64.~>>.unchecked.w32"
+  | toString (Word_ARSHIFT_unchecked (W64, W64)) = "Word64.~>>.unchecked.w64"
+  | toString (Word_toInt_unchecked (WORD, INT)) = "Word.toInt.unchecked"
+  | toString (Word_toInt_unchecked (WORD, I32)) = "Word.toInt32.unchecked"
+  | toString (Word_toInt_unchecked (WORD, I54)) = "Word.toInt54.unchecked"
+  | toString (Word_toInt_unchecked (WORD, I64)) = "Word.toInt64.unchecked"
+  | toString (Word_toInt_unchecked (WORD, INT_INF)) = "Word.toIntInf.unchecked"
+  | toString (Word_toInt_unchecked (W32, INT)) = "Word32.toInt.unchecked"
+  | toString (Word_toInt_unchecked (W32, I32)) = "Word32.toInt32.unchecked"
+  | toString (Word_toInt_unchecked (W32, I54)) = "Word32.toInt54.unchecked"
+  | toString (Word_toInt_unchecked (W32, I64)) = "Word32.toInt64.unchecked"
+  | toString (Word_toInt_unchecked (W32, INT_INF)) = "Word32.toIntInf.unchecked"
+  | toString (Word_toInt_unchecked (W64, INT)) = "Word64.toInt.unchecked"
+  | toString (Word_toInt_unchecked (W64, I32)) = "Word64.toInt32.unchecked"
+  | toString (Word_toInt_unchecked (W64, I54)) = "Word64.toInt54.unchecked"
+  | toString (Word_toInt_unchecked (W64, I64)) = "Word64.toInt64.unchecked"
+  | toString (Word_toInt_unchecked (W64, INT_INF)) = "Word64.toIntInf.unchecked"
+  | toString (Word_toIntX_unchecked (WORD, INT)) = "Word.toIntX.unchecked"
+  | toString (Word_toIntX_unchecked (WORD, I32)) = "Word.toIntX32.unchecked"
+  | toString (Word_toIntX_unchecked (WORD, I54)) = "Word.toIntX54.unchecked"
+  | toString (Word_toIntX_unchecked (WORD, I64)) = "Word.toIntX64.unchecked"
+  | toString (Word_toIntX_unchecked (WORD, INT_INF)) = "Word.toIntXInf.unchecked"
+  | toString (Word_toIntX_unchecked (W32, INT)) = "Word32.toIntX.unchecked"
+  | toString (Word_toIntX_unchecked (W32, I32)) = "Word32.toIntX32.unchecked"
+  | toString (Word_toIntX_unchecked (W32, I54)) = "Word32.toIntX54.unchecked"
+  | toString (Word_toIntX_unchecked (W32, I64)) = "Word32.toIntX64.unchecked"
+  | toString (Word_toIntX_unchecked (W32, INT_INF)) = "Word32.toIntXInf.unchecked"
+  | toString (Word_toIntX_unchecked (W64, INT)) = "Word64.toIntX.unchecked"
+  | toString (Word_toIntX_unchecked (W64, I32)) = "Word64.toIntX32.unchecked"
+  | toString (Word_toIntX_unchecked (W64, I54)) = "Word64.toIntX54.unchecked"
+  | toString (Word_toIntX_unchecked (W64, I64)) = "Word64.toIntX64.unchecked"
+  | toString (Word_toIntX_unchecked (W64, INT_INF)) = "Word64.toIntXInf.unchecked"
+  | toString (Word_fromInt (WORD, INT)) = "Word.fromInt"
+  | toString (Word_fromInt (WORD, I32)) = "Word.fromInt32"
+  | toString (Word_fromInt (WORD, I54)) = "Word.fromInt54"
+  | toString (Word_fromInt (WORD, I64)) = "Word.fromInt64"
+  | toString (Word_fromInt (WORD, INT_INF)) = "Word.fromIntInf"
+  | toString (Word_fromInt (W32, INT)) = "Word32.fromInt"
+  | toString (Word_fromInt (W32, I32)) = "Word32.fromInt32"
+  | toString (Word_fromInt (W32, I54)) = "Word32.fromInt54"
+  | toString (Word_fromInt (W32, I64)) = "Word32.fromInt64"
+  | toString (Word_fromInt (W32, INT_INF)) = "Word32.fromIntInf"
+  | toString (Word_fromInt (W64, INT)) = "Word64.fromInt"
+  | toString (Word_fromInt (W64, I32)) = "Word64.fromInt32"
+  | toString (Word_fromInt (W64, I54)) = "Word64.fromInt54"
+  | toString (Word_fromInt (W64, I64)) = "Word64.fromInt64"
+  | toString (Word_fromInt (W64, INT_INF)) = "Word64.fromIntInf"
+  | toString (Word_toWord (WORD, WORD)) = "Word.toWord"
+  | toString (Word_toWord (WORD, W32)) = "Word.toWord32"
+  | toString (Word_toWord (WORD, W64)) = "Word.toWord64"
+  | toString (Word_toWord (W32, WORD)) = "Word32.toWord"
+  | toString (Word_toWord (W32, W32)) = "Word32.toWord32"
+  | toString (Word_toWord (W32, W64)) = "Word32.toWord64"
+  | toString (Word_toWord (W64, WORD)) = "Word64.toWord"
+  | toString (Word_toWord (W64, W32)) = "Word64.toWord32"
+  | toString (Word_toWord (W64, W64)) = "Word64.toWord64"
   | toString Real_PLUS = "Real.+"
   | toString Real_MINUS = "Real.-"
   | toString Real_TIMES = "Real.*"
@@ -1069,6 +1137,69 @@ fun fromString "=" = SOME EQUAL
   | fromString "Word64.>>.unchecked" = SOME (Word_RSHIFT_unchecked (W64, WORD))
   | fromString "Word64.>>.unchecked.w32" = SOME (Word_RSHIFT_unchecked (W64, W32))
   | fromString "Word64.>>.unchecked.w64" = SOME (Word_RSHIFT_unchecked (W64, W64))
+  | fromString "Word.~>>.unchecked" = SOME (Word_ARSHIFT_unchecked (WORD, WORD))
+  | fromString "Word.~>>.unchecked.w32" = SOME (Word_ARSHIFT_unchecked (WORD, W32))
+  | fromString "Word.~>>.unchecked.w64" = SOME (Word_ARSHIFT_unchecked (WORD, W64))
+  | fromString "Word32.~>>.unchecked" = SOME (Word_ARSHIFT_unchecked (W32, WORD))
+  | fromString "Word32.~>>.unchecked.w32" = SOME (Word_ARSHIFT_unchecked (W32, W32))
+  | fromString "Word32.~>>.unchecked.w64" = SOME (Word_ARSHIFT_unchecked (W32, W64))
+  | fromString "Word64.~>>.unchecked" = SOME (Word_ARSHIFT_unchecked (W64, WORD))
+  | fromString "Word64.~>>.unchecked.w32" = SOME (Word_ARSHIFT_unchecked (W64, W32))
+  | fromString "Word64.~>>.unchecked.w64" = SOME (Word_ARSHIFT_unchecked (W64, W64))
+  | fromString "Word.toInt.unchecked" = SOME (Word_toInt_unchecked (WORD, INT))
+  | fromString "Word.toInt32.unchecked" = SOME (Word_toInt_unchecked (WORD, I32))
+  | fromString "Word.toInt54.unchecked" = SOME (Word_toInt_unchecked (WORD, I54))
+  | fromString "Word.toInt64.unchecked" = SOME (Word_toInt_unchecked (WORD, I64))
+  | fromString "Word.toIntInf.unchecked" = SOME (Word_toInt_unchecked (WORD, INT_INF))
+  | fromString "Word32.toInt.unchecked" = SOME (Word_toInt_unchecked (W32, INT))
+  | fromString "Word32.toInt32.unchecked" = SOME (Word_toInt_unchecked (W32, I32))
+  | fromString "Word32.toInt54.unchecked" = SOME (Word_toInt_unchecked (W32, I54))
+  | fromString "Word32.toInt64.unchecked" = SOME (Word_toInt_unchecked (W32, I64))
+  | fromString "Word32.toIntInf.unchecked" = SOME (Word_toInt_unchecked (W32, INT_INF))
+  | fromString "Word64.toInt.unchecked" = SOME (Word_toInt_unchecked (W64, INT))
+  | fromString "Word64.toInt32.unchecked" = SOME (Word_toInt_unchecked (W64, I32))
+  | fromString "Word64.toInt54.unchecked" = SOME (Word_toInt_unchecked (W64, I54))
+  | fromString "Word64.toInt64.unchecked" = SOME (Word_toInt_unchecked (W64, I64))
+  | fromString "Word64.toIntInf.unchecked" = SOME (Word_toInt_unchecked (W64, INT_INF))
+  | fromString "Word.toIntX.unchecked" = SOME (Word_toIntX_unchecked (WORD, INT))
+  | fromString "Word.toIntX32.unchecked" = SOME (Word_toIntX_unchecked (WORD, I32))
+  | fromString "Word.toIntX54.unchecked" = SOME (Word_toIntX_unchecked (WORD, I54))
+  | fromString "Word.toIntX64.unchecked" = SOME (Word_toIntX_unchecked (WORD, I64))
+  | fromString "Word.toIntXInf.unchecked" = SOME (Word_toIntX_unchecked (WORD, INT_INF))
+  | fromString "Word32.toIntX.unchecked" = SOME (Word_toIntX_unchecked (W32, INT))
+  | fromString "Word32.toIntX32.unchecked" = SOME (Word_toIntX_unchecked (W32, I32))
+  | fromString "Word32.toIntX54.unchecked" = SOME (Word_toIntX_unchecked (W32, I54))
+  | fromString "Word32.toIntX64.unchecked" = SOME (Word_toIntX_unchecked (W32, I64))
+  | fromString "Word32.toIntXInf.unchecked" = SOME (Word_toIntX_unchecked (W32, INT_INF))
+  | fromString "Word64.toIntX.unchecked" = SOME (Word_toIntX_unchecked (W64, INT))
+  | fromString "Word64.toIntX32.unchecked" = SOME (Word_toIntX_unchecked (W64, I32))
+  | fromString "Word64.toIntX54.unchecked" = SOME (Word_toIntX_unchecked (W64, I54))
+  | fromString "Word64.toIntX64.unchecked" = SOME (Word_toIntX_unchecked (W64, I64))
+  | fromString "Word64.toIntXInf.unchecked" = SOME (Word_toIntX_unchecked (W64, INT_INF))
+  | fromString "Word.fromInt" = SOME (Word_fromInt (WORD, INT))
+  | fromString "Word.fromInt32" = SOME (Word_fromInt (WORD, I32))
+  | fromString "Word.fromInt54" = SOME (Word_fromInt (WORD, I54))
+  | fromString "Word.fromInt64" = SOME (Word_fromInt (WORD, I64))
+  | fromString "Word.fromIntInf" = SOME (Word_fromInt (WORD, INT_INF))
+  | fromString "Word32.fromInt" = SOME (Word_fromInt (W32, INT))
+  | fromString "Word32.fromInt32" = SOME (Word_fromInt (W32, I32))
+  | fromString "Word32.fromInt54" = SOME (Word_fromInt (W32, I54))
+  | fromString "Word32.fromInt64" = SOME (Word_fromInt (W32, I64))
+  | fromString "Word32.fromIntInf" = SOME (Word_fromInt (W32, INT_INF))
+  | fromString "Word64.fromInt" = SOME (Word_fromInt (W64, INT))
+  | fromString "Word64.fromInt32" = SOME (Word_fromInt (W64, I32))
+  | fromString "Word64.fromInt54" = SOME (Word_fromInt (W64, I54))
+  | fromString "Word64.fromInt64" = SOME (Word_fromInt (W64, I64))
+  | fromString "Word64.fromIntInf" = SOME (Word_fromInt (W64, INT_INF))
+  | fromString "Word.toWord" = SOME (Word_toWord (WORD, WORD))
+  | fromString "Word.toWord32" = SOME (Word_toWord (WORD, W32))
+  | fromString "Word.toWord64" = SOME (Word_toWord (WORD, W64))
+  | fromString "Word32.toWord" = SOME (Word_toWord (W32, WORD))
+  | fromString "Word32.toWord32" = SOME (Word_toWord (W32, W32))
+  | fromString "Word32.toWord64" = SOME (Word_toWord (W32, W64))
+  | fromString "Word64.toWord" = SOME (Word_toWord (W64, WORD))
+  | fromString "Word64.toWord32" = SOME (Word_toWord (W64, W32))
+  | fromString "Word64.toWord64" = SOME (Word_toWord (W64, W64))
   | fromString "Real.+" = SOME Real_PLUS
   | fromString "Real.-" = SOME Real_MINUS
   | fromString "Real.*" = SOME Real_TIMES
@@ -1474,6 +1605,11 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Word_xorb _) = false
   | mayRaise (Word_LSHIFT_unchecked _) = false
   | mayRaise (Word_RSHIFT_unchecked _) = false
+  | mayRaise (Word_ARSHIFT_unchecked _) = false
+  | mayRaise (Word_toInt_unchecked _) = false
+  | mayRaise (Word_toIntX_unchecked _) = false
+  | mayRaise (Word_fromInt _) = false
+  | mayRaise (Word_toWord _) = false
   | mayRaise Real_PLUS = false
   | mayRaise Real_MINUS = false
   | mayRaise Real_TIMES = false
@@ -1754,6 +1890,11 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Word_xorb _) = true
   | isDiscardable (Word_LSHIFT_unchecked _) = true
   | isDiscardable (Word_RSHIFT_unchecked _) = true
+  | isDiscardable (Word_ARSHIFT_unchecked _) = true
+  | isDiscardable (Word_toInt_unchecked _) = true
+  | isDiscardable (Word_toIntX_unchecked _) = true
+  | isDiscardable (Word_fromInt _) = true
+  | isDiscardable (Word_toWord _) = true
   | isDiscardable Real_PLUS = true
   | isDiscardable Real_MINUS = true
   | isDiscardable Real_TIMES = true
@@ -2037,6 +2178,11 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Word_xorb _, [_, _]) = true
   | isDiscardableWithArgs (Word_LSHIFT_unchecked _, [_, _]) = true
   | isDiscardableWithArgs (Word_RSHIFT_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Word_ARSHIFT_unchecked _, [_, _]) = true
+  | isDiscardableWithArgs (Word_toInt_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Word_toIntX_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Word_fromInt _, [_]) = true
+  | isDiscardableWithArgs (Word_toWord _, [_]) = true
   | isDiscardableWithArgs (Real_PLUS, [_, _]) = true
   | isDiscardableWithArgs (Real_MINUS, [_, _]) = true
   | isDiscardableWithArgs (Real_TIMES, [_, _]) = true
@@ -2302,6 +2448,11 @@ fun fixIntWord { int, word }
         | Word_xorb a1 => Word_xorb (fixWord a1)
         | Word_LSHIFT_unchecked (a1, a2) => Word_LSHIFT_unchecked (fixWord a1, fixWord a2)
         | Word_RSHIFT_unchecked (a1, a2) => Word_RSHIFT_unchecked (fixWord a1, fixWord a2)
+        | Word_ARSHIFT_unchecked (a1, a2) => Word_ARSHIFT_unchecked (fixWord a1, fixWord a2)
+        | Word_toInt_unchecked (a1, a2) => Word_toInt_unchecked (fixWord a1, fixInt a2)
+        | Word_toIntX_unchecked (a1, a2) => Word_toIntX_unchecked (fixWord a1, fixInt a2)
+        | Word_fromInt (a1, a2) => Word_fromInt (fixWord a1, fixInt a2)
+        | Word_toWord (a1, a2) => Word_toWord (fixWord a1, fixWord a2)
         | Char_ord a1 => Char_ord (fixInt a1)
         | Char_chr_unchecked a1 => Char_chr_unchecked (fixInt a1)
         | Char7_ord a1 => Char7_ord (fixInt a1)
@@ -2394,6 +2545,11 @@ fun returnArity EQUAL = 1
   | returnArity (Word_xorb _) = 1
   | returnArity (Word_LSHIFT_unchecked _) = 1
   | returnArity (Word_RSHIFT_unchecked _) = 1
+  | returnArity (Word_ARSHIFT_unchecked _) = 1
+  | returnArity (Word_toInt_unchecked _) = 1
+  | returnArity (Word_toIntX_unchecked _) = 1
+  | returnArity (Word_fromInt _) = 1
+  | returnArity (Word_toWord _) = 1
   | returnArity Real_PLUS = 1
   | returnArity Real_MINUS = 1
   | returnArity Real_TIMES = 1
@@ -2892,6 +3048,69 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], results = [word64] }
   | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], results = [word64] }
   | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word, word32], results = [word] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word, word64], results = [word] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32, word], results = [word32] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32, word64], results = [word32] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], results = [word64] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], results = [word64] }
+  | typeOf (Primitives.Word_ARSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.WORD, Primitives.INT)) = { vars = [], args = vector [word], results = [int] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.WORD, Primitives.I32)) = { vars = [], args = vector [word], results = [int32] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.WORD, Primitives.I54)) = { vars = [], args = vector [word], results = [int54] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.WORD, Primitives.I64)) = { vars = [], args = vector [word], results = [int64] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.WORD, Primitives.INT_INF)) = { vars = [], args = vector [word], results = [intInf] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.INT)) = { vars = [], args = vector [word32], results = [int] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.I32)) = { vars = [], args = vector [word32], results = [int32] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.I54)) = { vars = [], args = vector [word32], results = [int54] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.I64)) = { vars = [], args = vector [word32], results = [int64] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W32, Primitives.INT_INF)) = { vars = [], args = vector [word32], results = [intInf] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.INT)) = { vars = [], args = vector [word64], results = [int] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.I32)) = { vars = [], args = vector [word64], results = [int32] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.I54)) = { vars = [], args = vector [word64], results = [int54] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.I64)) = { vars = [], args = vector [word64], results = [int64] }
+  | typeOf (Primitives.Word_toInt_unchecked (Primitives.W64, Primitives.INT_INF)) = { vars = [], args = vector [word64], results = [intInf] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.WORD, Primitives.INT)) = { vars = [], args = vector [word], results = [int] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.WORD, Primitives.I32)) = { vars = [], args = vector [word], results = [int32] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.WORD, Primitives.I54)) = { vars = [], args = vector [word], results = [int54] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.WORD, Primitives.I64)) = { vars = [], args = vector [word], results = [int64] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.WORD, Primitives.INT_INF)) = { vars = [], args = vector [word], results = [intInf] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.INT)) = { vars = [], args = vector [word32], results = [int] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.I32)) = { vars = [], args = vector [word32], results = [int32] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.I54)) = { vars = [], args = vector [word32], results = [int54] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.I64)) = { vars = [], args = vector [word32], results = [int64] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W32, Primitives.INT_INF)) = { vars = [], args = vector [word32], results = [intInf] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.INT)) = { vars = [], args = vector [word64], results = [int] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.I32)) = { vars = [], args = vector [word64], results = [int32] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.I54)) = { vars = [], args = vector [word64], results = [int54] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.I64)) = { vars = [], args = vector [word64], results = [int64] }
+  | typeOf (Primitives.Word_toIntX_unchecked (Primitives.W64, Primitives.INT_INF)) = { vars = [], args = vector [word64], results = [intInf] }
+  | typeOf (Primitives.Word_fromInt (Primitives.WORD, Primitives.INT)) = { vars = [], args = vector [int], results = [word] }
+  | typeOf (Primitives.Word_fromInt (Primitives.WORD, Primitives.I32)) = { vars = [], args = vector [int32], results = [word] }
+  | typeOf (Primitives.Word_fromInt (Primitives.WORD, Primitives.I54)) = { vars = [], args = vector [int54], results = [word] }
+  | typeOf (Primitives.Word_fromInt (Primitives.WORD, Primitives.I64)) = { vars = [], args = vector [int64], results = [word] }
+  | typeOf (Primitives.Word_fromInt (Primitives.WORD, Primitives.INT_INF)) = { vars = [], args = vector [intInf], results = [word] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W32, Primitives.INT)) = { vars = [], args = vector [int], results = [word32] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W32, Primitives.I32)) = { vars = [], args = vector [int32], results = [word32] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W32, Primitives.I54)) = { vars = [], args = vector [int54], results = [word32] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W32, Primitives.I64)) = { vars = [], args = vector [int64], results = [word32] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W32, Primitives.INT_INF)) = { vars = [], args = vector [intInf], results = [word32] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W64, Primitives.INT)) = { vars = [], args = vector [int], results = [word64] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W64, Primitives.I32)) = { vars = [], args = vector [int32], results = [word64] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W64, Primitives.I54)) = { vars = [], args = vector [int54], results = [word64] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W64, Primitives.I64)) = { vars = [], args = vector [int64], results = [word64] }
+  | typeOf (Primitives.Word_fromInt (Primitives.W64, Primitives.INT_INF)) = { vars = [], args = vector [intInf], results = [word64] }
+  | typeOf (Primitives.Word_toWord (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word], results = [word] }
+  | typeOf (Primitives.Word_toWord (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word], results = [word32] }
+  | typeOf (Primitives.Word_toWord (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word], results = [word64] }
+  | typeOf (Primitives.Word_toWord (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32], results = [word] }
+  | typeOf (Primitives.Word_toWord (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32], results = [word32] }
+  | typeOf (Primitives.Word_toWord (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32], results = [word64] }
+  | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64], results = [word] }
+  | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64], results = [word32] }
+  | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64], results = [word64] }
   | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_MINUS = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], results = [real] }

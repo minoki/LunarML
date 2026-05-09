@@ -1,0 +1,393 @@
+structure WordImpl :> sig
+                structure LargeWord : sig
+                            eqtype word
+                            val wordSize : int
+                            val toLarge : word -> word
+                            val toLargeX : word -> word
+                            val toLargeWord : word -> word
+                            val toLargeWordX : word -> word
+                            val fromLarge : word -> word
+                            val fromLargeWord : word -> word
+                            val toInt : word -> int
+                            val toIntX : word -> int
+                            val fromInt : int -> word
+                            val andb : word * word -> word
+                            val orb : word * word -> word
+                            val xorb : word * word -> word
+                            val notb : word -> word
+                            val << : word * Word.word -> word
+                            val >> : word * Word.word -> word
+                            val ~>> : word * Word.word -> word
+                            val + : word * word -> word
+                            val - : word * word -> word
+                            val * : word * word -> word
+                            val div : word * word -> word
+                            val mod : word * word -> word
+                            val compare : word * word -> order
+                            val < : word * word -> bool
+                            val <= : word * word -> bool
+                            val > : word * word -> bool
+                            val >= : word * word -> bool
+                            val ~ : word -> word
+                            val min : word * word -> word
+                            val max : word * word -> word
+                            (*
+                            val fmt : StringCvt.radix -> word -> string
+                            val toString : word -> string
+                            *)
+                        end
+                structure Word8 : sig
+                            eqtype word
+                            val wordSize : int
+                            val toLarge : word -> LargeWord.word
+                            val toLargeX : word -> LargeWord.word
+                            val toLargeWord : word -> LargeWord.word
+                            val toLargeWordX : word -> LargeWord.word
+                            val fromLarge : LargeWord.word -> word
+                            val fromLargeWord : LargeWord.word -> word
+                            val toInt : word -> int
+                            val toIntX : word -> int
+                            val fromInt : int -> word
+                            val andb : word * word -> word
+                            val orb : word * word -> word
+                            val xorb : word * word -> word
+                            val notb : word -> word
+                            val << : word * Word.word -> word
+                            val >> : word * Word.word -> word
+                            val ~>> : word * Word.word -> word
+                            val + : word * word -> word
+                            val - : word * word -> word
+                            val * : word * word -> word
+                            val div : word * word -> word
+                            val mod : word * word -> word
+                            val compare : word * word -> order
+                            val < : word * word -> bool
+                            val <= : word * word -> bool
+                            val > : word * word -> bool
+                            val >= : word * word -> bool
+                            val ~ : word -> word
+                            val min : word * word -> word
+                            val max : word * word -> word
+                            (*
+                            val fmt : StringCvt.radix -> word -> string
+                            val toString : word -> string
+                            *)
+                        end
+                structure Word16 : sig
+                            eqtype word
+                            val wordSize : int
+                            val toLarge : word -> LargeWord.word
+                            val toLargeX : word -> LargeWord.word
+                            val toLargeWord : word -> LargeWord.word
+                            val toLargeWordX : word -> LargeWord.word
+                            val fromLarge : LargeWord.word -> word
+                            val fromLargeWord : LargeWord.word -> word
+                            val toInt : word -> int
+                            val toIntX : word -> int
+                            val fromInt : int -> word
+                            val andb : word * word -> word
+                            val orb : word * word -> word
+                            val xorb : word * word -> word
+                            val notb : word -> word
+                            val << : word * Word.word -> word
+                            val >> : word * Word.word -> word
+                            val ~>> : word * Word.word -> word
+                            val + : word * word -> word
+                            val - : word * word -> word
+                            val * : word * word -> word
+                            val div : word * word -> word
+                            val mod : word * word -> word
+                            val compare : word * word -> order
+                            val < : word * word -> bool
+                            val <= : word * word -> bool
+                            val > : word * word -> bool
+                            val >= : word * word -> bool
+                            val ~ : word -> word
+                            val min : word * word -> word
+                            val max : word * word -> word
+                            (*
+                            val fmt : StringCvt.radix -> word -> string
+                            val toString : word -> string
+                            *)
+                        end
+                structure Word32 : sig
+                            eqtype word
+                            val wordSize : int
+                            val toLarge : word -> LargeWord.word
+                            val toLargeX : word -> LargeWord.word
+                            val toLargeWord : word -> LargeWord.word
+                            val toLargeWordX : word -> LargeWord.word
+                            val fromLarge : LargeWord.word -> word
+                            val fromLargeWord : LargeWord.word -> word
+                            val toInt : word -> int
+                            val toIntX : word -> int
+                            val fromInt : int -> word
+                            val andb : word * word -> word
+                            val orb : word * word -> word
+                            val xorb : word * word -> word
+                            val notb : word -> word
+                            val << : word * Word.word -> word
+                            val >> : word * Word.word -> word
+                            val ~>> : word * Word.word -> word
+                            val + : word * word -> word
+                            val - : word * word -> word
+                            val * : word * word -> word
+                            val div : word * word -> word
+                            val mod : word * word -> word
+                            val compare : word * word -> order
+                            val < : word * word -> bool
+                            val <= : word * word -> bool
+                            val > : word * word -> bool
+                            val >= : word * word -> bool
+                            val ~ : word -> word
+                            val min : word * word -> word
+                            val max : word * word -> word
+                            (*
+                            val fmt : StringCvt.radix -> word -> string
+                            val toString : word -> string
+                            *)
+                        end
+                structure Word64 : sig
+                            eqtype word
+                            val wordSize : int
+                            val toLarge : word -> LargeWord.word
+                            val toLargeX : word -> LargeWord.word
+                            val toLargeWord : word -> LargeWord.word
+                            val toLargeWordX : word -> LargeWord.word
+                            val fromLarge : LargeWord.word -> word
+                            val fromLargeWord : LargeWord.word -> word
+                            val toInt : word -> int
+                            val toIntX : word -> int
+                            val fromInt : int -> word
+                            val andb : word * word -> word
+                            val orb : word * word -> word
+                            val xorb : word * word -> word
+                            val notb : word -> word
+                            val << : word * Word.word -> word
+                            val >> : word * Word.word -> word
+                            val ~>> : word * Word.word -> word
+                            val + : word * word -> word
+                            val - : word * word -> word
+                            val * : word * word -> word
+                            val div : word * word -> word
+                            val mod : word * word -> word
+                            val compare : word * word -> order
+                            val < : word * word -> bool
+                            val <= : word * word -> bool
+                            val > : word * word -> bool
+                            val >= : word * word -> bool
+                            val ~ : word -> word
+                            val min : word * word -> word
+                            val max : word * word -> word
+                            (*
+                            val fmt : StringCvt.radix -> word -> string
+                            val toString : word -> string
+                            *)
+                        end
+                sharing type LargeWord.word = Word64.word
+                val wordToWord8 : Word.word -> Word8.word
+                val wordToWord16 : Word.word -> Word16.word
+                val wordToWord32 : Word.word -> Word32.word
+                val wordToLarge : Word.word -> LargeWord.word
+                val wordToLargeX : Word.word -> LargeWord.word
+                val wordFromLarge : LargeWord.word -> Word.word
+                val uncheckedWordToWord8 : Word.word -> Word8.word
+                val uncheckedWordToWord16 : Word.word -> Word16.word
+                val word8ToWord : Word8.word -> Word.word
+                val word16ToWord : Word16.word -> Word.word
+                val word32ToWord : Word32.word -> Word.word
+            end where type Word64.word = _Prim.Word64.word = struct
+structure Word32 = struct
+fun toLarge x = _primCall "Word.toWord64" (x)
+fun toLargeX x = let val w = _primCall "Word.toWord64" (x)
+                 in if x >= 0wx80000000 then
+                        w - 0wx80000000
+                    else
+                        w
+                 end
+fun fromLarge x = _primCall "Word64.toWord" (x)
+val toLargeWord = toLarge
+val toLargeWordX = toLargeX
+val fromLargeWord = fromLarge
+open Word
+end
+structure Word8 = struct
+type word = Word.word
+val FULL : word = 0wxFF
+val wordSize = 8
+val toLarge = Word32.toLarge
+fun toLargeX x = if x >= 0wx80 then
+                     Word32.toLarge x - 0wx80
+                 else
+                     Word32.toLarge x
+fun fromLarge x = Word32.fromLarge (Word64.andb (x, 0wxFF))
+val toInt = Word.toInt
+fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
+                   Word.toInt x
+               else
+                   ~ (Word.toInt (FULL - x) + 1)
+fun fromInt x = Word.andb (Word.fromInt x, FULL)
+val andb = Word.andb
+val orb = Word.orb
+val xorb = Word.xorb
+fun notb x = Word.andb (Word.notb x, FULL)
+fun << (x, y) = Word.andb (Word.<< (x, y), FULL)
+val >> = Word.>>
+fun ~>> (x, y) = if x >= 0wx80 then
+                     Word.andb (Word.~>> (Word.andb (x, 0wx7F) - 0wx80, y), FULL)
+                 else
+                     Word.>> (x, y)
+fun x + y = Word.andb (Word.+ (x, y), FULL)
+fun x - y = Word.andb (Word.- (x, y), FULL)
+fun x * y = Word.andb (Word.* (x, y), FULL)
+fun x div y = Word.andb (Word.div (x, y), FULL)
+fun x mod y = Word.andb (Word.mod (x, y), FULL)
+val compare = Word.compare
+val op < = Word.<
+val op <= = Word.<=
+val op > = Word.>
+val op >= = Word.>=
+fun ~ x = Word.andb (Word.~ x, FULL)
+val min = Word.min
+val max = Word.max
+(*
+val fmt = Word.fmt
+val toString = Word.toString
+*)
+val toLargeWord = toLarge
+val toLargeWordX = toLargeX
+val fromLargeWord = fromLarge
+end
+structure Word16  = struct
+type word = Word.word
+val FULL : word = 0wxFFFF
+val wordSize = 16
+val toLarge = Word32.toLarge
+fun toLargeX x = if x >= 0wx8000 then
+                     Word32.toLarge x - 0wx8000
+                 else
+                     Word32.toLarge x
+fun fromLarge x = Word32.fromLarge (Word64.andb (x, 0wxFFFF))
+val toInt = Word.toInt
+fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
+                   Word.toInt x
+               else
+                   ~ (Word.toInt (FULL - x) + 1)
+fun fromInt x = Word.andb (Word.fromInt x, FULL)
+val andb = Word.andb
+val orb = Word.orb
+val xorb = Word.xorb
+fun notb x = Word.andb (Word.notb x, FULL)
+fun << (x, y) = Word.andb (Word.<< (x, y), FULL)
+val >> = Word.>>
+fun ~>> (x, y) = if x >= 0wx8000 then
+                     Word.andb (Word.~>> (Word.andb (x, 0wx7FFF) - 0wx8000, y), FULL)
+                 else
+                     Word.>> (x, y)
+fun x + y = Word.andb (Word.+ (x, y), FULL)
+fun x - y = Word.andb (Word.- (x, y), FULL)
+fun x * y = Word.andb (Word.* (x, y), FULL)
+fun x div y = Word.andb (Word.div (x, y), FULL)
+fun x mod y = Word.andb (Word.mod (x, y), FULL)
+val compare = Word.compare
+val op < = Word.<
+val op <= = Word.<=
+val op > = Word.>
+val op >= = Word.>=
+fun ~ x = Word.andb (Word.~ x, FULL)
+val min = Word.min
+val max = Word.max
+(*
+val fmt = Word.fmt
+val toString = Word.toString
+*)
+val toLargeWord = toLarge
+val toLargeWordX = toLargeX
+val fromLargeWord = fromLarge
+end
+structure Word64 = struct
+fun toLarge x = x
+fun toLargeX x = x
+fun fromLarge x = x
+val toLargeWord = toLarge
+val toLargeWordX = toLargeX
+val fromLargeWord = fromLarge
+open Word64
+end
+structure LargeWord = Word64
+fun wordToWord8 x = Word.andb (x, Word8.FULL)
+fun wordToWord16 x = Word.andb (x, Word16.FULL)
+fun wordToWord32 x = x
+fun wordToWord64 x = Word32.toLarge x
+fun wordToLarge x = Word32.toLarge x
+val wordToLargeX = Word32.toLargeX
+val wordFromLarge = Word32.fromLarge
+fun uncheckedWordToWord8 x = x
+fun uncheckedWordToWord16 x = x
+fun word8ToWord x = x
+fun word16ToWord x = x
+fun word32ToWord x = x
+end
+structure LargeWord = WordImpl.LargeWord
+structure Word8 = WordImpl.Word8
+structure Word16 = WordImpl.Word16
+structure Word32 = WordImpl.Word32
+structure Word64 = WordImpl.Word64
+structure Word = struct
+open Word
+val toLarge = WordImpl.wordToLarge
+val toLargeX = WordImpl.wordToLargeX
+val fromLarge = WordImpl.wordFromLarge
+val toLargeWord = WordImpl.wordToLarge
+val toLargeWordX = WordImpl.wordToLargeX
+val fromLargeWord = WordImpl.wordFromLarge
+end
+_overload "Word" [Word8.word] { + = Word8.+
+                              , - = Word8.-
+                              , * = Word8.*
+                              , div = Word8.div
+                              , mod = Word8.mod
+                              , ~ = Word8.~
+                              , < = Word8.<
+                              , <= = Word8.<=
+                              , > = Word8.>
+                              , >= = Word8.>=
+                              , fromWord = WordImpl.wordToWord8
+                              , wordSize = 8
+                              }
+_overload "Word" [Word16.word] { + = Word16.+
+                               , - = Word16.-
+                               , * = Word16.*
+                               , div = Word16.div
+                               , mod = Word16.mod
+                               , ~ = Word16.~
+                               , < = Word16.<
+                               , <= = Word16.<=
+                               , > = Word16.>
+                               , >= = Word16.>=
+                               , fromWord = WordImpl.wordToWord16
+                               , wordSize = 16
+                               }
+_overload "Word" [Word32.word] { + = Word32.+
+                               , - = Word32.-
+                               , * = Word32.*
+                               , div = Word32.div
+                               , mod = Word32.mod
+                               , ~ = Word32.~
+                               , < = Word32.<
+                               , <= = Word32.<=
+                               , > = Word32.>
+                               , >= = Word32.>=
+                               , fromWord = WordImpl.wordToWord32
+                               , wordSize = 32
+                               }
+
+signature WORD = sig
+    include WORD
+    val toLarge : word -> LargeWord.word
+    val toLargeX : word -> LargeWord.word
+    val toLargeWord : word -> LargeWord.word
+    val toLargeWordX : word -> LargeWord.word
+    val fromLarge : LargeWord.word -> word
+    val fromLargeWord : LargeWord.word -> word
+end;
