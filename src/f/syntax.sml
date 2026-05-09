@@ -79,6 +79,9 @@ sig
       * int (* returnArity (int), value argument: prim_effect, object, arguments *)
   | BoxOp of UnboxedTy (* 0 type args, 1 value arg *)
   | UnboxOp of UnboxedTy (* 0 type args, 1 value arg *)
+  | ForeignCallOp of string * string * (* arity *) int
+  (* type arguments: arg_type_1, ..., arg_type_n, result_type
+     value arguments: arg_1, ..., arg_n *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -341,6 +344,9 @@ struct
       * int (* returnArity (int), value argument: prim_effect, object, arguments *)
   | BoxOp of UnboxedTy (* 0 type args, 1 value arg *)
   | UnboxOp of UnboxedTy (* 0 type args, 1 value arg *)
+  | ForeignCallOp of string * string * (* arity *) int
+  (* type arguments: arg_type_1, ..., arg_type_n, result_type
+     value arguments: arg_1, ..., arg_n *)
   datatype PatternSCon =
     IntegerConstant of IntInf.int
   | WordConstant of IntInf.int
@@ -1754,6 +1760,8 @@ struct
           "BoxOp(" ^ print_UnboxedTy fsp ^ ")"
       | print_PrimOp (UnboxOp fsp) =
           "UnboxOp(" ^ print_UnboxedTy fsp ^ ")"
+      | print_PrimOp (ForeignCallOp (m, f, n)) =
+          "ForeignCall(" ^ m ^ "." ^ f ^ "/" ^ Int.toString n ^ ")"
     and print_UnboxedTy UBTyInt32 = "Int32"
       | print_UnboxedTy UBTyInt64 = "Int64"
       | print_UnboxedTy UBTyWord32 = "Word32"
@@ -3642,6 +3650,115 @@ struct
             , Vector.foldr (fn (ty, xs) => toFTy (ctx, env, ty) :: xs) [] tyargs
             , Vector.foldr (fn (x, xs) => toFExp (ctx, env, x) :: xs) [] args
             )
+      | toFExp (ctx, env, T.WasmImportFunExp (span, modName, fnName, fnTy)) =
+          let
+            val (argTy, retTy) =
+              case fnTy of
+                TypedSyntax.FnType (_, a, r) => (a, r)
+              | _ =>
+                  emitFatalError
+                    (ctx, [span], "_wasmImportFunction: not a function type")
+            val argTyF = toFTy (ctx, env, argTy)
+            val retTyF = toFTy (ctx, env, retTy)
+            (* Compute arity and component (label, type) list from the arg type.
+               unit -> arity 0, T1*...*Tn -> arity n, other T -> arity 1 *)
+            val (arity, components) =
+              case argTyF of
+                F.RecordType fields =>
+                  let
+                    val entries = Syntax.LabelMap.listItemsi fields
+                  in
+                    if
+                      null entries
+                    then
+                      (0, [])
+                    else if
+                      List.all
+                        (fn (Syntax.NumericLabel _, _) => true | _ => false)
+                        entries andalso List.length entries >= 2
+                    then
+                      let
+                        val sorted =
+                          ListMergeSort.sort
+                            (fn ( (Syntax.NumericLabel a, _)
+                                , (Syntax.NumericLabel b, _)
+                                ) => a > b
+                              | _ => false) entries
+                      in
+                        (List.length sorted, sorted)
+                      end
+                    else
+                      (1, [(Syntax.NumericLabel 1, argTyF)])
+                  end
+              | _ => (1, [(Syntax.NumericLabel 1, argTyF)])
+            val argVId = freshVId (ctx, "_wasmArg")
+            (* Build projections: for arity >= 2, project each field out of argVId *)
+            val (compVIds, letDecs) =
+              case components of
+                [] => ([], [])
+              | [(_, compTy)] =>
+                  let
+                    val vid = freshVId (ctx, "_wasmP")
+                  in
+                    (* arity=1: bind a local for the single arg (may or may not need projection) *)
+                    case argTyF of
+                      F.RecordType _ =>
+                        (* single-element record: project it *)
+                        ( [vid]
+                        , [F.ValDec (vid, SOME compTy, F.ProjectionExp
+                             { label = Syntax.NumericLabel 1
+                             , record = F.VarExp argVId
+                             , fieldTypes =
+                                 case argTyF of
+                                   F.RecordType m => m
+                                 | _ => Syntax.LabelMap.empty
+                             })]
+                        )
+                    | _ => (* scalar: use argVId directly *) ([argVId], [])
+                  end
+              | _ =>
+                  (* arity >= 2: project each field from the tuple *)
+                  let
+                    val fieldTypes =
+                      case argTyF of
+                        F.RecordType m => m
+                      | _ =>
+                          emitFatalError
+                            ( ctx
+                            , [span]
+                            , "_wasmImportFunction: expected record type for tuple arg"
+                            )
+                    fun projField (label, compTy) =
+                      let
+                        val vid = freshVId (ctx, "_wasmP")
+                      in
+                        ( vid
+                        , F.ValDec
+                            ( vid
+                            , SOME compTy
+                            , F.ProjectionExp
+                                { label = label
+                                , record = F.VarExp argVId
+                                , fieldTypes = fieldTypes
+                                }
+                            )
+                        )
+                      end
+                    val (vids, decs) = ListPair.unzip
+                      (List.map projField components)
+                  in
+                    (vids, decs)
+                  end
+            val compTys = List.map #2 components
+            val tyargs = compTys @ [retTyF]
+            val argExprs = List.map F.VarExp compVIds
+            val callExp = F.PrimExp
+              (F.ForeignCallOp (modName, fnName, arity), tyargs, argExprs)
+            val body =
+              if null letDecs then callExp else F.LetExp (letDecs, callExp)
+          in
+            F.FnExp (NONE, argVId, argTyF, body)
+          end
       | toFExp (ctx, env, T.BogusExp (_, ty)) =
           F.BogusExp (toFTy (ctx, env, ty))
     and doValBind ctx env (T.TupleBind (span, vars, exp)) =

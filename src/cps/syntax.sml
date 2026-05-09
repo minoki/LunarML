@@ -323,6 +323,7 @@ struct
           false (* should not occur *)
       | isDiscardable (PrimOp {primOp = F.BoxOp _, ...}) = true
       | isDiscardable (PrimOp {primOp = F.UnboxOp _, ...}) = true
+      | isDiscardable (PrimOp {primOp = F.ForeignCallOp _, ...}) = false
       | isDiscardable (Record _) = true
       | isDiscardable (ExnTag _) = true
       | isDiscardable (Projection _) = true
@@ -667,7 +668,9 @@ struct
            | F.LuaMethod1Op _ => "PrimOp(LuaMethod1Op)"
            | F.LuaMethodNOp _ => "PrimOp(LuaMethodNOp)"
            | F.BoxOp _ => "PrimOp(BoxOp)"
-           | F.UnboxOp _ => "PrimOp(UnboxOp)")
+           | F.UnboxOp _ => "PrimOp(UnboxOp)"
+           | F.ForeignCallOp (m, f, n) =>
+               "PrimOp(ForeignCall(" ^ m ^ "." ^ f ^ "/" ^ Int.toString n ^ "))")
       | simpleExpToString (Record _) = "Record"
       | simpleExpToString (ExnTag _) = "ExnTag"
       | simpleExpToString (Projection _) = "Projection"
@@ -1036,6 +1039,21 @@ struct
                   ( List.map (fn _ => FSyntax.Types.lua_value) args
                   , List.tabulate (n, fn _ => FSyntax.Types.lua_value)
                   )
+              | (F.ForeignCallOp (_, _, n), _) =>
+                  if List.length tyargs = n + 1 then
+                    let
+                      val retTy = List.last tyargs
+                      val results =
+                        case retTy of
+                          FSyntax.RecordType m =>
+                            if Syntax.LabelMap.isEmpty m then [] else [retTy]
+                        | _ => [retTy]
+                    in
+                      (List.take (tyargs, n), results)
+                    end
+                  else
+                    raise CSyntax.InvalidCode
+                      "ForeignCallOp: wrong number of type arguments"
               | _ =>
                   raise CSyntax.InvalidCode
                     ("unknown primop or invalid type arguments to primop "

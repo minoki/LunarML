@@ -13,6 +13,8 @@ sig
     , revFuncs: WasmSyntax.func list ref (* reversed *)
     , revGlobals: WasmSyntax.global list ref (* reversed *)
     , revImports: WasmSyntax.import list ref (* reversed *)
+    , importedFuncs: int StringMap.map StringMap.map ref
+    (* module_name -> func_name -> funcIdx *)
     , revExports: WasmSyntax.export list ref (* reversed *)
     , revDatas: WasmSyntax.data list ref (* reversed *)
     , revTags: WasmSyntax.tagtype list ref (* reversed, module-defined tags *)
@@ -67,6 +69,7 @@ struct
     , revFuncs: W.func list ref
     , revGlobals: W.global list ref
     , revImports: W.import list ref
+    , importedFuncs: int StringMap.map StringMap.map ref
     , revExports: W.export list ref
     , revDatas: W.data list ref
     , revTags: W.tagtype list ref
@@ -536,6 +539,128 @@ struct
   (* ==================== doValue ==================== *)
   (* All do* functions take a reverse accumulator and return a reverse accumulator.
    * Use List.rev on the final result to get forward-order instructions. *)
+
+  (* ==================== ForeignCallOp import pre-registration ==================== *)
+
+  (* Convert an FSyntax type to a Wasm valtype for a Wasm import parameter/result.
+     Only primitive types are supported; others raise CodeGenError. *)
+  fun foreignTyToWasmType (ty: F.Ty) : W.valtype =
+    case tyToUnboxedTy ty of
+      SOME F.UBTyInt64 => W.NumType W.I64
+    | SOME F.UBTyWord64 => W.NumType W.I64
+    | SOME F.UBTyReal => W.NumType W.F64
+    | SOME _ (* I32 family *) => W.NumType W.I32
+    | NONE =>
+        raise CodeGenError
+          ("_wasmImportFunction: unsupported argument/result type for Wasm import"
+           ^ " (only primitive types i32/i64/f64 are supported)")
+
+  (* Scan NSyntax to collect all (modName, fnName, paramWasmTys, resultWasmTys)
+     from ForeignCallOp occurrences.  Results are deduplicated by (mod, fn). *)
+  fun collectForeignCallOps (stat: N.Stat) :
+    (string * string * W.valtype list * W.valtype list) list =
+    let
+      val seen: (string * string) list ref = ref []
+      val result: (string * string * W.valtype list * W.valtype list) list ref =
+        ref []
+      fun addIfNew (m, f, ptys, rtys) =
+        if List.exists (fn (m', f') => m = m' andalso f = f') (!seen) then ()
+        else (seen := (m, f) :: !seen; result := (m, f, ptys, rtys) :: !result)
+      fun scanExp (N.PrimOp {primOp = F.ForeignCallOp (m, f, n), tyargs, ...}) =
+            let
+              val paramTys = List.map foreignTyToWasmType
+                (List.take (tyargs, n))
+              val retTy = List.last tyargs
+              val resultTys =
+                case retTy of
+                  F.RecordType fields =>
+                    if Syntax.LabelMap.isEmpty fields then []
+                    else [foreignTyToWasmType retTy]
+                | _ => [foreignTyToWasmType retTy]
+            in
+              addIfNew (m, f, paramTys, resultTys)
+            end
+        | scanExp (N.PrimOp {args, ...}) = List.app scanExp args
+        | scanExp (N.Value _) = ()
+        | scanExp (N.Record fields) = Syntax.LabelMap.app scanExp fields
+        | scanExp (N.ExnTag _) = ()
+        | scanExp (N.Projection {record, ...}) = scanExp record
+        | scanExp (N.Abs {body, ...}) = scanStat body
+        | scanExp (N.LogicalAnd (a, b)) =
+            (scanExp a; scanExp b)
+        | scanExp (N.LogicalOr (a, b)) =
+            (scanExp a; scanExp b)
+      and scanDec (N.ValDec {exp, ...}) = scanExp exp
+        | scanDec (N.RecDec defs) =
+            List.app (fn d => scanStat (#body d)) defs
+        | scanDec (N.ContDec {body, ...}) = scanStat body
+        | scanDec (N.RecContDec defs) =
+            List.app (fn (_, _, body) => scanStat body) defs
+        | scanDec (N.ESImportDec _) = ()
+      and scanStat (N.Let {decs, cont}) =
+            (List.app scanDec decs; scanStat cont)
+        | scanStat (N.App {applied, args, ...}) =
+            (scanExp applied; List.app scanExp args)
+        | scanStat (N.AppCont {args, ...}) = List.app scanExp args
+        | scanStat (N.If {cond, thenCont, elseCont}) =
+            (scanExp cond; scanStat thenCont; scanStat elseCont)
+        | scanStat (N.Handle {body, handler = (_, hStat), ...}) =
+            (scanStat body; scanStat hStat)
+        | scanStat (N.Raise (_, e)) = scanExp e
+        | scanStat N.Unreachable = ()
+    in
+      scanStat stat;
+      List.rev (!result)
+    end
+
+  (* Register a Wasm function import, allocating its funcIdx.
+     Must be called before any allocFuncIdx for module-defined functions. *)
+  fun registerForeignImport (ctx: Context)
+    ( modName: string
+    , fnName: string
+    , paramTys: W.valtype list
+    , resultTys: W.valtype list
+    ) : unit =
+    let
+      val modMap = !(#importedFuncs ctx)
+      val fnMap =
+        case StringMap.find (modMap, modName) of
+          SOME m => m
+        | NONE => StringMap.empty
+    in
+      if StringMap.inDomain (fnMap, fnName) then
+        ()
+      else
+        let
+          val typeIdx = getFuncTypeIdx ctx (paramTys, resultTys)
+          val funcIdx =
+            allocFuncIdx ctx (* import gets index before module funcs *)
+          val newFnMap = StringMap.insert (fnMap, fnName, funcIdx)
+          val () =
+            #importedFuncs ctx := StringMap.insert (modMap, modName, newFnMap)
+          val () =
+            #revImports ctx
+            :=
+            {module_name = modName, name = fnName, desc = W.ImportFunc typeIdx}
+            :: !(#revImports ctx)
+        in
+          ()
+        end
+    end
+
+  (* Look up the funcIdx of a previously registered foreign import. *)
+  fun lookupForeignImport (ctx: Context) (modName: string, fnName: string) : int =
+    case StringMap.find (!(#importedFuncs ctx), modName) of
+      SOME fnMap =>
+        (case StringMap.find (fnMap, fnName) of
+           SOME idx => idx
+         | NONE =>
+             raise CodeGenError
+               ("ForeignCallOp: import not registered: " ^ modName ^ "."
+                ^ fnName))
+    | NONE =>
+        raise CodeGenError
+          ("ForeignCallOp: module not registered: " ^ modName ^ "." ^ fnName)
 
   fun doValue (fctx: FuncContext) (env: Env) (v: C.Value, acc: W.instr list) :
     W.instr list =
@@ -2040,6 +2165,25 @@ struct
       | (F.LuaMethodNOp _, _, _) =>
           raise CodeGenError "LuaMethodNOp not supported in Wasm"
 
+      (* ---- Wasm function imports ---- *)
+      | (F.ForeignCallOp (modName, fnName, _), tyargs, args) =>
+          let
+            val ctx = #ctx fctx
+            val funcIdx = lookupForeignImport ctx (modName, fnName)
+            (* Evaluate each argument; choose doExp vs doExpForAnyref based on type.
+               The args are paired with their FSyntax types in tyargs. *)
+            val argTys = List.take (tyargs, List.length args)
+            val acc =
+              List.foldl
+                (fn ((arg, argTy), a) =>
+                   case tyToUnboxedTy argTy of
+                     SOME _ => doExp fctx env (arg, a)
+                   | NONE => doExpForAnyref fctx env (arg, a)) acc
+                (ListPair.zip (args, argTys))
+          in
+            W.CALL funcIdx :: acc
+          end
+
       | _ => raise CodeGenError "doPrimOp: unhandled primOp"
     end
 
@@ -2730,6 +2874,7 @@ struct
       , revFuncs = ref []
       , revGlobals = ref []
       , revImports = ref []
+      , importedFuncs = ref StringMap.empty
       , revExports = ref []
       , revDatas = ref []
       , revTags = ref [smlExnTag]
@@ -2864,6 +3009,11 @@ struct
   fun doProgram (ctx: Context) (returnCont: C.CVar) (program: N.Stat)
     (export: ToFSyntax.export_entity) : W.module =
     let
+      (* Phase 1: pre-scan for ForeignCallOp and register all imports.
+         This must happen before any allocFuncIdx so import indices come first. *)
+      val foreignImports = collectForeignCallOps program
+      val () = List.app (registerForeignImport ctx) foreignImports
+
       (* Create a fresh context for the _start function *)
       val startCtx = newFuncContext ctx
 
@@ -2981,8 +3131,12 @@ struct
             end
         | _ => ()
 
-      (* Collect all elem declarations needed for REF_FUNC *)
-      val allFuncIdxs = List.tabulate (!(#nextFuncIdx ctx), fn i => i)
+      (* Collect all elem declarations needed for REF_FUNC.
+         Import functions occupy indices 0..numImports-1; module-defined
+         functions occupy numImports..nextFuncIdx-1. *)
+      val numImports = List.length (!(#revImports ctx))
+      val numModuleFuncs = !(#nextFuncIdx ctx) - numImports
+      val allFuncIdxs = List.tabulate (numModuleFuncs, fn i => i + numImports)
       val elems =
         if null allFuncIdxs then
           []

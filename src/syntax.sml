@@ -165,6 +165,11 @@ sig
   | ListExp of SourcePos.span * Exp vector
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Ty (* [extension] _wasmImportFunction "mod" "fn" : type *)
   | SequentialExp of SourcePos.span * Exp vector * Exp
   and Dec =
     ValDec of
@@ -607,6 +612,11 @@ struct
   | ListExp of SourcePos.span * Exp vector
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Ty (* [extension] _wasmImportFunction "mod" "fn" : type *)
   | SequentialExp of SourcePos.span * Exp vector * Exp
   and Dec =
     ValDec of
@@ -725,6 +735,7 @@ struct
     | getSourceSpanOfExp (ListExp (span, _)) = span
     | getSourceSpanOfExp (VectorExp (span, _)) = span
     | getSourceSpanOfExp (PrimExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (WasmImportFunExp (span, _, _, _)) = span
     | getSourceSpanOfExp (SequentialExp (span, _, _)) = span
 
   fun MkInfixConPat (pat1, _, longvid, pat2) =
@@ -886,6 +897,7 @@ struct
       | print_Exp (ListExp _) = "ListExp"
       | print_Exp (VectorExp _) = "VectorExp"
       | print_Exp (PrimExp _) = "PrimExp"
+      | print_Exp (WasmImportFunExp _) = "WasmImportFunExp"
       | print_Exp (SequentialExp _) = "SequentialExp"
     and print_Dec (ValDec (_, bound, _, valbind)) =
           "ValDec(" ^ print_list print_TyVar bound ^ ","
@@ -973,6 +985,11 @@ sig
   | ListExp of SourcePos.span * Exp vector
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Syntax.Ty (* [extension] _wasmImportFunction "mod" "fn" : type *)
   | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
   | MissingParenExp of
       Exp (* expressions lacking necessary parentheses; like 'if ...' in '1 + if ...' *)
@@ -1096,6 +1113,11 @@ struct
   | ListExp of SourcePos.span * Exp vector
   | VectorExp of SourcePos.span * Exp vector
   | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Syntax.Ty (* [extension] _wasmImportFunction "mod" "fn" : type *)
   | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
   | MissingParenExp of
       Exp (* expressions lacking necessary parentheses; like 'if ...' in '1 + if ...' *)
@@ -1190,6 +1212,7 @@ struct
     | getSourceSpanOfExp (ListExp (span, _)) = span
     | getSourceSpanOfExp (VectorExp (span, _)) = span
     | getSourceSpanOfExp (PrimExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (WasmImportFunExp (span, _, _, _)) = span
     | getSourceSpanOfExp (SequentialExp (span, _, _, _)) = span
     | getSourceSpanOfExp (MissingParenExp exp) = getSourceSpanOfExp exp
 

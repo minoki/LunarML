@@ -3204,6 +3204,23 @@ struct
           in
             (resultType, T.PrimExp (span, primOp, vector tyargs, args))
           end
+      | synthTypeOfExp
+          (ctx, env, S.WasmImportFunExp (span, modName, fnName, ty)) =
+          let
+            val ty' = evalTy (#context ctx, env, ty)
+          in
+            case ty' of
+              T.FnType (_, _, _) =>
+                (ty', T.WasmImportFunExp (span, modName, fnName, ty'))
+            | _ =>
+                ( emitTypeError
+                    ( ctx
+                    , [span]
+                    , "_wasmImportFunction: type annotation must be a function type"
+                    )
+                ; (ty', T.WasmImportFunExp (span, modName, fnName, ty'))
+                )
+          end
       | synthTypeOfExp (ctx, env, S.SequentialExp (span, xs, y)) =
           let
             val decs =
@@ -5371,6 +5388,7 @@ struct
             Vector.app (fn e => checkExp (ctx, env, e)) elems
         | checkExp (ctx, env, T.PrimExp (_, _, _, args)) =
             Vector.app (fn e => checkExp (ctx, env, e)) args
+        | checkExp (_, _, T.WasmImportFunExp _) = ()
         | checkExp (_, _, T.BogusExp _) = ()
       and checkDec (ctx, env, T.ValDec (_, valbinds)) =
             List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
@@ -5592,6 +5610,7 @@ struct
               (Vector.app goExp xs; goTy ty)
           | goExp (T.PrimExp (_, _, tyargs, args)) =
               (Vector.app goTy tyargs; Vector.app goExp args)
+          | goExp (T.WasmImportFunExp (_, _, _, ty)) = goTy ty
           | goExp (T.BogusExp (_, ty)) = goTy ty
         and goDec (T.ValDec (_, valbinds)) =
               (List.app goValBind valbinds; tynameset)

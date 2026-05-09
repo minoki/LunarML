@@ -656,6 +656,8 @@ struct
                 ; (Tokens.EQUALITY, NONE) (* extension *)
                 )
             | "_esImport" => (Tokens.ESIMPORT, NONE) (* extension *)
+            | "_wasmImportFunction" =>
+                (Tokens.WASMIMPORTFUN, NONE) (* extension *)
             | "abstype" => (Tokens.ABSTYPE, NONE)
             | "and" => (Tokens.AND, NONE)
             | "andalso" => (Tokens.ANDALSO, NONE)

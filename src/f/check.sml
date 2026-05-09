@@ -619,6 +619,12 @@ struct
           (checkExp (env, F.unboxedTyToTy fsp, e); F.BoxedType)
       | inferExp (env, F.PrimExp (F.UnboxOp fsp, [], [e])) =
           (checkExp (env, F.BoxedType, e); F.unboxedTyToTy fsp)
+      | inferExp (_, F.PrimExp (F.ForeignCallOp (_, _, n), tyargs, args)) =
+          if List.length tyargs = n + 1 andalso List.length args = n then
+            List.last tyargs
+          else
+            raise TypeError
+              "ForeignCallOp: wrong number of type args or value args"
       | inferExp (_, F.PrimExp (p, _, _)) =
           raise TypeError
             ("PrimOp with invalid arguments: "

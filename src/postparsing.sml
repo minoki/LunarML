@@ -894,6 +894,9 @@ struct
         in
           Syntax.PrimExp (span, primOp, tyargs, args)
         end
+    | doExp
+        (ctx, env, UnfixedSyntax.WasmImportFunExp (span, modName, fnName, ty)) =
+        Syntax.WasmImportFunExp (span, modName, fnName, ty)
     | doExp (ctx, env, UnfixedSyntax.SequentialExp (span, xs, y, optSemicolon)) =
         ( case optSemicolon of
             UnfixedSyntax.NO_SEMICOLON => ()
@@ -1948,6 +1951,8 @@ struct
                 (fn (e, set) => TyVarSet.union (collectExp (bound, e), set)) acc
                 args
             end
+        | collectExp (bound, WasmImportFunExp (_, _, _, ty)) =
+            TyVarSet.difference (freeTyVarsInTy (bound, ty), bound)
         | collectExp (bound, SequentialExp (_, xs, y)) =
             Vector.foldl
               (fn (x, set) => TyVarSet.union (collectExp (bound, x), set))
@@ -2121,6 +2126,7 @@ struct
         | doExp (bound, PrimExp (span, name, tyargs, args)) =
             PrimExp
               (span, name, tyargs, Vector.map (fn x => doExp (bound, x)) args)
+        | doExp (_, exp as WasmImportFunExp _) = exp
         | doExp (bound, SequentialExp (span, xs, y)) =
             SequentialExp
               (span, Vector.map (fn x => doExp (bound, x)) xs, doExp (bound, y))
@@ -2371,6 +2377,7 @@ struct
         )
     | doExp (ctx, env) (S.PrimExp (_, _, tyargs, args)) =
         (Vector.app (doTy ctx) tyargs; Vector.app (doExp (ctx, env)) args)
+    | doExp (ctx, _) (S.WasmImportFunExp (_, _, _, ty)) = doTy ctx ty
     | doExp (ctx, env) (S.SequentialExp (_, xs, y)) =
         (Vector.app (doExp (ctx, env)) xs; doExp (ctx, env) y)
   and doMatches (ctx, env) matches =

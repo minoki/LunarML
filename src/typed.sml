@@ -210,6 +210,11 @@ sig
   | ListExp of SourcePos.span * Exp vector * Ty
   | VectorExp of SourcePos.span * Exp vector * Ty
   | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Ty (* [extension] _wasmImportFunction *)
   | BogusExp of SourcePos.span * Ty (* undefined identifier *)
   and Dec =
     ValDec of SourcePos.span * ValBind list (* non-recursive *)
@@ -600,6 +605,11 @@ struct
   | ListExp of SourcePos.span * Exp vector * Ty
   | VectorExp of SourcePos.span * Exp vector * Ty
   | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+  | WasmImportFunExp of
+      SourcePos.span
+      * string
+      * string
+      * Ty (* [extension] _wasmImportFunction *)
   | BogusExp of SourcePos.span * Ty (* undefined identifier *)
   and Dec =
     ValDec of SourcePos.span * ValBind list (* non-recursive *)
@@ -710,6 +720,7 @@ struct
     | getSourceSpanOfExp (ListExp (span, _, _)) = span
     | getSourceSpanOfExp (VectorExp (span, _, _)) = span
     | getSourceSpanOfExp (PrimExp (span, _, _, _)) = span
+    | getSourceSpanOfExp (WasmImportFunExp (span, _, _, _)) = span
     | getSourceSpanOfExp (BogusExp (span, _)) = span
 
   (* pretty printing *)
@@ -900,6 +911,7 @@ struct
       | print_Exp (ListExp _) = "ListExp"
       | print_Exp (VectorExp _) = "VectorExp"
       | print_Exp (PrimExp _) = "PrimExp"
+      | print_Exp (WasmImportFunExp _) = "WasmImportFunExp"
       | print_Exp (BogusExp _) = "BogusExp"
     and print_Dec (ValDec (_, valbinds)) =
           "ValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
@@ -1264,6 +1276,8 @@ struct
         | doExp (PrimExp (span, primOp, tyargs, args)) =
             PrimExp
               (span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
+        | doExp (WasmImportFunExp (span, m, f, ty)) =
+            WasmImportFunExp (span, m, f, doTy ty)
         | doExp (BogusExp (span, ty)) =
             BogusExp (span, doTy ty)
       and doDec (ValDec (span, valbinds)) =
@@ -1471,6 +1485,7 @@ struct
             VectorExp (span, Vector.map doExp elems, elemTy)
         | doExp (PrimExp (span, primOp, tyargs, args)) =
             PrimExp (span, primOp, tyargs, Vector.map doExp args)
+        | doExp (e as WasmImportFunExp _) = e
         | doExp (e as BogusExp _) = e
       and doMatches matches =
         List.map
@@ -1656,6 +1671,8 @@ struct
         | doExp (PrimExp (span, primOp, tyargs, args)) =
             PrimExp
               (span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
+        | doExp (WasmImportFunExp (span, m, f, ty)) =
+            WasmImportFunExp (span, m, f, doTy ty)
         | doExp (BogusExp (span, ty)) =
             BogusExp (span, doTy ty)
       and doDec (ValDec (span, valbind)) =
@@ -1886,6 +1903,7 @@ struct
            Vector.foldl (fn (x, set) => set @ freeTyVarsInExp (bound, x)) set
              args
          end
+     | WasmImportFunExp (_, _, _, ty) => freeAnonymousTyVarsInTy ty
      | BogusExp (_, ty) => freeAnonymousTyVarsInTy ty)
   and freeTyVarsInMatches (_, nil, acc) = acc
     | freeTyVarsInMatches (bound, (pat, exp) :: rest, acc) =

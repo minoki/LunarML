@@ -337,7 +337,24 @@ struct
                   ( checkValue (env, fn () => "UnboxOp", F.BoxedType) e
                   ; [F.unboxedTyToTy fsp]
                   )
-              | _ => raise TypeError "invalid UnboxOp"))
+              | _ => raise TypeError "invalid UnboxOp")
+         | F.ForeignCallOp (_, _, n) =>
+             if List.length tyargs = n + 1 andalso List.length args = n then
+               let
+                 val argTys = List.take (tyargs, n)
+                 val retTy = List.last tyargs
+               in
+                 ListPair.app
+                   (fn (expected, actual) =>
+                      checkValue (env, fn () => "ForeignCallOp", expected)
+                        actual) (argTys, args);
+                 case retTy of
+                   F.RecordType m =>
+                     if Syntax.LabelMap.isEmpty m then [] else [retTy]
+                 | _ => [retTy]
+               end
+             else
+               raise TypeError "invalid ForeignCallOp")
     | inferSimpleExp (env, C.Record fields) =
         [F.RecordType (Syntax.LabelMap.map (inferValue env) fields)]
     | inferSimpleExp (env as {tyEnv, ...}, C.ExnTag {name = _, payloadTy}) =

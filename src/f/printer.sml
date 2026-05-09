@@ -141,6 +141,8 @@ struct
     | doPrimOp (F.LuaMethodNOp _) = [P.Fragment "LuaMethodN"]
     | doPrimOp (F.BoxOp _) = [P.Fragment "Box"]
     | doPrimOp (F.UnboxOp _) = [P.Fragment "Unbox"]
+    | doPrimOp (F.ForeignCallOp (m, f, n)) =
+        [P.Fragment ("ForeignCall(" ^ m ^ "." ^ f ^ "/" ^ Int.toString n ^ ")")]
   fun doPat _ (F.WildcardPat _) = [P.Fragment "_"]
     | doPat _ (F.SConPat {scon = F.IntegerConstant x, ...}) =
         [P.Fragment (IntInf.toString x)]
