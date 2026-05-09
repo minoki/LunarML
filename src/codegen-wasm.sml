@@ -1141,7 +1141,7 @@ struct
         SOME RETURN =>
           (case args of
              [arg] => W.RETURN :: doExp fctx env (arg, acc)
-           | [] => W.RETURN :: W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
+           | [] => W.RETURN :: acc
            | _ => raise CodeGenError "doAppCont: RETURN with multiple args")
       | SOME (BREAK_TO {label, params}) =>
           let
@@ -3014,7 +3014,8 @@ struct
       val foreignImports = collectForeignCallOps program
       val () = List.app (registerForeignImport ctx) foreignImports
 
-      (* Create a fresh context for the _start function *)
+      (* Fresh function context for the program entry function
+         (exported as _start for executables, internal for library mode). *)
       val startCtx = newFuncContext ctx
 
       (* Set up environment with return continuation *)
@@ -3046,38 +3047,47 @@ struct
                (envWithVar (e, vid, localIdx, anyref), acc)
              end) (env, []) predefExns
 
-      (* Generate body instructions with return suffix *)
+      (* Generate body instructions; trailing UNREACHABLE handles fall-through.
+         The program's terminating AppCont (from F.ExitProgram, F.ExportValue,
+         or F.ExportModule) emits the appropriate return shape, matched
+         against the function type chosen below per export. *)
       val revBody = doStat startCtx env (program, initAcc)
-      val revBody = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: revBody
-      val revBody = W.RETURN :: revBody
-      val bodyInstrs = List.rev revBody
-
+      val bodyInstrs = List.rev (W.UNREACHABLE :: revBody)
       val localTypes = List.rev (!(#revLocalTypes startCtx))
 
-      (* Create the _start function type: () -> (ref eq) *)
-      val startFuncTypeIdx = getFuncTypeIdx ctx ([], [anyref])
-
-      (* Register _start function *)
-      val startFuncIdx = allocFuncIdx ctx
-      val startFunc: W.func =
-        {typeidx = startFuncTypeIdx, locals = localTypes, body = bodyInstrs}
-      val () = #revFuncs ctx := startFunc :: !(#revFuncs ctx)
-
-      (* Export _start *)
-      val () =
-        #revExports ctx
-        :=
-        {name = "_start", desc = W.ExportFunc startFuncIdx}
-        :: !(#revExports ctx)
-
-      (* Generate export wrappers for EXPORT_NAMED *)
       val () =
         case export of
-          ToFSyntax.EXPORT_NAMED names =>
+          ToFSyntax.NO_EXPORT =>
             let
+              (* WASI Command: _start has type [] -> []. *)
+              val funcTypeIdx = getFuncTypeIdx ctx ([], [])
+              val funcIdx = allocFuncIdx ctx
+              val func: W.func =
+                {typeidx = funcTypeIdx, locals = localTypes, body = bodyInstrs}
+              val () = #revFuncs ctx := func :: !(#revFuncs ctx)
+              val () =
+                #revExports ctx
+                :=
+                {name = "_start", desc = W.ExportFunc funcIdx}
+                :: !(#revExports ctx)
+            in
+              ()
+            end
+        | ToFSyntax.EXPORT_NAMED names =>
+            let
+              (* Internal main function returns the export record on the stack. *)
+              val mainFuncTypeIdx = getFuncTypeIdx ctx ([], [anyref])
+              val mainFuncIdx = allocFuncIdx ctx
+              val mainFunc: W.func =
+                { typeidx = mainFuncTypeIdx
+                , locals = localTypes
+                , body = bodyInstrs
+                }
+              val () = #revFuncs ctx := mainFunc :: !(#revFuncs ctx)
+
               val nFields = Vector.length names
               val tupleTypeIdx = getTupleTypeIdx ctx nFields
-              (* Add a mutable global to cache the export record *)
+              (* Mutable global cache for the export record. *)
               val globalIdx = List.length (!(#revGlobals ctx))
               val () =
                 #revGlobals ctx
@@ -3086,27 +3096,22 @@ struct
                 , init = [W.REF_NULL (W.AbsHeapType W.HEAP_NONE)]
                 } :: !(#revGlobals ctx)
 
-              (* Generate an init function that calls _start and stores result *)
+              (* WASI Reactor: _initialize has type [] -> []. The host must
+                 call it once after instantiation, before any other export. *)
               val initFuncTypeIdx = getFuncTypeIdx ctx ([], [])
               val initFuncIdx = allocFuncIdx ctx
-              val initBody =
-                [ W.GLOBAL_GET globalIdx
-                , W.REF_IS_NULL
-                , W.IF
-                    ( W.BlockTypeNone
-                    , [W.CALL startFuncIdx, W.GLOBAL_SET globalIdx]
-                    , []
-                    )
-                ]
+              val initBody = [W.CALL mainFuncIdx, W.GLOBAL_SET globalIdx]
               val initFunc: W.func =
                 {typeidx = initFuncTypeIdx, locals = [], body = initBody}
               val () = #revFuncs ctx := initFunc :: !(#revFuncs ctx)
+              val () =
+                #revExports ctx
+                :=
+                {name = "_initialize", desc = W.ExportFunc initFuncIdx}
+                :: !(#revExports ctx)
 
-              (* Sort names to match LabelMap field ordering *)
               val sorted = sortedExportNames names
-              (* sorted: (originalIndex, name) list, sorted by name *)
-              (* The field index in the struct corresponds to position in the sorted list *)
-              val closureInstrs = [W.CALL initFuncIdx, W.GLOBAL_GET globalIdx]
+              val closureInstrs = [W.GLOBAL_GET globalIdx]
               fun genWrappers _ [] = ()
                 | genWrappers fieldIdx
                     ((_, name, {paramUnboxedTys, resultUnboxedTy}) :: rest) =
@@ -3129,7 +3134,9 @@ struct
             in
               genWrappers 0 sorted
             end
-        | _ => ()
+        | ToFSyntax.EXPORT_VALUE =>
+            raise CodeGenError
+              "Wasm backend: EXPORT_VALUE is not supported (use EXPORT_NAMED via `export structure ...`)"
 
       (* Collect all elem declarations needed for REF_FUNC.
          Import functions occupy indices 0..numImports-1; module-defined

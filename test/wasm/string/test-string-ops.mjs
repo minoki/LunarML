@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const wasm = await WebAssembly.compile(await readFile("string-ops.wasm"));
 const { exports } = await WebAssembly.instantiate(wasm);
+exports._initialize();
 
 let ok = true;
 function check(label, actual, expected) {
