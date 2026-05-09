@@ -32,6 +32,7 @@ sig
   | UBTyChar16
   | UBTyChar32
   | UBTyBool
+  | UBTyWasmPtr
   datatype PrimOp =
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
@@ -215,6 +216,7 @@ sig
     val exntag: Ty
     val lua_value: Ty
     val js_value: Ty
+    val wasm_ptr: Ty
     val prim_effect: Ty
     val boxed: Ty
     val list: Ty -> Ty
@@ -292,6 +294,7 @@ struct
   | UBTyChar16
   | UBTyChar32
   | UBTyBool
+  | UBTyWasmPtr
   datatype PrimOp =
     IntConstOp of IntInf.int (* 1 type argument *)
   | WordConstOp of IntInf.int (* 1 type argument *)
@@ -479,6 +482,7 @@ struct
     val exntag = TyVar PrimTypes.Names.exntag
     val lua_value = TyVar PrimTypes.Names.lua_value
     val js_value = TyVar PrimTypes.Names.js_value
+    val wasm_ptr = TyVar PrimTypes.Names.wasm_ptr
     val prim_effect = TyVar PrimTypes.Names.prim_effect
     val boxed = BoxedType
     fun list ty =
@@ -497,6 +501,7 @@ struct
     | unboxedTyToTy UBTyChar16 = Types.char16
     | unboxedTyToTy UBTyChar32 = Types.char32
     | unboxedTyToTy UBTyBool = Types.bool
+    | unboxedTyToTy UBTyWasmPtr = Types.wasm_ptr
   fun isUnboxedTy (TyVar tv) =
         TypedSyntax.eqTyVar (tv, PrimTypes.Names.int32)
         orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.int64)
@@ -507,6 +512,7 @@ struct
         orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.char16)
         orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.char32)
         orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.bool)
+        orelse TypedSyntax.eqTyVar (tv, PrimTypes.Names.wasm_ptr)
     | isUnboxedTy _ = false
   fun FnType (param, result) =
     MultiFnType ([param], result)
@@ -1757,6 +1763,7 @@ struct
       | print_UnboxedTy UBTyChar16 = "Char16"
       | print_UnboxedTy UBTyChar32 = "Char32"
       | print_UnboxedTy UBTyBool = "Bool"
+      | print_UnboxedTy UBTyWasmPtr = "WasmPtr"
     fun print_Pat (WildcardPat _) = "WildcardPat"
       | print_Pat
           (SConPat
@@ -5021,6 +5028,8 @@ struct
             SOME FSyntax.UBTyWord64
           else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.real) then
             SOME FSyntax.UBTyReal
+          else if TypedSyntax.eqTyName (tyname, PrimTypes.Names.wasm_ptr) then
+            SOME FSyntax.UBTyWasmPtr
           else
             NONE
       | _ => NONE

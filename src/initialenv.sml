@@ -878,6 +878,11 @@ struct
             , valEnv = emptyValEnv
             }
           )
+        , ( "_Prim.Wasm.ptr"
+          , { typeFunction = TypeFunction ([], PT.wasm_ptr)
+            , valEnv = emptyValEnv
+            }
+          )
         , ( "_Prim.DelimCont.prompt_tag"
           , { typeFunction = TypeFunction ([tyVarA], PT.prompt_tag tyA)
             , valEnv = emptyValEnv
@@ -1050,6 +1055,9 @@ struct
         , ( PT.Names.prim_effect
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
+        , ( PT.Names.wasm_ptr
+          , {arity = 0, admitsEquality = false, overloadClass = NONE}
+          )
         ]
     val initialEnv: Typing.Env =
       { valMap =
@@ -1206,6 +1214,7 @@ struct
         , PT.Names.vector
         , PT.Names.lua_value
         , PT.Names.js_value
+        , PT.Names.wasm_ptr
         , PT.Names.function2
         , PT.Names.function3
         , PT.Names.prompt_tag

@@ -103,6 +103,9 @@ sig
   (* Tag type (for exception handling) *)
   type tagtype = {functype: funcidx}
 
+  (* Memory argument (alignment hint and static offset for load/store) *)
+  type memarg = {align: int, offset: int}
+
   (* Block type *)
   datatype blocktype =
     BlockTypeNone
@@ -252,6 +255,13 @@ sig
   | I64_EXTEND8_S
   | I64_EXTEND16_S
   | I64_EXTEND32_S
+  (* Memory instructions (linear memory) *)
+  | MEMORY_SIZE
+  | MEMORY_GROW
+  | I32_LOAD of memarg
+  | I32_LOAD8_U of memarg
+  | I32_STORE of memarg
+  | I32_STORE8 of memarg
   (* Reference instructions *)
   | REF_NULL of heaptype
   | REF_IS_NULL
@@ -442,6 +452,8 @@ struct
 
   type tagtype = {functype: funcidx}
 
+  type memarg = {align: int, offset: int}
+
   datatype blocktype =
     BlockTypeNone
   | BlockTypeVal of valtype
@@ -550,6 +562,12 @@ struct
   | I64_EXTEND8_S
   | I64_EXTEND16_S
   | I64_EXTEND32_S
+  | MEMORY_SIZE
+  | MEMORY_GROW
+  | I32_LOAD of memarg
+  | I32_LOAD8_U of memarg
+  | I32_STORE of memarg
+  | I32_STORE8 of memarg
   | REF_NULL of heaptype
   | REF_IS_NULL
   | REF_FUNC of funcidx

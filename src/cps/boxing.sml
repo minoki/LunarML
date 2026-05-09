@@ -42,6 +42,8 @@ struct
             SOME F.UBTyChar32
           else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.bool) then
             SOME F.UBTyBool
+          else if TypedSyntax.eqTyVar (tv, PrimTypes.Names.wasm_ptr) then
+            SOME F.UBTyWasmPtr
           else
             NONE
       | tyToUnboxedTy _ = NONE

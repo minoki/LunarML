@@ -286,6 +286,7 @@ struct
          val exntag = F.TyVar PrimTypes.Names.exntag
          val LuaValue = F.TyVar PrimTypes.Names.lua_value
          val JavaScriptValue = F.TyVar PrimTypes.Names.js_value
+         val wasm_ptr = F.TyVar PrimTypes.Names.wasm_ptr
          val prim_effect = F.TyVar PrimTypes.Names.prim_effect
          fun refOf ty =
            F.AppType {applied = F.TyVar PrimTypes.Names.ref_, arg = ty}

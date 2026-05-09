@@ -22,6 +22,7 @@ unsafe-basic.sml
 bool.sml
 lunarml.sml
 wasm/string-prim.sml
+wasm/wasm-memory.sml
 end
 in
 signature INTEGER
@@ -43,5 +44,6 @@ structure Int32
 structure Int54
 structure Int64
 structure Position
+structure WasmMemory
 wasm/top-level.sml
 end

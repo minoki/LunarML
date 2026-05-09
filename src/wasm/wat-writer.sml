@@ -307,6 +307,61 @@ struct
     | I64_EXTEND8_S => outputLine (out, level, "i64.extend8_s")
     | I64_EXTEND16_S => outputLine (out, level, "i64.extend16_s")
     | I64_EXTEND32_S => outputLine (out, level, "i64.extend32_s")
+    (* Memory instructions *)
+    | MEMORY_SIZE => outputLine (out, level, "memory.size")
+    | MEMORY_GROW => outputLine (out, level, "memory.grow")
+    | I32_LOAD {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 0 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.load" ^ s)
+        end
+    | I32_LOAD8_U {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 0 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.load8_u" ^ s)
+        end
+    | I32_STORE {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 0 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.store" ^ s)
+        end
+    | I32_STORE8 {align, offset} =>
+        let
+          val s =
+            (if offset = 0 then "" else " offset=" ^ Int.toString offset)
+            ^
+            (if align = 0 then
+               ""
+             else
+               " align="
+               ^ Int.toString (Word.toInt (Word.<< (0w1, Word.fromInt align))))
+        in
+          outputLine (out, level, "i32.store8" ^ s)
+        end
     (* Reference instructions *)
     | REF_NULL ht => outputLine (out, level, "ref.null " ^ heaptypeToString ht)
     | REF_IS_NULL => outputLine (out, level, "ref.is_null")

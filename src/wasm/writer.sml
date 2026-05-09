@@ -501,6 +501,31 @@ struct
     | I64_EXTEND8_S => bufferOutputByte (buf, 0wxC2)
     | I64_EXTEND16_S => bufferOutputByte (buf, 0wxC3)
     | I64_EXTEND32_S => bufferOutputByte (buf, 0wxC4)
+    (* Memory instructions *)
+    | MEMORY_SIZE =>
+        (bufferOutputByte (buf, 0wx3F); bufferOutputByte (buf, 0wx00))
+    | MEMORY_GROW =>
+        (bufferOutputByte (buf, 0wx40); bufferOutputByte (buf, 0wx00))
+    | I32_LOAD {align, offset} =>
+        ( bufferOutputByte (buf, 0wx28)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I32_LOAD8_U {align, offset} =>
+        ( bufferOutputByte (buf, 0wx2C)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I32_STORE {align, offset} =>
+        ( bufferOutputByte (buf, 0wx36)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
+    | I32_STORE8 {align, offset} =>
+        ( bufferOutputByte (buf, 0wx3A)
+        ; bufferOutputULEB128 (buf, align)
+        ; bufferOutputULEB128 (buf, offset)
+        )
     (* Reference instructions *)
     | REF_NULL ht =>
         (bufferOutputByte (buf, 0wxD0); bufferOutputHeapType (buf, ht))

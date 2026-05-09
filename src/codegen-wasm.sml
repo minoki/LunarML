@@ -28,6 +28,7 @@ sig
     , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
     , taggedDataTypeIdx: WasmSyntax.typeidx (* $TaggedData: (struct (field i32) (field anyref)) *)
     , stringTypeIdx: WasmSyntax.typeidx (* $String: (array (mut i8)) *)
+    , needsLinearMemory: bool ref
     }
 
   type FuncContext =
@@ -80,6 +81,7 @@ struct
     , smlExnTagIdx: int
     , taggedDataTypeIdx: W.typeidx
     , stringTypeIdx: W.typeidx
+    , needsLinearMemory: bool ref
     }
 
   type FuncContext =
@@ -103,6 +105,7 @@ struct
         else if tv = PrimTypes.Names.int64 then SOME F.UBTyInt64
         else if tv = PrimTypes.Names.word64 then SOME F.UBTyWord64
         else if tv = PrimTypes.Names.real then SOME F.UBTyReal
+        else if tv = PrimTypes.Names.wasm_ptr then SOME F.UBTyWasmPtr
         else NONE
     | tyToUnboxedTy _ = NONE
 
@@ -115,6 +118,7 @@ struct
           orelse tv = PrimTypes.Names.bool orelse tv = PrimTypes.Names.char
           orelse tv = PrimTypes.Names.char7 orelse tv = PrimTypes.Names.char16
           orelse tv = PrimTypes.Names.char32 orelse tv = PrimTypes.Names.uchar
+          orelse tv = PrimTypes.Names.wasm_ptr
         then W.NumType W.I32
         else if
           tv = PrimTypes.Names.int64 orelse tv = PrimTypes.Names.word64
@@ -211,6 +215,7 @@ struct
     case ubt of
       F.UBTyInt32 => [W.STRUCT_NEW (#boxedI32TypeIdx ctx)]
     | F.UBTyWord32 => [W.STRUCT_NEW (#boxedI32TypeIdx ctx)]
+    | F.UBTyWasmPtr => [W.STRUCT_NEW (#boxedI32TypeIdx ctx)]
     | F.UBTyBool => [W.REF_I31]
     | F.UBTyChar => [W.REF_I31]
     | F.UBTyChar16 => [W.REF_I31]
@@ -234,6 +239,13 @@ struct
             [W.REF_CAST rt, W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)]
           end
       | F.UBTyWord32 =>
+          let
+            val rt: W.reftype =
+              {nullable = false, heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)}
+          in
+            [W.REF_CAST rt, W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)]
+          end
+      | F.UBTyWasmPtr =>
           let
             val rt: W.reftype =
               {nullable = false, heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)}
@@ -2493,6 +2505,49 @@ struct
       | Primitives.call2 => raise CodeGenError "call2: not yet implemented"
       | Primitives.call3 => raise CodeGenError "call3: not yet implemented"
 
+      (* Wasm linear memory operations *)
+      | Primitives.Wasm_memory_load32 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr] =>
+                W.I32_LOAD {align = 2, offset = 0} :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_load32: expected 1 arg"
+          )
+      | Primitives.Wasm_memory_load8_u =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr] =>
+                W.I32_LOAD8_U {align = 0, offset = 0}
+                :: doExp fctx env (ptr, acc)
+            | _ => raise CodeGenError "Wasm_memory_load8_u: expected 1 arg"
+          )
+      | Primitives.Wasm_memory_store32 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE {align = 2, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_store32: expected 2 args"
+          )
+      | Primitives.Wasm_memory_store8 =>
+          ( #needsLinearMemory (#ctx fctx) := true
+          ; case args of
+              [ptr, v] =>
+                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                :: W.I32_STORE8 {align = 0, offset = 0}
+                :: doExp fctx env (v, doExp fctx env (ptr, acc))
+            | _ => raise CodeGenError "Wasm_memory_store8: expected 2 args"
+          )
+      | Primitives.Wasm_ptr_add =>
+          (case args of
+             [ptr, off] =>
+               W.I32_BINOP W.ADD
+               :: doExp fctx env (off, doExp fctx env (ptr, acc))
+           | _ => raise CodeGenError "Wasm_ptr_add: expected 2 args")
+      | Primitives.Wasm_ptr_of_word32 => doUnary [] args
+      | Primitives.Wasm_ptr_to_word32 => doUnary [] args
+
       | _ =>
           raise CodeGenError
             ("doPrimCall: unhandled primitive: " ^ Primitives.toString prim)
@@ -2601,6 +2656,7 @@ struct
       , smlExnTagIdx = smlExnTagIdx
       , taggedDataTypeIdx = taggedDataTypeIdx
       , stringTypeIdx = stringTypeIdx
+      , needsLinearMemory = ref false
       }
     end
 
@@ -2847,18 +2903,21 @@ struct
            , init = List.map (fn i => [W.REF_FUNC i]) allFuncIdxs
            , mode = W.ElemDeclarative
            }]
+      val needsMem = !(#needsLinearMemory ctx)
+      val memExports =
+        if needsMem then [{name = "memory", desc = W.ExportMemory 0}] else []
     in
       { types = List.rev (!(#revTypes ctx))
       , funcs = List.rev (!(#revFuncs ctx))
       , tables = []
-      , mems = []
+      , mems = if needsMem then [{limits = {min = 1, max = NONE}}] else []
       , tags = List.rev (!(#revTags ctx))
       , globals = List.rev (!(#revGlobals ctx))
       , elems = elems
       , datas = List.rev (!(#revDatas ctx))
       , start = NONE
       , imports = List.rev (!(#revImports ctx))
-      , exports = List.rev (!(#revExports ctx))
+      , exports = List.rev (!(#revExports ctx)) @ memExports
       }
     end
 end

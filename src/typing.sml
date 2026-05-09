@@ -510,6 +510,7 @@ struct
        val exntag = PrimTypes.exntag
        val LuaValue = PrimTypes.lua_value
        val JavaScriptValue = PrimTypes.js_value
+       val wasm_ptr = PrimTypes.wasm_ptr
        val prim_effect = PrimTypes.prim_effect
        fun refOf ty =
          TypedSyntax.TyCon (SourcePos.nullSpan, [ty], PrimTypes.Names.ref_)

@@ -37,6 +37,8 @@ do
   local prim_effect = {"prim_effect"}
   local LuaValue = {"LuaValue"}
   local JSValue = {"JavaScriptValue"}
+  local WasmPtr = {"wasm_ptr"}
+  local word = {"word"}
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
   local list = function(elemTy) return {string_format("listOf (%s)", elemTy[1])} end
   local vector = function(elemTy) return {string_format("vectorOf (%s)", elemTy[1])} end
@@ -2000,6 +2002,56 @@ do
       mayraise = false,
       discardable = true,
     },
+    -- Wasm linear memory operations
+    {
+      name = "Wasm.memory.load8_u",
+      srcname = "Wasm_memory_load8_u",
+      type = { vars = {}, args = {WasmPtr}, results = {word} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Wasm.memory.load32",
+      srcname = "Wasm_memory_load32",
+      type = { vars = {}, args = {WasmPtr}, results = {word32} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Wasm.memory.store8",
+      srcname = "Wasm_memory_store8",
+      type = { vars = {}, args = {WasmPtr, word}, results = {} },
+      mayraise = false,
+      discardable = false,
+    },
+    {
+      name = "Wasm.memory.store32",
+      srcname = "Wasm_memory_store32",
+      type = { vars = {}, args = {WasmPtr, word32}, results = {} },
+      mayraise = false,
+      discardable = false,
+    },
+    {
+      name = "Wasm.ptr.add",
+      srcname = "Wasm_ptr_add",
+      type = { vars = {}, args = {WasmPtr, word32}, results = {WasmPtr} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Wasm.ptr.ofWord32",
+      srcname = "Wasm_ptr_of_word32",
+      type = { vars = {}, args = {word32}, results = {WasmPtr} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Wasm.ptr.toWord32",
+      srcname = "Wasm_ptr_to_word32",
+      type = { vars = {}, args = {WasmPtr}, results = {word32} },
+      mayraise = false,
+      discardable = true,
+    },
   }
   --[[
   local PRIMITIVES_cooked = {}
@@ -2335,6 +2387,7 @@ functor TypeOfPrimitives (type ty
                           val exntag : ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
+                          val wasm_ptr : ty
                           val prim_effect : ty
                           val refOf : ty -> ty
                           val listOf : ty -> ty
