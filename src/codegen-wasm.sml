@@ -727,6 +727,54 @@ struct
 
   (* ==================== doExp ==================== *)
 
+  (* Determine the unboxed type produced by a PrimOp, if any.
+     Returns NONE for PrimOps that produce ref-typed results. *)
+  and primOpUnboxedTy (primOp: F.PrimOp, tyargs: F.Ty list) : F.UnboxedTy option =
+    case primOp of
+      F.IntConstOp _ =>
+        (case tyargs of
+           [ty] => tyToUnboxedTy ty
+         | _ => NONE)
+    | F.WordConstOp _ =>
+        (case tyargs of
+           [ty] => tyToUnboxedTy ty
+         | _ => NONE)
+    | F.RealConstOp _ => SOME F.UBTyReal
+    | F.Char7ConstOp _ => SOME F.UBTyChar
+    | F.Char8ConstOp _ => SOME F.UBTyChar
+    | F.Char16ConstOp _ => SOME F.UBTyChar16
+    | F.Char32ConstOp _ => SOME F.UBTyChar32
+    | F.UCharConstOp _ => SOME F.UBTyChar
+    | F.UnboxOp ubt => SOME ubt
+    | F.DataTagAsInt32Op _ => SOME F.UBTyInt32
+    | F.DataPayloadOp _ =>
+        (case tyargs of
+           [_, payloadTy] => tyToUnboxedTy payloadTy
+         | _ => NONE)
+    | F.ExnPayloadOp =>
+        (case tyargs of
+           [payloadTy] => tyToUnboxedTy payloadTy
+         | _ => NONE)
+    | F.PrimCall p =>
+        let
+          val {vars, results, ...} = CheckF.TypeOfPrimitives.typeOf p
+        in
+          case results of
+            [resultTy] =>
+              let
+                val subst =
+                  ListPair.foldl
+                    (fn ((tv, _), ty, acc) =>
+                       TypedSyntax.TyVarMap.insert (acc, tv, ty))
+                    TypedSyntax.TyVarMap.empty (vars, tyargs)
+                val resultTy' = #doTy (F.substTy subst) resultTy
+              in
+                tyToUnboxedTy resultTy'
+              end
+          | _ => NONE
+        end
+    | _ => NONE
+
   (* Evaluate an expression that must produce an anyref value.
      If the expression produces an unboxed type (e.g., i32 constants),
      emit boxing instructions so the result is anyref-compatible.
@@ -752,6 +800,14 @@ struct
              | SOME (_, W.NumType W.I64) => SOME F.UBTyInt64
              | SOME (_, W.NumType W.F64) => SOME F.UBTyReal
              | _ => NONE)
+        (* PrimOps may also yield unboxed results.  After nestify, an
+           expression like (a + b) appears directly in a record field, so we
+           cannot rely on the value-level boxing performed for Var/const
+           cases above. *)
+        | N.PrimOp {primOp, tyargs, args = _} =>
+            primOpUnboxedTy (primOp, tyargs)
+        | N.LogicalAnd _ => SOME F.UBTyBool
+        | N.LogicalOr _ => SOME F.UBTyBool
         | _ => NONE
     in
       case ubtOpt of

@@ -24,3 +24,4 @@ val op ^ : string * string -> string = String.^;
 val concat : string list -> string = String.concat;
 val size : string -> int = String.size;
 val str : char -> string = String.str;
+val print : string -> unit = TextIO.print;
