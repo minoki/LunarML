@@ -15,7 +15,6 @@ signature PACK_REAL = sig end
 signature PACK_WORD = sig end
 signature REAL = sig end
 signature STRING = sig end
-signature STRING_CVT = sig end
 signature SUBSTRING = sig end
 signature TEXT = sig end
 signature TIME = sig end
@@ -94,7 +93,6 @@ structure String = struct
   val substring : string * int * int -> string = fn _ => raise Fail "String.substring: not implemented yet"
   open String
 end
-structure StringCvt = struct end
 structure Substring = struct type substring = unit end
 structure Text = struct end
 structure Time = struct end

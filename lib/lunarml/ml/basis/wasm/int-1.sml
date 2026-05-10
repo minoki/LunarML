@@ -25,8 +25,8 @@ signature INTEGER = sig
     val max : int * int -> int
     val sign : int -> Int.int
     val sameSign : int * int -> bool
-    (* val fmt : StringCvt.radix -> int -> string *)
-    (* val toString : int -> string *)
+    val fmt : StringCvt.radix -> int -> string
+    val toString : int -> string
     (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader; defined in scan-num.sml *)
     (* val fromString : string -> int option; defined in scan-num.sml *)
 end;
@@ -59,4 +59,152 @@ val sign : int -> int = fn x => if x > 0 then
                                 else
                                     0
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
+local
+  infix 6 +! -!
+  fun x +! y = _primCall "Int.+.wrapping" (x, y)
+  fun x -! y = _primCall "Int.-.wrapping" (x, y)
+  fun ~! x = _primCall "Int.~.wrapping" (x)
+  fun quot' (x, y) = _primCall "Int.quot.unchecked" (x, y)
+  fun rem' (x, y) = _primCall "Int.rem.unchecked" (x, y)
+  fun intToDigit i =
+    _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! i)
+  fun intToHexDigit i =
+    if i < 10 then
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! i)
+    else
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"A") -! 10 +! i)
+  fun fmtBIN 0 = "0"
+    | fmtBIN x =
+        let
+          val initialBufSize = 33
+          val radix = 2
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun goPositive (i, 0) = i +! 1
+            | goPositive (i, x) =
+                let val r = rem' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goPositive (i -! 1, quot' (x, radix))
+                end
+          fun goNegative (i, 0) =
+                ( _primCall "Unsafe.CharArray.update" (buf, i, #"~")
+                ; i
+                )
+            | goNegative (i, x) =
+                let val r = ~! (rem' (x, radix))
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goNegative (i -! 1, quot' (x, radix))
+                end
+          val i = if x < 0 then
+                    goNegative (initialBufSize -! 1, x)
+                  else
+                    goPositive (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtOCT 0 = "0"
+    | fmtOCT x =
+        let
+          (* ~40000000000 *)
+          val initialBufSize = 12
+          val radix = 8
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun goPositive (i, 0) = i +! 1
+            | goPositive (i, x) =
+                let val r = rem' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goPositive (i -! 1, quot' (x, radix))
+                end
+          fun goNegative (i, 0) =
+                ( _primCall "Unsafe.CharArray.update" (buf, i, #"~")
+                ; i
+                )
+            | goNegative (i, x) =
+                let val r = ~! (rem' (x, radix))
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goNegative (i -! 1, quot' (x, radix))
+                end
+          val i = if x < 0 then
+                    goNegative (initialBufSize -! 1, x)
+                  else
+                    goPositive (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtDEC 0 = "0"
+    | fmtDEC x =
+        let
+          (* ~2147483648 *)
+          val initialBufSize = 11
+          val radix = 10
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun goPositive (i, 0) = i +! 1
+            | goPositive (i, x) =
+                let val r = rem' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goPositive (i -! 1, quot' (x, radix))
+                end
+          fun goNegative (i, 0) =
+                ( _primCall "Unsafe.CharArray.update" (buf, i, #"~")
+                ; i
+                )
+            | goNegative (i, x) =
+                let val r = ~! (rem' (x, radix))
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToDigit r)
+                 ; goNegative (i -! 1, quot' (x, radix))
+                end
+          val i = if x < 0 then
+                    goNegative (initialBufSize -! 1, x)
+                  else
+                    goPositive (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtHEX 0 = "0"
+    | fmtHEX x =
+        let
+          (* ~80000000 *)
+          val initialBufSize = 9
+          val radix = 16
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun goPositive (i, 0) = i +! 1
+            | goPositive (i, x) =
+                let val r = rem' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToHexDigit r)
+                 ; goPositive (i -! 1, quot' (x, radix))
+                end
+          fun goNegative (i, 0) =
+                ( _primCall "Unsafe.CharArray.update" (buf, i, #"~")
+                ; i
+                )
+            | goNegative (i, x) =
+                let val r = ~! (rem' (x, radix))
+                in _primCall "Unsafe.CharArray.update" (buf, i, intToHexDigit r)
+                 ; goNegative (i -! 1, quot' (x, radix))
+                end
+          val i = if x < 0 then
+                    goNegative (initialBufSize -! 1, x)
+                  else
+                    goPositive (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+in
+  val toString = fmtDEC
+  fun fmt StringCvt.BIN = fmtBIN
+    | fmt StringCvt.OCT = fmtOCT
+    | fmt StringCvt.DEC = fmtDEC
+    | fmt StringCvt.HEX = fmtHEX
+end
 end; (* structure Int *)

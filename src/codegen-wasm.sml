@@ -2545,6 +2545,23 @@ struct
       | Primitives.CharArray_alloc Primitives.I32 =>
           doUnary [W.ARRAY_NEW_DEFAULT (#stringTypeIdx ctx)] args
 
+      | Primitives.Unsafe_CharArray_sub Primitives.I32 =>
+          (case args of
+             [str, idx] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+               in
+                 W.ARRAY_GET_U strTypeIdx
+                 ::
+                 doExp fctx env
+                   ( idx
+                   , W.REF_CAST
+                       {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+                     :: doExp fctx env (str, acc)
+                   )
+               end
+           | _ => raise CodeGenError "Unsafe_CharVector_sub: expected 2 args")
+
       | Primitives.Unsafe_CharArray_update Primitives.I32 =>
           (case args of
              [arr, idx, charArg] =>
@@ -2562,6 +2579,30 @@ struct
                    ))
                end
            | _ => raise CodeGenError "Unsafe_CharArray_update: expected 3 args")
+
+      | Primitives.CharArray_copy Primitives.I32 =>
+          (case args of
+             [dst, dstOff, src, srcOff, len] =>
+               let
+                 val strTypeIdx = #stringTypeIdx ctx
+                 val castStr =
+                   W.REF_CAST
+                     {nullable = false, heaptype = W.TypeIdx strTypeIdx}
+               in
+                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+                 :: W.ARRAY_COPY (strTypeIdx, strTypeIdx)
+                 ::
+                 doExp fctx env (len, doExp fctx env
+                   ( srcOff
+                   , castStr
+                     ::
+                     doExp fctx env (src, doExp fctx env
+                       (dstOff, castStr :: doExp fctx env (dst, acc)))
+                   ))
+               end
+           | _ => raise CodeGenError "CharArray_copy: expected 5 args")
+
+      | Primitives.CharArray_unsafeFreeze => doUnary [] args
 
       | Primitives.String_copyBytes Primitives.I32 =>
           (case args of

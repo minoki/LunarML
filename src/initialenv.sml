@@ -899,6 +899,11 @@ struct
             , valEnv = emptyValEnv
             }
           )
+        , ( "_Prim.CharArray.array"
+          , { typeFunction = TypeFunction ([], PT.charArray)
+            , valEnv = emptyValEnv
+            }
+          )
         ]
     val initialTyNameMap: Typing.TyNameAttr TypedSyntax.TyNameMap.map =
       List.foldl TypedSyntax.TyNameMap.insert' TypedSyntax.TyNameMap.empty
@@ -1056,6 +1061,9 @@ struct
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
         , ( PT.Names.wasm_ptr
+          , {arity = 0, admitsEquality = false, overloadClass = NONE}
+          )
+        , ( PT.Names.charArray
           , {arity = 0, admitsEquality = false, overloadClass = NONE}
           )
         ]
@@ -1220,6 +1228,7 @@ struct
         , PT.Names.prompt_tag
         , PT.Names.subcont
         , PT.Names.prim_effect
+        , PT.Names.charArray
         ]
     end
 end

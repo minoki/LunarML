@@ -38,6 +38,7 @@ do
   local LuaValue = {"LuaValue"}
   local JSValue = {"JavaScriptValue"}
   local WasmPtr = {"wasm_ptr"}
+  local charArray = {"charArray"}
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
   local list = function(elemTy) return {string_format("listOf (%s)", elemTy[1])} end
   local vector = function(elemTy) return {string_format("vectorOf (%s)", elemTy[1])} end
@@ -1235,6 +1236,15 @@ do
       mayraise = true,
       discardable = false, -- There is a special rule in CSyntax.isDiscardable
     },
+    --[[
+    {
+      name = "Array.allocUninitialized{.i}",
+      srcname = "Array_allocUninitialized",
+      type = { vars = {TV.a}, args = {intA}, results = {array(TV.a)} },
+      mayraise = true,
+      discardable = false, -- There is a special rule in CSyntax.isDiscardable
+    },
+    ]]
     {
       name = "Unsafe.cast",
       srcname = "Unsafe_cast",
@@ -1273,21 +1283,42 @@ do
     {
       name = "CharArray.alloc{.i}",
       srcname = "CharArray_alloc",
-      type = { vars = {}, args = {intA}, results = {string} },
+      type = { vars = {}, args = {intA}, results = {charArray} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Unsafe.CharArray.sub{.i}",
+      srcname = "Unsafe_CharArray_sub",
+      type = { vars = {}, args = {charArray, intA}, results = {char} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Unsafe.CharArray.update{.i}",
       srcname = "Unsafe_CharArray_update",
-      type = { vars = {}, args = {string, intA, char}, results = {} },
+      type = { vars = {}, args = {charArray, intA, char}, results = {} },
       mayraise = false,
       discardable = false,
     },
     {
+      name = "CharArray.copy{.i}",
+      srcname = "CharArray_copy",
+      type = { vars = {}, args = {charArray, intA, charArray, intA, intA}, results = {} },
+      mayraise = false,
+      discardable = false,
+    },
+    {
+      name = "CharArray.unsafeFreeze",
+      srcname = "CharArray_unsafeFreeze",
+      type = { vars = {}, args = {charArray}, results = {string} },
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "String.copyBytes{.i}",
       srcname = "String_copyBytes",
-      type = { vars = {}, args = {string, intA, string, intA, intA}, results = {} },
+      type = { vars = {}, args = {charArray, intA, string, intA, intA}, results = {} },
       mayraise = false,
       discardable = false,
     },
@@ -2465,6 +2496,7 @@ functor TypeOfPrimitives (type ty
                           val JavaScriptValue : ty
                           val wasm_ptr : ty
                           val prim_effect : ty
+                          val charArray : ty
                           val refOf : ty -> ty
                           val listOf : ty -> ty
                           val vectorOf : ty -> ty

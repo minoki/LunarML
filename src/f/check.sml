@@ -288,6 +288,7 @@ struct
          val JavaScriptValue = F.TyVar PrimTypes.Names.js_value
          val wasm_ptr = F.TyVar PrimTypes.Names.wasm_ptr
          val prim_effect = F.TyVar PrimTypes.Names.prim_effect
+         val charArray = F.TyVar PrimTypes.Names.charArray
          fun refOf ty =
            F.AppType {applied = F.TyVar PrimTypes.Names.ref_, arg = ty}
          fun listOf ty =

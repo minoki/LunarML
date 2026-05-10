@@ -222,6 +222,7 @@ sig
     val wasm_ptr: Ty
     val prim_effect: Ty
     val boxed: Ty
+    val charArray: Ty
     val list: Ty -> Ty
     val vector: Ty -> Ty
     val array: Ty -> Ty
@@ -491,6 +492,7 @@ struct
     val wasm_ptr = TyVar PrimTypes.Names.wasm_ptr
     val prim_effect = TyVar PrimTypes.Names.prim_effect
     val boxed = BoxedType
+    val charArray = TyVar PrimTypes.Names.charArray
     fun list ty =
       AppType {applied = TyVar PrimTypes.Names.list, arg = ty}
     fun vector ty =

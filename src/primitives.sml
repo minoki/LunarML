@@ -175,7 +175,10 @@ datatype PrimOp = EQUAL (* = *)
                 | Unsafe_Array_update of int_width (* Unsafe.Array.update{.i} *)
                 | Unsafe_CharVector_sub of int_width (* Unsafe.CharVector.sub{.i} *)
                 | CharArray_alloc of int_width (* CharArray.alloc{.i} *)
+                | Unsafe_CharArray_sub of int_width (* Unsafe.CharArray.sub{.i} *)
                 | Unsafe_CharArray_update of int_width (* Unsafe.CharArray.update{.i} *)
+                | CharArray_copy of int_width (* CharArray.copy{.i} *)
+                | CharArray_unsafeFreeze (* CharArray.unsafeFreeze *)
                 | String_copyBytes of int_width (* String.copyBytes{.i} *)
                 | Exception_instanceof (* Exception.instanceof *)
                 | DelimCont_newPromptTag (* DelimCont.newPromptTag *)
@@ -777,11 +780,22 @@ fun toString EQUAL = "="
   | toString (CharArray_alloc I54) = "CharArray.alloc.i54"
   | toString (CharArray_alloc I64) = "CharArray.alloc.i64"
   | toString (CharArray_alloc INT_INF) = "CharArray.alloc.intInf"
+  | toString (Unsafe_CharArray_sub INT) = "Unsafe.CharArray.sub"
+  | toString (Unsafe_CharArray_sub I32) = "Unsafe.CharArray.sub.i32"
+  | toString (Unsafe_CharArray_sub I54) = "Unsafe.CharArray.sub.i54"
+  | toString (Unsafe_CharArray_sub I64) = "Unsafe.CharArray.sub.i64"
+  | toString (Unsafe_CharArray_sub INT_INF) = "Unsafe.CharArray.sub.intInf"
   | toString (Unsafe_CharArray_update INT) = "Unsafe.CharArray.update"
   | toString (Unsafe_CharArray_update I32) = "Unsafe.CharArray.update.i32"
   | toString (Unsafe_CharArray_update I54) = "Unsafe.CharArray.update.i54"
   | toString (Unsafe_CharArray_update I64) = "Unsafe.CharArray.update.i64"
   | toString (Unsafe_CharArray_update INT_INF) = "Unsafe.CharArray.update.intInf"
+  | toString (CharArray_copy INT) = "CharArray.copy"
+  | toString (CharArray_copy I32) = "CharArray.copy.i32"
+  | toString (CharArray_copy I54) = "CharArray.copy.i54"
+  | toString (CharArray_copy I64) = "CharArray.copy.i64"
+  | toString (CharArray_copy INT_INF) = "CharArray.copy.intInf"
+  | toString CharArray_unsafeFreeze = "CharArray.unsafeFreeze"
   | toString (String_copyBytes INT) = "String.copyBytes"
   | toString (String_copyBytes I32) = "String.copyBytes.i32"
   | toString (String_copyBytes I54) = "String.copyBytes.i54"
@@ -1429,11 +1443,22 @@ fun fromString "=" = SOME EQUAL
   | fromString "CharArray.alloc.i54" = SOME (CharArray_alloc I54)
   | fromString "CharArray.alloc.i64" = SOME (CharArray_alloc I64)
   | fromString "CharArray.alloc.intInf" = SOME (CharArray_alloc INT_INF)
+  | fromString "Unsafe.CharArray.sub" = SOME (Unsafe_CharArray_sub INT)
+  | fromString "Unsafe.CharArray.sub.i32" = SOME (Unsafe_CharArray_sub I32)
+  | fromString "Unsafe.CharArray.sub.i54" = SOME (Unsafe_CharArray_sub I54)
+  | fromString "Unsafe.CharArray.sub.i64" = SOME (Unsafe_CharArray_sub I64)
+  | fromString "Unsafe.CharArray.sub.intInf" = SOME (Unsafe_CharArray_sub INT_INF)
   | fromString "Unsafe.CharArray.update" = SOME (Unsafe_CharArray_update INT)
   | fromString "Unsafe.CharArray.update.i32" = SOME (Unsafe_CharArray_update I32)
   | fromString "Unsafe.CharArray.update.i54" = SOME (Unsafe_CharArray_update I54)
   | fromString "Unsafe.CharArray.update.i64" = SOME (Unsafe_CharArray_update I64)
   | fromString "Unsafe.CharArray.update.intInf" = SOME (Unsafe_CharArray_update INT_INF)
+  | fromString "CharArray.copy" = SOME (CharArray_copy INT)
+  | fromString "CharArray.copy.i32" = SOME (CharArray_copy I32)
+  | fromString "CharArray.copy.i54" = SOME (CharArray_copy I54)
+  | fromString "CharArray.copy.i64" = SOME (CharArray_copy I64)
+  | fromString "CharArray.copy.intInf" = SOME (CharArray_copy INT_INF)
+  | fromString "CharArray.unsafeFreeze" = SOME CharArray_unsafeFreeze
   | fromString "String.copyBytes" = SOME (String_copyBytes INT)
   | fromString "String.copyBytes.i32" = SOME (String_copyBytes I32)
   | fromString "String.copyBytes.i54" = SOME (String_copyBytes I54)
@@ -1771,7 +1796,10 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Unsafe_Array_update _) = false
   | mayRaise (Unsafe_CharVector_sub _) = false
   | mayRaise (CharArray_alloc _) = false
+  | mayRaise (Unsafe_CharArray_sub _) = false
   | mayRaise (Unsafe_CharArray_update _) = false
+  | mayRaise (CharArray_copy _) = false
+  | mayRaise CharArray_unsafeFreeze = false
   | mayRaise (String_copyBytes _) = false
   | mayRaise Exception_instanceof = false
   | mayRaise DelimCont_newPromptTag = false
@@ -2062,7 +2090,10 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Unsafe_Array_update _) = false
   | isDiscardable (Unsafe_CharVector_sub _) = true
   | isDiscardable (CharArray_alloc _) = true
+  | isDiscardable (Unsafe_CharArray_sub _) = true
   | isDiscardable (Unsafe_CharArray_update _) = false
+  | isDiscardable (CharArray_copy _) = false
+  | isDiscardable CharArray_unsafeFreeze = true
   | isDiscardable (String_copyBytes _) = false
   | isDiscardable Exception_instanceof = true
   | isDiscardable DelimCont_newPromptTag = true
@@ -2356,7 +2387,10 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Unsafe_Array_update _, [_, _, _]) = false
   | isDiscardableWithArgs (Unsafe_CharVector_sub _, [_, _]) = true
   | isDiscardableWithArgs (CharArray_alloc _, [_]) = true
+  | isDiscardableWithArgs (Unsafe_CharArray_sub _, [_, _]) = true
   | isDiscardableWithArgs (Unsafe_CharArray_update _, [_, _, _]) = false
+  | isDiscardableWithArgs (CharArray_copy _, [_, _, _, _, _]) = false
+  | isDiscardableWithArgs (CharArray_unsafeFreeze, [_]) = true
   | isDiscardableWithArgs (String_copyBytes _, [_, _, _, _, _]) = false
   | isDiscardableWithArgs (Exception_instanceof, [_, _]) = true
   | isDiscardableWithArgs (DelimCont_newPromptTag, []) = true
@@ -2548,7 +2582,9 @@ fun fixIntWord { int, word }
         | Unsafe_Array_update a1 => Unsafe_Array_update (fixInt a1)
         | Unsafe_CharVector_sub a1 => Unsafe_CharVector_sub (fixInt a1)
         | CharArray_alloc a1 => CharArray_alloc (fixInt a1)
+        | Unsafe_CharArray_sub a1 => Unsafe_CharArray_sub (fixInt a1)
         | Unsafe_CharArray_update a1 => Unsafe_CharArray_update (fixInt a1)
+        | CharArray_copy a1 => CharArray_copy (fixInt a1)
         | String_copyBytes a1 => String_copyBytes (fixInt a1)
         | UTF8_size a1 => UTF8_size (fixInt a1)
         | UTF8_codePointAt a1 => UTF8_codePointAt (fixInt a1)
@@ -2738,7 +2774,10 @@ fun returnArity EQUAL = 1
   | returnArity (Unsafe_Array_update _) = 0
   | returnArity (Unsafe_CharVector_sub _) = 1
   | returnArity (CharArray_alloc _) = 1
+  | returnArity (Unsafe_CharArray_sub _) = 1
   | returnArity (Unsafe_CharArray_update _) = 0
+  | returnArity (CharArray_copy _) = 0
+  | returnArity CharArray_unsafeFreeze = 1
   | returnArity (String_copyBytes _) = 0
   | returnArity Exception_instanceof = 1
   | returnArity DelimCont_newPromptTag = 1
@@ -2894,6 +2933,7 @@ functor TypeOfPrimitives (type ty
                           val JavaScriptValue : ty
                           val wasm_ptr : ty
                           val prim_effect : ty
+                          val charArray : ty
                           val refOf : ty -> ty
                           val listOf : ty -> ty
                           val vectorOf : ty -> ty
@@ -3392,21 +3432,32 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Unsafe_CharVector_sub Primitives.I54) = { vars = [], args = vector [string, int54], results = [char] }
   | typeOf (Primitives.Unsafe_CharVector_sub Primitives.I64) = { vars = [], args = vector [string, int64], results = [char] }
   | typeOf (Primitives.Unsafe_CharVector_sub Primitives.INT_INF) = { vars = [], args = vector [string, intInf], results = [char] }
-  | typeOf (Primitives.CharArray_alloc Primitives.INT) = { vars = [], args = vector [int], results = [string] }
-  | typeOf (Primitives.CharArray_alloc Primitives.I32) = { vars = [], args = vector [int32], results = [string] }
-  | typeOf (Primitives.CharArray_alloc Primitives.I54) = { vars = [], args = vector [int54], results = [string] }
-  | typeOf (Primitives.CharArray_alloc Primitives.I64) = { vars = [], args = vector [int64], results = [string] }
-  | typeOf (Primitives.CharArray_alloc Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [string] }
-  | typeOf (Primitives.Unsafe_CharArray_update Primitives.INT) = { vars = [], args = vector [string, int, char], results = [] }
-  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I32) = { vars = [], args = vector [string, int32, char], results = [] }
-  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I54) = { vars = [], args = vector [string, int54, char], results = [] }
-  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I64) = { vars = [], args = vector [string, int64, char], results = [] }
-  | typeOf (Primitives.Unsafe_CharArray_update Primitives.INT_INF) = { vars = [], args = vector [string, intInf, char], results = [] }
-  | typeOf (Primitives.String_copyBytes Primitives.INT) = { vars = [], args = vector [string, int, string, int, int], results = [] }
-  | typeOf (Primitives.String_copyBytes Primitives.I32) = { vars = [], args = vector [string, int32, string, int32, int32], results = [] }
-  | typeOf (Primitives.String_copyBytes Primitives.I54) = { vars = [], args = vector [string, int54, string, int54, int54], results = [] }
-  | typeOf (Primitives.String_copyBytes Primitives.I64) = { vars = [], args = vector [string, int64, string, int64, int64], results = [] }
-  | typeOf (Primitives.String_copyBytes Primitives.INT_INF) = { vars = [], args = vector [string, intInf, string, intInf, intInf], results = [] }
+  | typeOf (Primitives.CharArray_alloc Primitives.INT) = { vars = [], args = vector [int], results = [charArray] }
+  | typeOf (Primitives.CharArray_alloc Primitives.I32) = { vars = [], args = vector [int32], results = [charArray] }
+  | typeOf (Primitives.CharArray_alloc Primitives.I54) = { vars = [], args = vector [int54], results = [charArray] }
+  | typeOf (Primitives.CharArray_alloc Primitives.I64) = { vars = [], args = vector [int64], results = [charArray] }
+  | typeOf (Primitives.CharArray_alloc Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [charArray] }
+  | typeOf (Primitives.Unsafe_CharArray_sub Primitives.INT) = { vars = [], args = vector [charArray, int], results = [char] }
+  | typeOf (Primitives.Unsafe_CharArray_sub Primitives.I32) = { vars = [], args = vector [charArray, int32], results = [char] }
+  | typeOf (Primitives.Unsafe_CharArray_sub Primitives.I54) = { vars = [], args = vector [charArray, int54], results = [char] }
+  | typeOf (Primitives.Unsafe_CharArray_sub Primitives.I64) = { vars = [], args = vector [charArray, int64], results = [char] }
+  | typeOf (Primitives.Unsafe_CharArray_sub Primitives.INT_INF) = { vars = [], args = vector [charArray, intInf], results = [char] }
+  | typeOf (Primitives.Unsafe_CharArray_update Primitives.INT) = { vars = [], args = vector [charArray, int, char], results = [] }
+  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I32) = { vars = [], args = vector [charArray, int32, char], results = [] }
+  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I54) = { vars = [], args = vector [charArray, int54, char], results = [] }
+  | typeOf (Primitives.Unsafe_CharArray_update Primitives.I64) = { vars = [], args = vector [charArray, int64, char], results = [] }
+  | typeOf (Primitives.Unsafe_CharArray_update Primitives.INT_INF) = { vars = [], args = vector [charArray, intInf, char], results = [] }
+  | typeOf (Primitives.CharArray_copy Primitives.INT) = { vars = [], args = vector [charArray, int, charArray, int, int], results = [] }
+  | typeOf (Primitives.CharArray_copy Primitives.I32) = { vars = [], args = vector [charArray, int32, charArray, int32, int32], results = [] }
+  | typeOf (Primitives.CharArray_copy Primitives.I54) = { vars = [], args = vector [charArray, int54, charArray, int54, int54], results = [] }
+  | typeOf (Primitives.CharArray_copy Primitives.I64) = { vars = [], args = vector [charArray, int64, charArray, int64, int64], results = [] }
+  | typeOf (Primitives.CharArray_copy Primitives.INT_INF) = { vars = [], args = vector [charArray, intInf, charArray, intInf, intInf], results = [] }
+  | typeOf Primitives.CharArray_unsafeFreeze = { vars = [], args = vector [charArray], results = [string] }
+  | typeOf (Primitives.String_copyBytes Primitives.INT) = { vars = [], args = vector [charArray, int, string, int, int], results = [] }
+  | typeOf (Primitives.String_copyBytes Primitives.I32) = { vars = [], args = vector [charArray, int32, string, int32, int32], results = [] }
+  | typeOf (Primitives.String_copyBytes Primitives.I54) = { vars = [], args = vector [charArray, int54, string, int54, int54], results = [] }
+  | typeOf (Primitives.String_copyBytes Primitives.I64) = { vars = [], args = vector [charArray, int64, string, int64, int64], results = [] }
+  | typeOf (Primitives.String_copyBytes Primitives.INT_INF) = { vars = [], args = vector [charArray, intInf, string, intInf, intInf], results = [] }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], results = [bool] }
   | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
   | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyA, tyB), tyA], results = [tyB] }

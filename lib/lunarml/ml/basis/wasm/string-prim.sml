@@ -15,7 +15,7 @@ fun x ^ y =
   in
     _primCall "String.copyBytes" (buf, 0, x, 0, n1);
     _primCall "String.copyBytes" (buf, n1, y, 0, n2);
-    Unsafe.cast buf
+    _primCall "CharArray.unsafeFreeze" (buf)
   end
 
 fun implode (cs : char list) : string =
@@ -28,7 +28,7 @@ fun implode (cs : char list) : string =
             (_primCall "Unsafe.CharArray.update" (buf, i, c); fill (rest, i + 1))
   in
     fill (cs, 0);
-    Unsafe.cast buf
+    _primCall "CharArray.unsafeFreeze" (buf)
   end
 
 fun concat (ss : string list) : string =
@@ -45,7 +45,7 @@ fun concat (ss : string list) : string =
             end
   in
     copyAll (ss, 0);
-    Unsafe.cast buf
+    _primCall "CharArray.unsafeFreeze" (buf)
   end
 
 (* Lexicographic comparison: -1, 0, or 1 *)
@@ -96,7 +96,7 @@ _overload "String" [string] { < = String.<
 
 (* CharArray type alias for string (same representation in WasmGC) *)
 structure CharArray = struct
-type array = string
+type array = _Prim.CharArray.array
 fun alloc (n : int) : array = _primCall "CharArray.alloc" (n)
 fun unsafeUpdate (arr : array, i : int, c : char) : unit =
   _primCall "Unsafe.CharArray.update" (arr, i, c)
@@ -111,8 +111,8 @@ end
 
 (* UnsafeCharArray for use by other Basis code *)
 structure UnsafeCharArray = struct
-type array = string
+type array = CharArray.array
 type elem = char
-fun sub (a : array, i : int) : elem = _primCall "Unsafe.CharVector.sub" (a, i)
+fun sub (a : array, i : int) : elem = _primCall "Unsafe.CharArray.sub" (a, i)
 fun update (a : array, i : int, c : elem) : unit = _primCall "Unsafe.CharArray.update" (a, i, c)
 end

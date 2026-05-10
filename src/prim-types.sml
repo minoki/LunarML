@@ -39,6 +39,7 @@ sig
     val function3: TypedSyntax.TyName
     val prompt_tag: TypedSyntax.TyName
     val subcont: TypedSyntax.TyName
+    val charArray: TypedSyntax.TyName
   end
   val unit: 'l TypedSyntax.BaseTy
   val bool: 'l TypedSyntax.BaseTy
@@ -66,6 +67,7 @@ sig
   val lua_value: 'l TypedSyntax.BaseTy
   val js_value: 'l TypedSyntax.BaseTy
   val prim_effect: 'l TypedSyntax.BaseTy
+  val charArray: 'l TypedSyntax.BaseTy
   val ref_: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
   val list: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
   val vector: 'l TypedSyntax.BaseTy -> 'l TypedSyntax.BaseTy
@@ -122,6 +124,7 @@ struct
     val string7 = TypedSyntax.MkTyName ("String7.string", 30)
     val uchar = TypedSyntax.MkTyName ("UChar.char", 31)
     val wasm_ptr = TypedSyntax.MkTyName ("Wasm.ptr", 32)
+    val charArray = TypedSyntax.MkTyName ("CharArray.array", 33)
   end
 
   val unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
@@ -151,6 +154,7 @@ struct
   val word64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.word64)
   val prim_effect =
     TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.prim_effect)
+  val charArray = TypedSyntax.TyCon (SourcePos.nullSpan, [], Names.charArray)
   fun ref_ ty =
     TypedSyntax.TyCon (SourcePos.nullSpan, [ty], Names.ref_)
   fun list ty =
