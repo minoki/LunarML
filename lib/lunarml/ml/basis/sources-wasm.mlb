@@ -34,6 +34,7 @@ math.sig
 mono-sequence.sml
 os-path.sig
 io.sml
+wasi/text-io.sml
 wasm/stub.sml
 end
 in

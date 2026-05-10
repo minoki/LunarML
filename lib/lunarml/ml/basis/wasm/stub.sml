@@ -95,9 +95,6 @@ end
 structure StringCvt = struct end
 structure Substring = struct type substring = unit end
 structure Text = struct end
-structure TextIO = struct
-  val print : string -> unit = fn _ => raise Fail "TextIO.print: not implemented yet"
-end
 structure Time = struct end
 structure Timer = struct end
 structure Vector = struct
