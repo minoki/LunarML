@@ -507,9 +507,9 @@ struct
           (checkExp (env, dataTy, data); F.Types.string16)
       | inferExp
           ( env
-          , F.PrimExp (F.DataTagAsIntOp _, [dataTy], [data])
+          , F.PrimExp (F.DataTagAsInt32Op _, [dataTy], [data])
           ) (* TODO: Check constructor info *) =
-          (checkExp (env, dataTy, data); F.Types.int)
+          (checkExp (env, dataTy, data); F.Types.int32)
       | inferExp
           ( env
           , F.PrimExp (F.DataPayloadOp _, [dataTy, payloadTy], [data])

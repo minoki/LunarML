@@ -2014,7 +2014,7 @@ struct
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for DataPayloadOp")
-      | (F.DataTagAsIntOp info, _, [arg]) =>
+      | (F.DataTagAsInt32Op info, _, [arg]) =>
           (case #representation info of
              Syntax.REP_ENUM =>
                (* Enum: i31ref encodes tag index; cast to i31 + i31.get_u *)
@@ -2034,7 +2034,7 @@ struct
                end
            | _ =>
                raise CodeGenError
-                 "doPrimOp: unexpected representation for DataTagAsIntOp")
+                 "doPrimOp: unexpected representation for DataTagAsInt32Op")
       | (F.DataTagAsStringOp _, _, [_]) =>
           raise CodeGenError "DataTagAsStringOp not supported for Wasm target"
       | (F.DataTagAsString16Op _, _, [_]) =>

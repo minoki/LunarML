@@ -119,7 +119,7 @@ struct
     | doPrimOp F.VectorOp = [P.Fragment "vector"]
     | doPrimOp (F.DataTagAsStringOp _) = [P.Fragment "data-tag-as-string"]
     | doPrimOp (F.DataTagAsString16Op _) = [P.Fragment "data-tag-as-string16"]
-    | doPrimOp (F.DataTagAsIntOp _) = [P.Fragment "data-tag-as-int"]
+    | doPrimOp (F.DataTagAsInt32Op _) = [P.Fragment "data-tag-as-int32"]
     | doPrimOp (F.DataPayloadOp _) = [P.Fragment "data-payload"]
     | doPrimOp F.ExnPayloadOp = [P.Fragment "exn-payload"]
     | doPrimOp (F.ConstructValOp _) = [P.Fragment "ConstructVal"]

@@ -347,14 +347,14 @@ struct
                              , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                              ]
                            )
-                     | TargetInfo.INTEGER =>
+                     | TargetInfo.INT32 =>
                          F.PrimExp
-                           ( F.PrimCall (Primitives.Int_EQUAL Primitives.INT)
+                           ( F.PrimCall (Primitives.Int_EQUAL Primitives.I32)
                            , []
-                           , [ F.PrimExp (F.DataTagAsIntOp info, [ty], [exp])
+                           , [ F.PrimExp (F.DataTagAsInt32Op info, [ty], [exp])
                              , F.IntConstExp
                                  ( Int.toLarge (constructorTagIndex info)
-                                 , F.Types.int
+                                 , F.Types.int32
                                  )
                              ]
                            )
@@ -399,14 +399,14 @@ struct
                           , F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)
                           ]
                         )
-                  | TargetInfo.INTEGER =>
+                  | TargetInfo.INT32 =>
                       F.PrimExp
-                        ( F.PrimCall (Primitives.Int_EQUAL Primitives.INT)
+                        ( F.PrimCall (Primitives.Int_EQUAL Primitives.I32)
                         , []
-                        , [ F.PrimExp (F.DataTagAsIntOp info, [ty], [exp])
+                        , [ F.PrimExp (F.DataTagAsInt32Op info, [ty], [exp])
                           , F.IntConstExp
                               ( Int.toLarge (constructorTagIndex info)
-                              , F.Types.int
+                              , F.Types.int32
                               )
                           ]
                         )))
@@ -741,7 +741,7 @@ struct
     | isDiscardablePrimOp F.VectorOp = true
     | isDiscardablePrimOp (F.DataTagAsStringOp _) = true
     | isDiscardablePrimOp (F.DataTagAsString16Op _) = true
-    | isDiscardablePrimOp (F.DataTagAsIntOp _) = true
+    | isDiscardablePrimOp (F.DataTagAsInt32Op _) = true
     | isDiscardablePrimOp (F.DataPayloadOp _) = true
     | isDiscardablePrimOp F.ExnPayloadOp = true
     | isDiscardablePrimOp (F.ConstructValOp _) = true

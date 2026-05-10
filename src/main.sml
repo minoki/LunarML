@@ -100,7 +100,7 @@ struct
      | BACKEND_WASM _ =>
          { defaultInt = Primitives.I32
          , defaultWord = Primitives.W32
-         , datatypeTag = TargetInfo.INTEGER
+         , datatypeTag = TargetInfo.INT32
          , minInt = SOME TargetInfo.minInt32
          , maxInt = SOME TargetInfo.maxInt32
          , wordSize = 32

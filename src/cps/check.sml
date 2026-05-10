@@ -160,13 +160,13 @@ struct
                   ; [F.Types.string16]
                   )
               | _ => raise TypeError "invalid DataTagAsString16")
-         | F.DataTagAsIntOp _ =>
+         | F.DataTagAsInt32Op _ =>
              (case (tyargs, args) of
                 ([dataTy], [data]) =>
-                  ( checkValue (env, fn () => "DataTagAsIntOp", dataTy) data
-                  ; [F.Types.int]
+                  ( checkValue (env, fn () => "DataTagAsInt32Op", dataTy) data
+                  ; [F.Types.int32]
                   )
-              | _ => raise TypeError "invalid DataTagAsInt")
+              | _ => raise TypeError "invalid DataTagAsInt32")
          | F.DataPayloadOp _ =>
              (case (tyargs, args) of
                 ([dataTy, payloadTy], [data]) =>
