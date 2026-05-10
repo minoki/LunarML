@@ -63,6 +63,8 @@ signature SUBSTRING
 signature TEXT
 signature TIME
 signature TIMER
+signature UNSAFE_MONO_ARRAY (* extension *)
+signature UNSAFE_MONO_VECTOR (* extension *)
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
@@ -144,6 +146,7 @@ structure Text
 structure TextIO
 structure Time
 structure Timer
+structure Unsafe (* extension *)
 structure UnsafeCharArray (* extension *)
 structure UnsafeCharVector (* extension *)
 structure Vector

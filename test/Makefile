@@ -6,6 +6,8 @@ LUA= lua
 LUAC= luac
 LUAJIT= luajit
 NODE= node
+WASMTIME= wasmtime -Wgc -Wfunction-references -Wexceptions
+WASMTIME_COMPILE= wasmtime compile -Wgc -Wfunction-references -Wexceptions
 
 LUNARML_GEN2= false
 VARIANT_GEN2= gen2
@@ -37,8 +39,13 @@ LUNARML_OPTION= --nodejs-cps $(DEFAULT_ANN)
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
 CHECKER= $(NODE) --check
+else ifeq ($(VARIANT), wasmtime)
+LUNARML_OPTION= --wasm $(DEFAULT_ANN)
+OUTEXT= .wasm
+INTERPRETER= $(WASMTIME)
+CHECKER= $(WASMTIME_COMPILE)
 else
-$(error VARIANT must be one of lua, lua-continuations, luajit, nodejs or nodejs-cps)
+$(error VARIANT must be one of lua, lua-continuations, luajit, nodejs, nodejs-cps, or wasmtime)
 endif
 
 should_run += $(addprefix should_run/,\

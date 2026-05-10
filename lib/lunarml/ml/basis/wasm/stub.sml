@@ -20,6 +20,8 @@ signature SUBSTRING = sig end
 signature TEXT = sig end
 signature TIME = sig end
 signature TIMER = sig end
+signature UNSAFE_MONO_ARRAY = sig end
+signature UNSAFE_MONO_VECTOR = sig end
 signature VECTOR = sig end
 signature VECTOR_SLICE = sig end
 structure Array = struct datatype 'a array = ARRAY_STUB end
