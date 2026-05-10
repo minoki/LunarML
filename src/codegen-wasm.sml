@@ -30,6 +30,7 @@ sig
     , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
     , taggedDataTypeIdx: WasmSyntax.typeidx (* $TaggedData: (struct (field i32) (field anyref)) *)
     , stringTypeIdx: WasmSyntax.typeidx (* $String: (array (mut i8)) *)
+    , refTypeIdx: WasmSyntax.typeidx (* $Ref: (struct (field (mut anyref))) *)
     , needsLinearMemory: bool ref
     }
 
@@ -84,6 +85,7 @@ struct
     , smlExnTagIdx: int
     , taggedDataTypeIdx: W.typeidx
     , stringTypeIdx: W.typeidx
+    , refTypeIdx: W.typeidx
     , needsLinearMemory: bool ref
     }
 
@@ -2158,6 +2160,47 @@ struct
             :: doExp fctx env (lst, acc)
           end
 
+      (* ---- Ref cells (type-aware) ---- *)
+      | (F.PrimCall Primitives.Ref_ref, [elemTy], [arg]) =>
+          let
+            val refTypeIdx = #refTypeIdx ctx
+            val argAcc =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (arg, acc))
+              | NONE => doExpForAnyref fctx env (arg, acc)
+          in
+            W.STRUCT_NEW refTypeIdx :: argAcc
+          end
+      | (F.PrimCall Primitives.Ref_set, [elemTy], [r, v]) =>
+          let
+            val refTypeIdx = #refTypeIdx ctx
+            val castRef =
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx refTypeIdx}
+            val accAfterRef = castRef :: doExp fctx env (r, acc)
+            val accAfterValue =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  List.revAppend
+                    (emitBox (ubt, ctx), doExp fctx env (v, accAfterRef))
+              | NONE => doExpForAnyref fctx env (v, accAfterRef)
+          in
+            W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+            :: W.STRUCT_SET (refTypeIdx, 0) :: accAfterValue
+          end
+      | (F.PrimCall Primitives.Ref_read, [elemTy], [r]) =>
+          let
+            val refTypeIdx = #refTypeIdx ctx
+            val castRef =
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx refTypeIdx}
+            val baseAcc =
+              W.STRUCT_GET (refTypeIdx, 0) :: castRef :: doExp fctx env (r, acc)
+          in
+            case tyToUnboxedTy elemTy of
+              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+            | NONE => baseAcc
+          end
+
       (* ---- PrimCall ---- *)
       | (F.PrimCall prim, _, args) => doPrimCall fctx env (prim, args, acc)
 
@@ -2627,23 +2670,7 @@ struct
            | _ => raise CodeGenError "String_copyBytes: expected 5 args")
 
       (* ---- Ref cells ---- *)
-      | Primitives.Ref_ref =>
-          (* Create a 1-field mutable struct *)
-          (case args of
-             [arg] =>
-               let
-                 val refTypeIdx = allocTypeIdx ctx
-                 val subtype = W.SubType
-                   { final = false
-                   , supertypes = []
-                   , body = W.StructType
-                       [{mut = W.VAR, storagetype = W.ValStorageType anyref}]
-                   }
-                 val () = #revTypes ctx := [subtype] :: !(#revTypes ctx)
-               in
-                 W.STRUCT_NEW refTypeIdx :: doExp fctx env (arg, acc)
-               end
-           | _ => raise CodeGenError "Ref_ref: expected 1 arg")
+      (* Ref_ref / Ref_set / Ref_read are handled in doPrimOp with type info. *)
       | Primitives.Ref_EQUAL =>
           (case args of
              [a, b] =>
@@ -2655,12 +2682,6 @@ struct
                  :: doExp fctx env (b, castEq :: doExp fctx env (a, acc))
                end
            | _ => raise CodeGenError "Ref_EQUAL: expected 2 args")
-      | Primitives.Ref_set =>
-          raise CodeGenError
-            "Ref_set: not yet implemented (needs known ref type)"
-      | Primitives.Ref_read =>
-          raise CodeGenError
-            "Ref_read: not yet implemented (needs known ref type)"
 
       (* ---- List operations ---- *)
       | Primitives.List_cons =>
@@ -2913,11 +2934,20 @@ struct
         , body =
             W.ArrayType {mut = W.VAR, storagetype = W.PackedStorageType W.I8}
         }
+      val refTypeIdx = 9
+      (* Ref: (struct (field (mut anyref))) — shared representation for all SML refs *)
+      val refType = W.SubType
+        { final = false
+        , supertypes = []
+        , body = W.StructType
+            [{mut = W.VAR, storagetype = W.ValStorageType anyref}]
+        }
     in
-      { nextTypeIdx = ref 9
+      { nextTypeIdx = ref 10
       , nextFuncIdx = ref 0
       , revTypes = ref
-          [ [stringType]
+          [ [refType]
+          , [stringType]
           , [taggedDataType]
           , [smlExnFuncType]
           , [smlExnType]
@@ -2945,6 +2975,7 @@ struct
       , smlExnTagIdx = smlExnTagIdx
       , taggedDataTypeIdx = taggedDataTypeIdx
       , stringTypeIdx = stringTypeIdx
+      , refTypeIdx = refTypeIdx
       , needsLinearMemory = ref false
       }
     end
