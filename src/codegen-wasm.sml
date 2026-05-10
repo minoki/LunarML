@@ -1233,10 +1233,12 @@ struct
             | _ => raise CodeGenError "RecContDec: getParamLocals"
 
           (* Step 2: detect initial call pattern:
-             restDecs = [], finalCont = AppCont k args for k in defs *)
+             finalCont = AppCont k args for k in defs.
+             restDecs (decs between this RecContDec and finalCont) are processed
+             before entering the loop. *)
           val initOpt =
-            case (restDecs, finalCont) of
-              ([], N.AppCont {applied = k, args = initArgs}) =>
+            case finalCont of
+              N.AppCont {applied = k, args = initArgs} =>
                 (case List.find (fn (name, _, _) => name = k) defs of
                    SOME (_, params, _) => SOME (k, params, initArgs)
                  | NONE => NONE)
@@ -1245,8 +1247,15 @@ struct
           case initOpt of
             SOME (initK, initParams, initArgs) =>
               let
+                (* First: process restDecs (e.g., ValDecs that compute helper values
+                   used inside the rec cont's body) before entering the loop. *)
+                val (envAfterRest, acc) =
+                  List.foldl (fn (dec, (e, a)) => doDec fctx e (dec, a))
+                    (env, acc) restDecs
+
                 val initParamLocals = getParamLocals initK
-                (* Emit initial param assignments (fold over 3 lists simultaneously) *)
+                (* Emit initial param assignments (fold over 3 lists simultaneously).
+                   Use envAfterRest so initArgs can reference vars bound by restDecs. *)
                 val acc =
                   let
                     fun go ([], [], [], a) = a
@@ -1258,11 +1267,16 @@ struct
                                   W.LOCAL_SET lIdx
                                   ::
                                   (case tyToWasmType ty of
-                                     W.NumType W.I32 => doExp fctx env (arg, a)
-                                   | W.NumType W.I64 => doExp fctx env (arg, a)
-                                   | W.NumType W.F64 => doExp fctx env (arg, a)
-                                   | _ => doExpForAnyref fctx env (arg, a))
-                              | NONE => W.DROP :: doExp fctx env (arg, a)
+                                     W.NumType W.I32 =>
+                                       doExp fctx envAfterRest (arg, a)
+                                   | W.NumType W.I64 =>
+                                       doExp fctx envAfterRest (arg, a)
+                                   | W.NumType W.F64 =>
+                                       doExp fctx envAfterRest (arg, a)
+                                   | _ =>
+                                       doExpForAnyref fctx envAfterRest (arg, a))
+                              | NONE =>
+                                  W.DROP :: doExp fctx envAfterRest (arg, a)
                           in
                             go (lRest, pRest, aRest, a')
                           end
@@ -1299,10 +1313,11 @@ struct
                 (* Build loop body: for each continuation body, generate code.
                    loopEnv: outer continuations bumped by 1 (for the LOOP block depth),
                    but this RecContDec's own CONTINUE_TOs stay at label=0 (BR 0 = loop back).
-                   Also add params as vars so the loop body can read them. *)
+                   Also add params as vars so the loop body can read them.
+                   Base off envAfterRest so vars bound by restDecs are visible inside the loop. *)
                 val loopEnv =
                   let
-                    val bumpedBase = bumpEnvConts 1 env
+                    val bumpedBase = bumpEnvConts 1 envAfterRest
                     (* Re-add CONTINUE_TO entries (label=0 = the LOOP) *)
                     val withConts =
                       List.foldl
