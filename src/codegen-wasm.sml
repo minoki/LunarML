@@ -921,15 +921,74 @@ struct
       val paramLocals =
         List.map (fn _ => allocLocal innerFctx anyref) params (* params *)
 
-      (* Build environment for function body *)
+      (* Build environment for function body.
+         Params arrive as anyref in the Wasm closure convention.
+         If a param's FSyntax type corresponds to an unboxed numeric type (e.g. int32
+         from CpsUnpackRecordParameter after boxing), allocate an unboxed local and
+         emit preamble instructions to unbox. This handles functions created by
+         CpsUnpackRecordParameter in optimizeCps #3 that bypass CpsBoxing. *)
       val innerEnv = emptyEnv
-      (* Add return continuation *)
       val innerEnv = envWithCont (innerEnv, contParam, RETURN)
-      (* Add params: in Wasm, all function params are anyref (boxed by CpsBoxing) *)
-      val innerEnv =
+      val (revParamUnboxPreamble, innerEnv) =
         ListPair.foldl
-          (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx, anyref))
-          innerEnv (params, paramLocals)
+          (fn ((v, ty), rawLocalIdx, (revAcc, e)) =>
+             let
+               val wasmTy = tyToWasmType ty
+             in
+               case wasmTy of
+                 W.NumType W.I32 =>
+                   let
+                     val unboxedLocalIdx =
+                       allocLocal innerFctx (W.NumType W.I32)
+                     val instrs =
+                       W.LOCAL_SET unboxedLocalIdx
+                       :: W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)
+                       ::
+                       W.REF_CAST
+                         { nullable = false
+                         , heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)
+                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                   in
+                     ( instrs
+                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.I32)
+                     )
+                   end
+               | W.NumType W.I64 =>
+                   let
+                     val unboxedLocalIdx =
+                       allocLocal innerFctx (W.NumType W.I64)
+                     val instrs =
+                       W.LOCAL_SET unboxedLocalIdx
+                       :: W.STRUCT_GET (#boxedI64TypeIdx ctx, 0)
+                       ::
+                       W.REF_CAST
+                         { nullable = false
+                         , heaptype = W.TypeIdx (#boxedI64TypeIdx ctx)
+                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                   in
+                     ( instrs
+                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.I64)
+                     )
+                   end
+               | W.NumType W.F64 =>
+                   let
+                     val unboxedLocalIdx =
+                       allocLocal innerFctx (W.NumType W.F64)
+                     val instrs =
+                       W.LOCAL_SET unboxedLocalIdx
+                       :: W.STRUCT_GET (#boxedF64TypeIdx ctx, 0)
+                       ::
+                       W.REF_CAST
+                         { nullable = false
+                         , heaptype = W.TypeIdx (#boxedF64TypeIdx ctx)
+                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                   in
+                     ( instrs
+                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.F64)
+                     )
+                   end
+               | _ => (revAcc, envWithVar (e, v, rawLocalIdx, anyref))
+             end) ([], innerEnv) (params, paramLocals)
 
       (* Add free variables: extract from closure struct.
        * Free vars with numeric types (i32/i64/f64) are stored boxed in the closure
@@ -977,7 +1036,12 @@ struct
                   go (rest, fieldIdx + 1, fullInstrs, e')
                 end
         in
-          go (freeVars, 1, [], innerEnv) (* field 0 is the code pointer *)
+          go
+            ( freeVars
+            , 1
+            , revParamUnboxPreamble
+            , innerEnv
+            ) (* field 0 is code ptr *)
         end
 
       (* Generate body with preamble as initial accumulator.
@@ -1126,7 +1190,8 @@ struct
               {nullable = false, heaptype = W.TypeIdx (#closureBaseTypeIdx ctx)}
             :: acc'
           val acc' =
-            List.foldl (fn (arg', a) => doExp fctx env (arg', a)) acc' args'
+            List.foldl (fn (arg', a) => doExpForAnyref fctx env (arg', a)) acc'
+              args'
           val acc' = W.LOCAL_GET closureLocal' :: acc'
           val acc' =
             W.REF_CAST
@@ -1546,10 +1611,57 @@ struct
 
             val innerEnv = emptyEnv
             val innerEnv = envWithCont (innerEnv, contParam, RETURN)
-            val innerEnv =
+            val (revParamUnboxPreamble, innerEnv) =
               ListPair.foldl
-                (fn ((v, _), localIdx, e) => envWithVar (e, v, localIdx, anyref))
-                innerEnv (params, paramLocals)
+                (fn ((v, ty), rawLocalIdx, (revAcc, e)) =>
+                   let
+                     val wasmTy = tyToWasmType ty
+                   in
+                     case wasmTy of
+                       W.NumType W.I32 =>
+                         let
+                           val ul = allocLocal innerFctx (W.NumType W.I32)
+                           val instrs =
+                             W.LOCAL_SET ul
+                             :: W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)
+                             ::
+                             W.REF_CAST
+                               { nullable = false
+                               , heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)
+                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                         in
+                           (instrs, envWithVar (e, v, ul, W.NumType W.I32))
+                         end
+                     | W.NumType W.I64 =>
+                         let
+                           val ul = allocLocal innerFctx (W.NumType W.I64)
+                           val instrs =
+                             W.LOCAL_SET ul
+                             :: W.STRUCT_GET (#boxedI64TypeIdx ctx, 0)
+                             ::
+                             W.REF_CAST
+                               { nullable = false
+                               , heaptype = W.TypeIdx (#boxedI64TypeIdx ctx)
+                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                         in
+                           (instrs, envWithVar (e, v, ul, W.NumType W.I64))
+                         end
+                     | W.NumType W.F64 =>
+                         let
+                           val ul = allocLocal innerFctx (W.NumType W.F64)
+                           val instrs =
+                             W.LOCAL_SET ul
+                             :: W.STRUCT_GET (#boxedF64TypeIdx ctx, 0)
+                             ::
+                             W.REF_CAST
+                               { nullable = false
+                               , heaptype = W.TypeIdx (#boxedF64TypeIdx ctx)
+                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                         in
+                           (instrs, envWithVar (e, v, ul, W.NumType W.F64))
+                         end
+                     | _ => (revAcc, envWithVar (e, v, rawLocalIdx, anyref))
+                   end) ([], innerEnv) (params, paramLocals)
 
             (* Extract free vars from closure into reverse preamble.
              * Numeric free vars are stored boxed in the struct; unbox them. *)
@@ -1588,7 +1700,7 @@ struct
                        | _ => W.LOCAL_SET localIdx :: baseInstrs
                    in
                      (fullInstrs, envWithVar (e, fv, localIdx, outerTy), fi + 1)
-                   end) ([], innerEnv, 1) freeVars
+                   end) (revParamUnboxPreamble, innerEnv, 1) freeVars
 
             (* If self is used as free var, extract it too (always anyref) *)
             val (revPreamble, innerEnv) =
@@ -2266,7 +2378,8 @@ struct
             val initAcc =
               case tyToUnboxedTy elemTy of
                 SOME ubt =>
-                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (init, acc))
+                  List.revAppend
+                    (emitBox (ubt, ctx), doExp fctx env (init, acc))
               | NONE => doExpForAnyref fctx env (init, acc)
           in
             W.ARRAY_NEW arrayTypeIdx :: doExp fctx env (n, initAcc)
@@ -2299,11 +2412,12 @@ struct
             val vAcc =
               case tyToUnboxedTy elemTy of
                 SOME ubt =>
-                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (v, idxAcc))
+                  List.revAppend
+                    (emitBox (ubt, ctx), doExp fctx env (v, idxAcc))
               | NONE => doExpForAnyref fctx env (v, idxAcc)
           in
-            W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-            :: W.ARRAY_SET arrayTypeIdx :: vAcc
+            W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: W.ARRAY_SET arrayTypeIdx
+            :: vAcc
           end
 
       (* ---- PrimCall ---- *)
@@ -2830,8 +2944,9 @@ struct
           (case args of
              [arr] =>
                W.ARRAY_LEN
-               :: W.REF_CAST
-                    {nullable = false, heaptype = W.TypeIdx (#arrayTypeIdx ctx)}
+               ::
+               W.REF_CAST
+                 {nullable = false, heaptype = W.TypeIdx (#arrayTypeIdx ctx)}
                :: doExp fctx env (arr, acc)
            | _ => raise CodeGenError "Array_length: expected 1 arg")
 
@@ -3058,7 +3173,8 @@ struct
       val arrayType = W.SubType
         { final = false
         , supertypes = []
-        , body = W.ArrayType {mut = W.VAR, storagetype = W.ValStorageType anyref}
+        , body =
+            W.ArrayType {mut = W.VAR, storagetype = W.ValStorageType anyref}
         }
     in
       { nextTypeIdx = ref 11
