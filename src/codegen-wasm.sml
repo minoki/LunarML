@@ -30,6 +30,7 @@ sig
     , smlExnTagIdx: int (* tagidx of $sml_exn tag *)
     , taggedDataTypeIdx: WasmSyntax.typeidx (* $TaggedData: (struct (field i32) (field anyref)) *)
     , stringTypeIdx: WasmSyntax.typeidx (* $String: (array (mut i8)) *)
+    , arrayTypeIdx: WasmSyntax.typeidx (* $Array: (array (mut anyref)) *)
     , refTypeIdx: WasmSyntax.typeidx (* $Ref: (struct (field (mut anyref))) *)
     , needsLinearMemory: bool ref
     }
@@ -85,6 +86,7 @@ struct
     , smlExnTagIdx: int
     , taggedDataTypeIdx: W.typeidx
     , stringTypeIdx: W.typeidx
+    , arrayTypeIdx: W.typeidx
     , refTypeIdx: W.typeidx
     , needsLinearMemory: bool ref
     }
@@ -2257,6 +2259,53 @@ struct
             | NONE => baseAcc
           end
 
+      (* ---- Array operations (type-aware) ---- *)
+      | (F.PrimCall (Primitives.Array_array _), [elemTy], [n, init]) =>
+          let
+            val arrayTypeIdx = #arrayTypeIdx ctx
+            val initAcc =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (init, acc))
+              | NONE => doExpForAnyref fctx env (init, acc)
+          in
+            W.ARRAY_NEW arrayTypeIdx :: doExp fctx env (n, initAcc)
+          end
+
+      | (F.PrimCall (Primitives.Array_allocUninitialized _), [_], [n]) =>
+          W.ARRAY_NEW_DEFAULT (#arrayTypeIdx ctx) :: doExp fctx env (n, acc)
+
+      | (F.PrimCall (Primitives.Unsafe_Array_sub _), [elemTy], [arr, idx]) =>
+          let
+            val arrayTypeIdx = #arrayTypeIdx ctx
+            val castArr =
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
+            val baseAcc =
+              W.ARRAY_GET arrayTypeIdx
+              :: doExp fctx env (idx, castArr :: doExp fctx env (arr, acc))
+          in
+            case tyToUnboxedTy elemTy of
+              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+            | NONE => baseAcc
+          end
+
+      | (F.PrimCall (Primitives.Unsafe_Array_update _), [elemTy], [arr, idx, v]) =>
+          let
+            val arrayTypeIdx = #arrayTypeIdx ctx
+            val castArr =
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
+            val arrAcc = castArr :: doExp fctx env (arr, acc)
+            val idxAcc = doExp fctx env (idx, arrAcc)
+            val vAcc =
+              case tyToUnboxedTy elemTy of
+                SOME ubt =>
+                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (v, idxAcc))
+              | NONE => doExpForAnyref fctx env (v, idxAcc)
+          in
+            W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
+            :: W.ARRAY_SET arrayTypeIdx :: vAcc
+          end
+
       (* ---- PrimCall ---- *)
       | (F.PrimCall prim, _, args) => doPrimCall fctx env (prim, args, acc)
 
@@ -2778,7 +2827,13 @@ struct
 
       (* ---- Array operations ---- *)
       | Primitives.Array_length _ =>
-          raise CodeGenError "Array_length: not yet implemented"
+          (case args of
+             [arr] =>
+               W.ARRAY_LEN
+               :: W.REF_CAST
+                    {nullable = false, heaptype = W.TypeIdx (#arrayTypeIdx ctx)}
+               :: doExp fctx env (arr, acc)
+           | _ => raise CodeGenError "Array_length: expected 1 arg")
 
       (* ---- Conversion ---- *)
       | Primitives.Int_toInt_unchecked (from, to) =>
@@ -2998,11 +3053,19 @@ struct
         , body = W.StructType
             [{mut = W.VAR, storagetype = W.ValStorageType anyref}]
         }
+      val arrayTypeIdx = 10
+      (* Array: (array (mut anyref)) — polymorphic SML array *)
+      val arrayType = W.SubType
+        { final = false
+        , supertypes = []
+        , body = W.ArrayType {mut = W.VAR, storagetype = W.ValStorageType anyref}
+        }
     in
-      { nextTypeIdx = ref 10
+      { nextTypeIdx = ref 11
       , nextFuncIdx = ref 0
       , revTypes = ref
-          [ [refType]
+          [ [arrayType]
+          , [refType]
           , [stringType]
           , [taggedDataType]
           , [smlExnFuncType]
@@ -3031,6 +3094,7 @@ struct
       , smlExnTagIdx = smlExnTagIdx
       , taggedDataTypeIdx = taggedDataTypeIdx
       , stringTypeIdx = stringTypeIdx
+      , arrayTypeIdx = arrayTypeIdx
       , refTypeIdx = refTypeIdx
       , needsLinearMemory = ref false
       }

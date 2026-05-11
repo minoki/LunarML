@@ -23,7 +23,6 @@ signature UNSAFE_MONO_ARRAY = sig end
 signature UNSAFE_MONO_VECTOR = sig end
 signature VECTOR = sig end
 signature VECTOR_SLICE = sig end
-structure Array = struct datatype 'a array = ARRAY_STUB end
 structure ArraySlice = struct end
 structure BinIO = struct end
 structure BoolArray = struct end

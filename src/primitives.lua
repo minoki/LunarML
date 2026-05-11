@@ -1236,15 +1236,13 @@ do
       mayraise = true,
       discardable = false, -- There is a special rule in CSyntax.isDiscardable
     },
-    --[[
     {
       name = "Array.allocUninitialized{.i}",
       srcname = "Array_allocUninitialized",
       type = { vars = {TV.a}, args = {intA}, results = {array(TV.a)} },
       mayraise = true,
-      discardable = false, -- There is a special rule in CSyntax.isDiscardable
+      discardable = true,
     },
-    ]]
     {
       name = "Unsafe.cast",
       srcname = "Unsafe_cast",

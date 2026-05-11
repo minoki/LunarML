@@ -169,6 +169,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Array_length of int_width (* Array.length{.i} *)
                 | Array_fromList (* Array.fromList *)
                 | Array_array of int_width (* Array.array{.i} *)
+                | Array_allocUninitialized of int_width (* Array.allocUninitialized{.i} *)
                 | Unsafe_cast (* Unsafe.cast *)
                 | Unsafe_Vector_sub of int_width (* Unsafe.Vector.sub{.i} *)
                 | Unsafe_Array_sub of int_width (* Unsafe.Array.sub{.i} *)
@@ -754,6 +755,11 @@ fun toString EQUAL = "="
   | toString (Array_array I54) = "Array.array.i54"
   | toString (Array_array I64) = "Array.array.i64"
   | toString (Array_array INT_INF) = "Array.array.intInf"
+  | toString (Array_allocUninitialized INT) = "Array.allocUninitialized"
+  | toString (Array_allocUninitialized I32) = "Array.allocUninitialized.i32"
+  | toString (Array_allocUninitialized I54) = "Array.allocUninitialized.i54"
+  | toString (Array_allocUninitialized I64) = "Array.allocUninitialized.i64"
+  | toString (Array_allocUninitialized INT_INF) = "Array.allocUninitialized.intInf"
   | toString Unsafe_cast = "Unsafe.cast"
   | toString (Unsafe_Vector_sub INT) = "Unsafe.Vector.sub"
   | toString (Unsafe_Vector_sub I32) = "Unsafe.Vector.sub.i32"
@@ -1417,6 +1423,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "Array.array.i54" = SOME (Array_array I54)
   | fromString "Array.array.i64" = SOME (Array_array I64)
   | fromString "Array.array.intInf" = SOME (Array_array INT_INF)
+  | fromString "Array.allocUninitialized" = SOME (Array_allocUninitialized INT)
+  | fromString "Array.allocUninitialized.i32" = SOME (Array_allocUninitialized I32)
+  | fromString "Array.allocUninitialized.i54" = SOME (Array_allocUninitialized I54)
+  | fromString "Array.allocUninitialized.i64" = SOME (Array_allocUninitialized I64)
+  | fromString "Array.allocUninitialized.intInf" = SOME (Array_allocUninitialized INT_INF)
   | fromString "Unsafe.cast" = SOME Unsafe_cast
   | fromString "Unsafe.Vector.sub" = SOME (Unsafe_Vector_sub INT)
   | fromString "Unsafe.Vector.sub.i32" = SOME (Unsafe_Vector_sub I32)
@@ -1790,6 +1801,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Array_length _) = false
   | mayRaise Array_fromList = false
   | mayRaise (Array_array _) = true
+  | mayRaise (Array_allocUninitialized _) = true
   | mayRaise Unsafe_cast = false
   | mayRaise (Unsafe_Vector_sub _) = false
   | mayRaise (Unsafe_Array_sub _) = false
@@ -2084,6 +2096,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Array_length _) = true
   | isDiscardable Array_fromList = true
   | isDiscardable (Array_array _) = false
+  | isDiscardable (Array_allocUninitialized _) = true
   | isDiscardable Unsafe_cast = true
   | isDiscardable (Unsafe_Vector_sub _) = true
   | isDiscardable (Unsafe_Array_sub _) = true
@@ -2381,6 +2394,7 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Array_length _, [_]) = true
   | isDiscardableWithArgs (Array_fromList, [_]) = true
   | isDiscardableWithArgs (Array_array _, [_, _]) = false
+  | isDiscardableWithArgs (Array_allocUninitialized _, [_]) = true
   | isDiscardableWithArgs (Unsafe_cast, [_]) = true
   | isDiscardableWithArgs (Unsafe_Vector_sub _, [_, _]) = true
   | isDiscardableWithArgs (Unsafe_Array_sub _, [_, _]) = true
@@ -2577,6 +2591,7 @@ fun fixIntWord { int, word }
         | Vector_unsafeFromListRevN a1 => Vector_unsafeFromListRevN (fixInt a1)
         | Array_length a1 => Array_length (fixInt a1)
         | Array_array a1 => Array_array (fixInt a1)
+        | Array_allocUninitialized a1 => Array_allocUninitialized (fixInt a1)
         | Unsafe_Vector_sub a1 => Unsafe_Vector_sub (fixInt a1)
         | Unsafe_Array_sub a1 => Unsafe_Array_sub (fixInt a1)
         | Unsafe_Array_update a1 => Unsafe_Array_update (fixInt a1)
@@ -2768,6 +2783,7 @@ fun returnArity EQUAL = 1
   | returnArity (Array_length _) = 1
   | returnArity Array_fromList = 1
   | returnArity (Array_array _) = 1
+  | returnArity (Array_allocUninitialized _) = 1
   | returnArity Unsafe_cast = 1
   | returnArity (Unsafe_Vector_sub _) = 1
   | returnArity (Unsafe_Array_sub _) = 1
@@ -3411,6 +3427,11 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Array_array Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, tyA], results = [arrayOf (tyA)] }
   | typeOf (Primitives.Array_array Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64, tyA], results = [arrayOf (tyA)] }
   | typeOf (Primitives.Array_array Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf, tyA], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_allocUninitialized Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_allocUninitialized Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_allocUninitialized Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_allocUninitialized Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64], results = [arrayOf (tyA)] }
+  | typeOf (Primitives.Array_allocUninitialized Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf], results = [arrayOf (tyA)] }
   | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [tyA], results = [tyB] }
   | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int], results = [tyA] }
   | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int32], results = [tyA] }

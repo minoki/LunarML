@@ -34,6 +34,7 @@ wasm/wasm-memory.sml
 ieee-real-0.sml
 math.sig
 mono-sequence.sml
+wasm/array-prim.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
