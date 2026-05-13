@@ -1,4 +1,3 @@
-exception Fail of string
 signature ARRAY = sig end
 signature ARRAY_SLICE = sig end
 signature BOOL = sig end
