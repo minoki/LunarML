@@ -1552,8 +1552,8 @@ struct
         in
           (env', acc)
         end
-    | [(NONE, _)] => (env, W.DROP :: doExp fctx env (exp, acc))
-    | [] => (env, W.DROP :: doExp fctx env (exp, acc))
+    | [(NONE, _)] => (env, doExp fctx env (exp, acc))
+    | [] => (env, doExp fctx env (exp, acc))
     | _ =>
         (* Multiple results: evaluate exp (should be a tuple), project each *)
         raise CodeGenError "doValDec: multiple results not yet implemented"
@@ -2355,8 +2355,7 @@ struct
                     (emitBox (ubt, ctx), doExp fctx env (v, accAfterRef))
               | NONE => doExpForAnyref fctx env (v, accAfterRef)
           in
-            W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-            :: W.STRUCT_SET (refTypeIdx, 0) :: accAfterValue
+            W.STRUCT_SET (refTypeIdx, 0) :: accAfterValue
           end
       | (F.PrimCall Primitives.Ref_read, [elemTy], [r]) =>
           let
@@ -2416,8 +2415,7 @@ struct
                     (emitBox (ubt, ctx), doExp fctx env (v, idxAcc))
               | NONE => doExpForAnyref fctx env (v, idxAcc)
           in
-            W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: W.ARRAY_SET arrayTypeIdx
-            :: vAcc
+            W.ARRAY_SET arrayTypeIdx :: vAcc
           end
 
       (* ---- PrimCall ---- *)
@@ -2830,8 +2828,7 @@ struct
                let
                  val strTypeIdx = #stringTypeIdx ctx
                in
-                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                 :: W.ARRAY_SET strTypeIdx
+                 W.ARRAY_SET strTypeIdx
                  ::
                  doExp fctx env (charArg, doExp fctx env
                    ( idx
@@ -2851,8 +2848,7 @@ struct
                    W.REF_CAST
                      {nullable = false, heaptype = W.TypeIdx strTypeIdx}
                in
-                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                 :: W.ARRAY_COPY (strTypeIdx, strTypeIdx)
+                 W.ARRAY_COPY (strTypeIdx, strTypeIdx)
                  ::
                  doExp fctx env (len, doExp fctx env
                    ( srcOff
@@ -2875,8 +2871,7 @@ struct
                    W.REF_CAST
                      {nullable = false, heaptype = W.TypeIdx strTypeIdx}
                in
-                 W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                 :: W.ARRAY_COPY (strTypeIdx, strTypeIdx)
+                 W.ARRAY_COPY (strTypeIdx, strTypeIdx)
                  ::
                  doExp fctx env (len, doExp fctx env
                    ( srcOff
@@ -3033,8 +3028,7 @@ struct
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE8 {align = 0, offset = 0}
+                W.I32_STORE8 {align = 0, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
             | _ => raise CodeGenError "Wasm_memory_storeWord8: expected 2 args"
           )
@@ -3042,8 +3036,7 @@ struct
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE16 {align = 1, offset = 0}
+                W.I32_STORE16 {align = 1, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
             | _ => raise CodeGenError "Wasm_memory_storeWord16: expected 2 args"
           )
@@ -3051,8 +3044,7 @@ struct
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE {align = 2, offset = 0}
+                W.I32_STORE {align = 2, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
             | _ => raise CodeGenError "Wasm_memory_storeWord32: expected 2 args"
           )
@@ -3060,8 +3052,7 @@ struct
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE {align = 3, offset = 0}
+                W.I32_STORE {align = 3, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
             | _ => raise CodeGenError "Wasm_memory_storeWord64: expected 2 args"
           )
@@ -3069,8 +3060,7 @@ struct
           ( #needsLinearMemory (#ctx fctx) := true
           ; case args of
               [ptr, v] =>
-                W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                :: W.I32_STORE8 {align = 0, offset = 0}
+                W.I32_STORE8 {align = 0, offset = 0}
                 :: doExp fctx env (v, doExp fctx env (ptr, acc))
             | _ => raise CodeGenError "Wasm_memory_storeChar8: expected 2 args"
           )
