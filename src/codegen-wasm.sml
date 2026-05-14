@@ -2906,6 +2906,19 @@ struct
                end
            | _ => raise CodeGenError "String_copyBytes: expected 5 args")
 
+      (* ---- Array equality (reference equality) ---- *)
+      | Primitives.Array_EQUAL =>
+          (case args of
+             [a, b] =>
+               let
+                 val castEq =
+                   W.REF_CAST {nullable = true, heaptype = W.AbsHeapType W.EQ}
+               in
+                 W.REF_EQ :: castEq
+                 :: doExp fctx env (b, castEq :: doExp fctx env (a, acc))
+               end
+           | _ => raise CodeGenError "Array_EQUAL: expected 2 args")
+
       (* ---- Ref cells ---- *)
       (* Ref_ref / Ref_set / Ref_read are handled in doPrimOp with type info. *)
       | Primitives.Ref_EQUAL =>
