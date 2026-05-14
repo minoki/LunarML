@@ -95,10 +95,6 @@ structure Substring = struct type substring = unit end
 structure Text = struct end
 structure Time = struct end
 structure Timer = struct end
-structure Vector = struct
-  datatype 'a vector = VECTOR_STUB
-  val fromList : 'a list -> 'a vector = fn _ => raise Fail "Vector.fromList: not implemented yet"
-end
 structure VectorSlice = struct end
 structure WideChar = struct end
 structure WideCharArray = struct end

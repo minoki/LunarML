@@ -2293,8 +2293,31 @@ struct
           end
 
       (* ---- Vector operations ---- *)
-      | (F.VectorOp, _, _) =>
-          raise CodeGenError "doPrimOp: VectorOp not yet implemented"
+      | (F.VectorOp, _, args) =>
+          let
+            val arrayTypeIdx = #arrayTypeIdx ctx
+            val n = List.length args
+            val argsAcc =
+              List.foldl (fn (a, prev) => doExpForAnyref fctx env (a, prev)) acc
+                args
+          in
+            W.ARRAY_NEW_FIXED (arrayTypeIdx, n) :: argsAcc
+          end
+
+      (* ---- PrimCall (type-aware overrides for Vector) ---- *)
+      | (F.PrimCall (Primitives.Unsafe_Vector_sub _), [elemTy], [v, idx]) =>
+          let
+            val arrayTypeIdx = #arrayTypeIdx ctx
+            val castV =
+              W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
+            val baseAcc =
+              W.ARRAY_GET arrayTypeIdx
+              :: doExp fctx env (idx, castV :: doExp fctx env (v, acc))
+          in
+            case tyToUnboxedTy elemTy of
+              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+            | NONE => baseAcc
+          end
 
       (* ---- PrimCall (type-aware overrides) ---- *)
       | (F.PrimCall Primitives.List_cons, [elemTy], [hd, tl]) =>
@@ -2934,7 +2957,7 @@ struct
                end
            | _ => raise CodeGenError "List_unsafeTail: expected 1 arg")
 
-      (* ---- Array operations ---- *)
+      (* ---- Array/Vector operations ---- *)
       | Primitives.Array_length _ =>
           (case args of
              [arr] =>
@@ -2944,6 +2967,16 @@ struct
                  {nullable = false, heaptype = W.TypeIdx (#arrayTypeIdx ctx)}
                :: doExp fctx env (arr, acc)
            | _ => raise CodeGenError "Array_length: expected 1 arg")
+
+      | Primitives.Vector_length _ =>
+          (case args of
+             [v] =>
+               W.ARRAY_LEN
+               ::
+               W.REF_CAST
+                 {nullable = false, heaptype = W.TypeIdx (#arrayTypeIdx ctx)}
+               :: doExp fctx env (v, acc)
+           | _ => raise CodeGenError "Vector_length: expected 1 arg")
 
       (* ---- Conversion ---- *)
       | Primitives.Int_toInt_unchecked (from, to) =>

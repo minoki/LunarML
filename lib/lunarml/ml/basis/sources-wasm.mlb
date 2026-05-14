@@ -35,6 +35,7 @@ ieee-real-0.sml
 math.sig
 mono-sequence.sml
 wasm/array-prim.sml
+wasm/vector-prim.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
