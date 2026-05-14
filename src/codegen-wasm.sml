@@ -2158,7 +2158,15 @@ struct
                in
                  W.STRUCT_NEW taggedDataIdx :: acc
                end
-           | Syntax.REP_ALIAS => doExp fctx env (payload, acc)
+           | Syntax.REP_ALIAS =>
+               (* REP_ALIAS: result is the payload itself.  Box if the payload
+                  type is unboxed (e.g. real → f64) so the result is always
+                  anyref-compatible, matching the variable's wasm type. *)
+               (case tyToUnboxedTy payloadTy of
+                  SOME ubt =>
+                    List.revAppend
+                      (emitBox (ubt, ctx), doExp fctx env (payload, acc))
+                | NONE => doExpForAnyref fctx env (payload, acc))
            | Syntax.REP_LIST =>
                doExp fctx env
                  (payload, acc) (* payload is already a cons cell from the IR *)
@@ -2182,7 +2190,16 @@ struct
                    SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
                  | NONE => baseAcc
                end
-           | Syntax.REP_ALIAS => doExp fctx env (arg, acc)
+           | Syntax.REP_ALIAS =>
+               (* REP_ALIAS: the value is stored boxed (see ConstructValWithPayloadOp).
+                  Unbox to the payload type if it is an unboxed type. *)
+               let
+                 val baseAcc = doExp fctx env (arg, acc)
+               in
+                 case tyToUnboxedTy payloadTy of
+                   SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
+                 | NONE => baseAcc
+               end
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for DataPayloadOp")
