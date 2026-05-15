@@ -515,26 +515,31 @@ in
                             (fn ((p, _), KEEP, (decs, args)) =>
                                (decs, C.Var p :: args)
                               | (_, ELIMINATE, acc) => acc
-                              | ((p, _), UNPACK fields, (decs, args)) =>
-                               List.foldr
-                                 (fn ((v, label, ty), (decs, args)) =>
-                                    let
-                                      val v =
-                                        CpsSimplify.renewVId (#base ctx, v)
-                                      val dec = C.ValDec
-                                        { exp =
-                                            C.Projection
-                                              { label = label
-                                              , record = C.Var p
-                                              , fieldTypes =
-                                                  Syntax.LabelMap.empty (* dummy *)
-                                              }
-                                        , results = [(SOME v, substTy ty)]
-                                        }
-                                    in
-                                      (dec :: decs, C.Var v :: args)
-                                    end) (decs, args) fields) ([], [])
-                            (wrapperParams, paramTransforms)
+                              | ((p, paramTy), UNPACK fields, (decs, args)) =>
+                               let
+                                 val fullFieldTypes =
+                                   case FSyntax.weakNormalizeTy paramTy of
+                                     FSyntax.RecordType ft => ft
+                                   | _ => Syntax.LabelMap.empty
+                               in
+                                 List.foldr
+                                   (fn ((v, label, ty), (decs, args)) =>
+                                      let
+                                        val v =
+                                          CpsSimplify.renewVId (#base ctx, v)
+                                        val dec = C.ValDec
+                                          { exp =
+                                              C.Projection
+                                                { label = label
+                                                , record = C.Var p
+                                                , fieldTypes = fullFieldTypes
+                                                }
+                                          , results = [(SOME v, substTy ty)]
+                                          }
+                                      in
+                                        (dec :: decs, C.Var v :: args)
+                                      end) (decs, args) fields
+                               end) ([], []) (wrapperParams, paramTransforms)
                       in
                         C.Abs
                           { contParam = k
@@ -684,25 +689,33 @@ in
                                 (fn ((p, _), KEEP, (decs, args)) =>
                                    (decs, C.Var p :: args)
                                   | (_, ELIMINATE, acc) => acc
-                                  | ((p, _), UNPACK fields, (decs, args)) =>
-                                   List.foldr
-                                     (fn ((v, label, ty), (decs, args)) =>
-                                        let
-                                          val v =
-                                            CpsSimplify.renewVId (#base ctx, v)
-                                          val dec = C.ValDec
-                                            { exp =
-                                                C.Projection
-                                                  { label = label
-                                                  , record = C.Var p
-                                                  , fieldTypes =
-                                                      Syntax.LabelMap.empty (* dummy *)
-                                                  }
-                                            , results = [(SOME v, ty)]
-                                            }
-                                        in
-                                          (dec :: decs, C.Var v :: args)
-                                        end) (decs, args) fields) ([], [])
+                                  | ((p, paramTy), UNPACK fields, (decs, args)) =>
+                                   let
+                                     val fullFieldTypes =
+                                       case FSyntax.weakNormalizeTy paramTy of
+                                         FSyntax.RecordType ft => ft
+                                       | _ => Syntax.LabelMap.empty
+                                   in
+                                     List.foldr
+                                       (fn ((v, label, ty), (decs, args)) =>
+                                          let
+                                            val v =
+                                              CpsSimplify.renewVId
+                                                (#base ctx, v)
+                                            val dec = C.ValDec
+                                              { exp =
+                                                  C.Projection
+                                                    { label = label
+                                                    , record = C.Var p
+                                                    , fieldTypes =
+                                                        fullFieldTypes
+                                                    }
+                                              , results = [(SOME v, ty)]
+                                              }
+                                          in
+                                            (dec :: decs, C.Var v :: args)
+                                          end) (decs, args) fields
+                                   end) ([], [])
                                 (wrapperParams, paramTransforms)
                           in
                             { contParam = k
@@ -955,25 +968,31 @@ in
                             (fn ((SOME p, _), KEEP, (decs, args)) =>
                                (decs, C.Var p :: args)
                               | ((SOME _, _), ELIMINATE, acc) => acc
-                              | ((SOME p, _), UNPACK fields, (decs, args)) =>
-                               List.foldr
-                                 (fn ((v, label, ty), (decs, args)) =>
-                                    let
-                                      val v =
-                                        CpsSimplify.renewVId (#base ctx, v)
-                                      val dec = C.ValDec
-                                        { exp =
-                                            C.Projection
-                                              { label = label
-                                              , record = C.Var p
-                                              , fieldTypes =
-                                                  Syntax.LabelMap.empty (* dummy *)
-                                              }
-                                        , results = [(SOME v, ty)]
-                                        }
-                                    in
-                                      (dec :: decs, C.Var v :: args)
-                                    end) (decs, args) fields
+                              | ((SOME p, paramTy), UNPACK fields, (decs, args)) =>
+                               let
+                                 val fullFieldTypes =
+                                   case FSyntax.weakNormalizeTy paramTy of
+                                     FSyntax.RecordType ft => ft
+                                   | _ => Syntax.LabelMap.empty
+                               in
+                                 List.foldr
+                                   (fn ((v, label, ty), (decs, args)) =>
+                                      let
+                                        val v =
+                                          CpsSimplify.renewVId (#base ctx, v)
+                                        val dec = C.ValDec
+                                          { exp =
+                                              C.Projection
+                                                { label = label
+                                                , record = C.Var p
+                                                , fieldTypes = fullFieldTypes
+                                                }
+                                          , results = [(SOME v, ty)]
+                                          }
+                                      in
+                                        (dec :: decs, C.Var v :: args)
+                                      end) (decs, args) fields
+                               end
                               | ((NONE, _), _, acc) => acc) ([], [])
                             (params', paramTransforms)
                       in
@@ -1092,25 +1111,36 @@ in
                                 (fn ((SOME p, _), KEEP, (decs, args)) =>
                                    (decs, C.Var p :: args)
                                   | ((SOME _, _), ELIMINATE, acc) => acc
-                                  | ((SOME p, _), UNPACK fields, (decs, args)) =>
-                                   List.foldr
-                                     (fn ((v, label, ty), (decs, args)) =>
-                                        let
-                                          val v =
-                                            CpsSimplify.renewVId (#base ctx, v)
-                                          val dec = C.ValDec
-                                            { exp =
-                                                C.Projection
-                                                  { label = label
-                                                  , record = C.Var p
-                                                  , fieldTypes =
-                                                      Syntax.LabelMap.empty (* dummy *)
-                                                  }
-                                            , results = [(SOME v, ty)]
-                                            }
-                                        in
-                                          (dec :: decs, C.Var v :: args)
-                                        end) (decs, args) fields
+                                  | ( (SOME p, paramTy)
+                                    , UNPACK fields
+                                    , (decs, args)
+                                    ) =>
+                                   let
+                                     val fullFieldTypes =
+                                       case FSyntax.weakNormalizeTy paramTy of
+                                         FSyntax.RecordType ft => ft
+                                       | _ => Syntax.LabelMap.empty
+                                   in
+                                     List.foldr
+                                       (fn ((v, label, ty), (decs, args)) =>
+                                          let
+                                            val v =
+                                              CpsSimplify.renewVId
+                                                (#base ctx, v)
+                                            val dec = C.ValDec
+                                              { exp =
+                                                  C.Projection
+                                                    { label = label
+                                                    , record = C.Var p
+                                                    , fieldTypes =
+                                                        fullFieldTypes
+                                                    }
+                                              , results = [(SOME v, ty)]
+                                              }
+                                          in
+                                            (dec :: decs, C.Var v :: args)
+                                          end) (decs, args) fields
+                                   end
                                   | ((NONE, _), _, acc) => acc) ([], [])
                                 (params', paramTransforms)
                           in
