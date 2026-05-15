@@ -319,15 +319,28 @@ struct
       }
 
   type Env =
-    { vars: (W.localidx * W.valtype) TypedSyntax.VIdMap.map
+    { vars: (W.localidx * F.UnboxedTy option) TypedSyntax.VIdMap.map
     , continuations: cont_repr C.CVarMap.map
     }
+
+  (* Convert an UnboxedTy option to the corresponding Wasm valtype *)
+  fun ubtOptToWasmTy NONE = anyref
+    | ubtOptToWasmTy (SOME F.UBTyInt32) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyWord32) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyWasmPtr) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyBool) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyChar) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyChar16) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyChar32) = W.NumType W.I32
+    | ubtOptToWasmTy (SOME F.UBTyInt64) = W.NumType W.I64
+    | ubtOptToWasmTy (SOME F.UBTyWord64) = W.NumType W.I64
+    | ubtOptToWasmTy (SOME F.UBTyReal) = W.NumType W.F64
 
   val emptyEnv: Env =
     {vars = TypedSyntax.VIdMap.empty, continuations = C.CVarMap.empty}
 
-  fun envWithVar (env: Env, v, idx, ty) : Env =
-    { vars = TypedSyntax.VIdMap.insert (#vars env, v, (idx, ty))
+  fun envWithVar (env: Env, v, idx, ubt_opt) : Env =
+    { vars = TypedSyntax.VIdMap.insert (#vars env, v, (idx, ubt_opt))
     , continuations = #continuations env
     }
 
@@ -798,10 +811,8 @@ struct
         (* Handle variables with unboxed types in the environment *)
         | N.Value (C.Var vid) =>
             (case TypedSyntax.VIdMap.find (#vars env, vid) of
-               SOME (_, W.NumType W.I32) => SOME F.UBTyInt32
-             | SOME (_, W.NumType W.I64) => SOME F.UBTyInt64
-             | SOME (_, W.NumType W.F64) => SOME F.UBTyReal
-             | _ => NONE)
+               SOME (_, ubt_opt) => ubt_opt
+             | NONE => NONE)
         (* PrimOps may also yield unboxed results.  After nestify, an
            expression like (a + b) appears directly in a record field, so we
            cannot rely on the value-level boxing performed for Var/const
@@ -933,61 +944,24 @@ struct
         ListPair.foldl
           (fn ((v, ty), rawLocalIdx, (revAcc, e)) =>
              let
-               val wasmTy = tyToWasmType ty
+               val ubt = tyToUnboxedTy ty
+               val wasmTy = ubtOptToWasmTy ubt
              in
-               case wasmTy of
-                 W.NumType W.I32 =>
+               case ubt of
+                 NONE => (revAcc, envWithVar (e, v, rawLocalIdx, NONE))
+               | SOME ubty =>
                    let
-                     val unboxedLocalIdx =
-                       allocLocal innerFctx (W.NumType W.I32)
+                     val unboxedLocalIdx = allocLocal innerFctx wasmTy
                      val instrs =
                        W.LOCAL_SET unboxedLocalIdx
-                       :: W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)
                        ::
-                       W.REF_CAST
-                         { nullable = false
-                         , heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)
-                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                       List.revAppend
+                         ( emitUnbox (ubty, ctx)
+                         , W.LOCAL_GET rawLocalIdx :: revAcc
+                         )
                    in
-                     ( instrs
-                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.I32)
-                     )
+                     (instrs, envWithVar (e, v, unboxedLocalIdx, ubt))
                    end
-               | W.NumType W.I64 =>
-                   let
-                     val unboxedLocalIdx =
-                       allocLocal innerFctx (W.NumType W.I64)
-                     val instrs =
-                       W.LOCAL_SET unboxedLocalIdx
-                       :: W.STRUCT_GET (#boxedI64TypeIdx ctx, 0)
-                       ::
-                       W.REF_CAST
-                         { nullable = false
-                         , heaptype = W.TypeIdx (#boxedI64TypeIdx ctx)
-                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
-                   in
-                     ( instrs
-                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.I64)
-                     )
-                   end
-               | W.NumType W.F64 =>
-                   let
-                     val unboxedLocalIdx =
-                       allocLocal innerFctx (W.NumType W.F64)
-                     val instrs =
-                       W.LOCAL_SET unboxedLocalIdx
-                       :: W.STRUCT_GET (#boxedF64TypeIdx ctx, 0)
-                       ::
-                       W.REF_CAST
-                         { nullable = false
-                         , heaptype = W.TypeIdx (#boxedF64TypeIdx ctx)
-                         } :: W.LOCAL_GET rawLocalIdx :: revAcc
-                   in
-                     ( instrs
-                     , envWithVar (e, v, unboxedLocalIdx, W.NumType W.F64)
-                     )
-                   end
-               | _ => (revAcc, envWithVar (e, v, rawLocalIdx, anyref))
              end) ([], innerEnv) (params, paramLocals)
 
       (* Add free variables: extract from closure struct.
@@ -999,13 +973,14 @@ struct
           fun go ([], _, revAcc, e) = (revAcc, e)
             | go (fv :: rest, fieldIdx, revAcc, e) =
                 let
-                  (* Look up the outer type of this free variable *)
-                  val outerTy =
+                  (* Look up the outer unboxed type of this free variable *)
+                  val outerUbt =
                     case TypedSyntax.VIdMap.find (#vars env, fv) of
-                      SOME (_, ty) => ty
-                    | NONE => anyref
-                  val localIdx = allocLocal innerFctx outerTy
-                  val e' = envWithVar (e, fv, localIdx, outerTy)
+                      SOME (_, ubt) => ubt
+                    | NONE => NONE
+                  val outerWasmTy = ubtOptToWasmTy outerUbt
+                  val localIdx = allocLocal innerFctx outerWasmTy
+                  val e' = envWithVar (e, fv, localIdx, outerUbt)
                   (* Base: load the (boxed) free variable from the closure struct *)
                   val baseInstrs =
                     W.STRUCT_GET (closureTypeIdx, fieldIdx)
@@ -1013,25 +988,13 @@ struct
                     W.REF_CAST
                       {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
                     :: W.LOCAL_GET selfLocal :: revAcc
-                  (* If numeric, unbox it; otherwise store anyref directly *)
+                  (* If unboxed type, unbox it; otherwise store anyref directly *)
                   val fullInstrs =
-                    case outerTy of
-                      W.NumType W.I32 =>
+                    case outerUbt of
+                      NONE => W.LOCAL_SET localIdx :: baseInstrs
+                    | SOME ubty =>
                         W.LOCAL_SET localIdx
-                        :: W.STRUCT_GET (0, 0) (* IntBox field 0 -> i32 *)
-                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 0}
-                        :: baseInstrs
-                    | W.NumType W.I64 =>
-                        W.LOCAL_SET localIdx
-                        :: W.STRUCT_GET (1, 0) (* I64Box field 0 -> i64 *)
-                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 1}
-                        :: baseInstrs
-                    | W.NumType W.F64 =>
-                        W.LOCAL_SET localIdx
-                        :: W.STRUCT_GET (2, 0) (* F64Box field 0 -> f64 *)
-                        :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx 2}
-                        :: baseInstrs
-                    | _ => W.LOCAL_SET localIdx :: baseInstrs
+                        :: List.revAppend (emitUnbox (ubty, ctx), baseInstrs)
                 in
                   go (rest, fieldIdx + 1, fullInstrs, e')
                 end
@@ -1071,13 +1034,9 @@ struct
         List.foldl
           (fn (fv, a) =>
              case TypedSyntax.VIdMap.find (#vars env, fv) of
-               SOME (idx, W.NumType W.I32) =>
-                 W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a (* box as IntBox *)
-             | SOME (idx, W.NumType W.I64) =>
-                 W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a (* box as I64Box *)
-             | SOME (idx, W.NumType W.F64) =>
-                 W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a (* box as F64Box *)
-             | SOME (idx, _) => W.LOCAL_GET idx :: a
+               SOME (idx, SOME ubty) =>
+                 List.revAppend (emitBox (ubty, ctx), W.LOCAL_GET idx :: a)
+             | SOME (idx, NONE) => W.LOCAL_GET idx :: a
              | NONE =>
                  raise CodeGenError
                    ("doAbs: free var not in scope: " ^ TypedSyntax.print_VId fv))
@@ -1135,7 +1094,7 @@ struct
           (* Env for body: add successfulExitIn → innerOutRepr *)
           val bodyEnv = envWithCont (env, successfulExitIn, innerOutRepr)
           (* Env for handler: bind exception variable e to eLocal *)
-          val handlerEnv = envWithVar (env, e, eLocal, anyref)
+          val handlerEnv = envWithVar (env, e, eLocal, NONE)
           (* Generate body and handler code *)
           val bodyCode = List.rev (doStat fctx bodyEnv (body, []))
           val handlerCode = List.rev (doStat fctx handlerEnv (h, []))
@@ -1331,7 +1290,7 @@ struct
           val bodyEnv =
             ListPair.foldl
               (fn ((SOME v, ty), SOME localIdx, e) =>
-                 envWithVar (e, v, localIdx, tyToWasmType ty)
+                 envWithVar (e, v, localIdx, tyToUnboxedTy ty)
                 | (_, _, e) => e) env (params, paramLocals)
           val contBodyCode = List.rev (doStat fctx bodyEnv (body, []))
         in
@@ -1462,7 +1421,7 @@ struct
                            in
                              ListPair.foldl
                                (fn ((SOME v, ty), SOME idx, e) =>
-                                  envWithVar (e, v, idx, tyToWasmType ty)
+                                  envWithVar (e, v, idx, tyToUnboxedTy ty)
                                  | (_, _, e) => e) e (params, paramLocals)
                            end) withConts defs
                   in
@@ -1545,10 +1504,10 @@ struct
     case results of
       [(SOME v, ty)] =>
         let
-          val wasmTy = tyToWasmType ty
-          val localIdx = allocLocal fctx wasmTy
+          val ubt = tyToUnboxedTy ty
+          val localIdx = allocLocal fctx (ubtOptToWasmTy ubt)
           val acc = W.LOCAL_SET localIdx :: doExp fctx env (exp, acc)
-          val env' = envWithVar (env, v, localIdx, wasmTy)
+          val env' = envWithVar (env, v, localIdx, ubt)
         in
           (env', acc)
         end
@@ -1615,52 +1574,24 @@ struct
               ListPair.foldl
                 (fn ((v, ty), rawLocalIdx, (revAcc, e)) =>
                    let
-                     val wasmTy = tyToWasmType ty
+                     val ubt = tyToUnboxedTy ty
+                     val wasmTy = ubtOptToWasmTy ubt
                    in
-                     case wasmTy of
-                       W.NumType W.I32 =>
+                     case ubt of
+                       NONE => (revAcc, envWithVar (e, v, rawLocalIdx, NONE))
+                     | SOME ubty =>
                          let
-                           val ul = allocLocal innerFctx (W.NumType W.I32)
+                           val ul = allocLocal innerFctx wasmTy
                            val instrs =
                              W.LOCAL_SET ul
-                             :: W.STRUCT_GET (#boxedI32TypeIdx ctx, 0)
                              ::
-                             W.REF_CAST
-                               { nullable = false
-                               , heaptype = W.TypeIdx (#boxedI32TypeIdx ctx)
-                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
+                             List.revAppend
+                               ( emitUnbox (ubty, ctx)
+                               , W.LOCAL_GET rawLocalIdx :: revAcc
+                               )
                          in
-                           (instrs, envWithVar (e, v, ul, W.NumType W.I32))
+                           (instrs, envWithVar (e, v, ul, ubt))
                          end
-                     | W.NumType W.I64 =>
-                         let
-                           val ul = allocLocal innerFctx (W.NumType W.I64)
-                           val instrs =
-                             W.LOCAL_SET ul
-                             :: W.STRUCT_GET (#boxedI64TypeIdx ctx, 0)
-                             ::
-                             W.REF_CAST
-                               { nullable = false
-                               , heaptype = W.TypeIdx (#boxedI64TypeIdx ctx)
-                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
-                         in
-                           (instrs, envWithVar (e, v, ul, W.NumType W.I64))
-                         end
-                     | W.NumType W.F64 =>
-                         let
-                           val ul = allocLocal innerFctx (W.NumType W.F64)
-                           val instrs =
-                             W.LOCAL_SET ul
-                             :: W.STRUCT_GET (#boxedF64TypeIdx ctx, 0)
-                             ::
-                             W.REF_CAST
-                               { nullable = false
-                               , heaptype = W.TypeIdx (#boxedF64TypeIdx ctx)
-                               } :: W.LOCAL_GET rawLocalIdx :: revAcc
-                         in
-                           (instrs, envWithVar (e, v, ul, W.NumType W.F64))
-                         end
-                     | _ => (revAcc, envWithVar (e, v, rawLocalIdx, anyref))
                    end) ([], innerEnv) (params, paramLocals)
 
             (* Extract free vars from closure into reverse preamble.
@@ -1669,11 +1600,12 @@ struct
               List.foldl
                 (fn (fv, (revAcc, e, fi)) =>
                    let
-                     val outerTy =
+                     val outerUbt =
                        case TypedSyntax.VIdMap.find (#vars env, fv) of
-                         SOME (_, ty) => ty
-                       | NONE => anyref
-                     val localIdx = allocLocal innerFctx outerTy
+                         SOME (_, ubt) => ubt
+                       | NONE => NONE
+                     val outerWasmTy = ubtOptToWasmTy outerUbt
+                     val localIdx = allocLocal innerFctx outerWasmTy
                      val baseInstrs =
                        W.STRUCT_GET (closureTypeIdx, fi)
                        ::
@@ -1681,25 +1613,16 @@ struct
                          {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
                        :: W.LOCAL_GET selfLocal :: revAcc
                      val fullInstrs =
-                       case outerTy of
-                         W.NumType W.I32 =>
-                           W.LOCAL_SET localIdx :: W.STRUCT_GET (0, 0)
-                           ::
-                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 0}
-                           :: baseInstrs
-                       | W.NumType W.I64 =>
-                           W.LOCAL_SET localIdx :: W.STRUCT_GET (1, 0)
-                           ::
-                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 1}
-                           :: baseInstrs
-                       | W.NumType W.F64 =>
-                           W.LOCAL_SET localIdx :: W.STRUCT_GET (2, 0)
-                           ::
-                           W.REF_CAST {nullable = false, heaptype = W.TypeIdx 2}
-                           :: baseInstrs
-                       | _ => W.LOCAL_SET localIdx :: baseInstrs
+                       case outerUbt of
+                         NONE => W.LOCAL_SET localIdx :: baseInstrs
+                       | SOME ubty =>
+                           W.LOCAL_SET localIdx
+                           :: List.revAppend (emitUnbox (ubty, ctx), baseInstrs)
                    in
-                     (fullInstrs, envWithVar (e, fv, localIdx, outerTy), fi + 1)
+                     ( fullInstrs
+                     , envWithVar (e, fv, localIdx, outerUbt)
+                     , fi + 1
+                     )
                    end) (revParamUnboxPreamble, innerEnv, 1) freeVars
 
             (* If self is used as free var, extract it too (always anyref) *)
@@ -1714,7 +1637,7 @@ struct
                     W.REF_CAST
                       {nullable = false, heaptype = W.TypeIdx closureTypeIdx}
                     :: W.LOCAL_GET selfLocal :: revPreamble
-                  , envWithVar (innerEnv, name, localIdx, anyref)
+                  , envWithVar (innerEnv, name, localIdx, NONE)
                   )
                 end
               else
@@ -1742,13 +1665,10 @@ struct
               List.foldl
                 (fn (fv, a) =>
                    case TypedSyntax.VIdMap.find (#vars env, fv) of
-                     SOME (idx, W.NumType W.I32) =>
-                       W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a
-                   | SOME (idx, W.NumType W.I64) =>
-                       W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a
-                   | SOME (idx, W.NumType W.F64) =>
-                       W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a
-                   | SOME (idx, _) => W.LOCAL_GET idx :: a
+                     SOME (idx, SOME ubty) =>
+                       List.revAppend
+                         (emitBox (ubty, ctx), W.LOCAL_GET idx :: a)
+                   | SOME (idx, NONE) => W.LOCAL_GET idx :: a
                    | NONE =>
                        raise CodeGenError "doRecDec: free var not in scope") acc
                 freeVars
@@ -1770,7 +1690,7 @@ struct
               else
                 acc
 
-            val env' = envWithVar (env, name, closureLocal, anyref)
+            val env' = envWithVar (env, name, closureLocal, NONE)
           in
             (env', acc)
           end
@@ -1837,7 +1757,7 @@ struct
                      val innerEnv =
                        ListPair.foldl
                          (fn ((v, _), localIdx, e) =>
-                            envWithVar (e, v, localIdx, anyref)) innerEnv
+                            envWithVar (e, v, localIdx, NONE)) innerEnv
                          (params, paramLocals)
 
                      (* Extract outer free vars from closure fields 1..nOuterFV *)
@@ -1845,11 +1765,12 @@ struct
                        List.foldl
                          (fn (fv, (revAcc, e, fi)) =>
                             let
-                              val outerTy =
+                              val outerUbt =
                                 case TypedSyntax.VIdMap.find (#vars env, fv) of
-                                  SOME (_, ty) => ty
-                                | NONE => anyref
-                              val localIdx = allocLocal innerFctx outerTy
+                                  SOME (_, ubt) => ubt
+                                | NONE => NONE
+                              val outerWasmTy = ubtOptToWasmTy outerUbt
+                              val localIdx = allocLocal innerFctx outerWasmTy
                               val baseInstrs =
                                 W.STRUCT_GET (closureTypeIdx, fi)
                                 ::
@@ -1858,29 +1779,16 @@ struct
                                   , heaptype = W.TypeIdx closureTypeIdx
                                   } :: W.LOCAL_GET selfLocal :: revAcc
                               val fullInstrs =
-                                case outerTy of
-                                  W.NumType W.I32 =>
-                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (0, 0)
+                                case outerUbt of
+                                  NONE => W.LOCAL_SET localIdx :: baseInstrs
+                                | SOME ubty =>
+                                    W.LOCAL_SET localIdx
                                     ::
-                                    W.REF_CAST
-                                      {nullable = false, heaptype = W.TypeIdx 0}
-                                    :: baseInstrs
-                                | W.NumType W.I64 =>
-                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (1, 0)
-                                    ::
-                                    W.REF_CAST
-                                      {nullable = false, heaptype = W.TypeIdx 1}
-                                    :: baseInstrs
-                                | W.NumType W.F64 =>
-                                    W.LOCAL_SET localIdx :: W.STRUCT_GET (2, 0)
-                                    ::
-                                    W.REF_CAST
-                                      {nullable = false, heaptype = W.TypeIdx 2}
-                                    :: baseInstrs
-                                | _ => W.LOCAL_SET localIdx :: baseInstrs
+                                    List.revAppend
+                                      (emitUnbox (ubty, ctx), baseInstrs)
                             in
                               ( fullInstrs
-                              , envWithVar (e, fv, localIdx, outerTy)
+                              , envWithVar (e, fv, localIdx, outerUbt)
                               , fi + 1
                               )
                             end) ([], innerEnv, 1) freeVars
@@ -1905,7 +1813,7 @@ struct
                                    ( rest
                                    , fi + 1
                                    , instrs
-                                   , envWithVar (e, sibName, localIdx, anyref)
+                                   , envWithVar (e, sibName, localIdx, NONE)
                                    )
                                end
                        in
@@ -1949,13 +1857,10 @@ struct
                        List.foldl
                          (fn (fv, a') =>
                             case TypedSyntax.VIdMap.find (#vars env, fv) of
-                              SOME (idx, W.NumType W.I32) =>
-                                W.STRUCT_NEW 0 :: W.LOCAL_GET idx :: a'
-                            | SOME (idx, W.NumType W.I64) =>
-                                W.STRUCT_NEW 1 :: W.LOCAL_GET idx :: a'
-                            | SOME (idx, W.NumType W.F64) =>
-                                W.STRUCT_NEW 2 :: W.LOCAL_GET idx :: a'
-                            | SOME (idx, _) => W.LOCAL_GET idx :: a'
+                              SOME (idx, SOME ubty) =>
+                                List.revAppend
+                                  (emitBox (ubty, ctx), W.LOCAL_GET idx :: a')
+                            | SOME (idx, NONE) => W.LOCAL_GET idx :: a'
                             | NONE =>
                                 raise CodeGenError
                                   "doRecDec: free var not in scope") a freeVars
@@ -2001,7 +1906,7 @@ struct
             val env' =
               List.foldl
                 (fn ({name, closureLocal, ...}, e) =>
-                   envWithVar (e, name, closureLocal, anyref)) env funcInfos
+                   envWithVar (e, name, closureLocal, NONE)) env funcInfos
           in
             (env', acc)
           end
@@ -3420,7 +3325,7 @@ struct
                  :: W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
                  :: W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
              in
-               (envWithVar (e, vid, localIdx, anyref), acc)
+               (envWithVar (e, vid, localIdx, NONE), acc)
              end) (env, []) predefExns
 
       (* Generate body instructions; trailing UNREACHABLE handles fall-through.
