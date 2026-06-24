@@ -117,8 +117,8 @@ struct
     | tyToUnboxedTy _ = NONE
 
   (* Convert FSyntax.Ty to Wasm valtype for local variable allocation.
-     After CpsBoxing, unboxed types appear in certain positions;
-     boxed types and polymorphic types use anyref. *)
+     After boxing (NSyntaxFromCpsWasm), unboxed types appear in certain
+     positions; boxed types and polymorphic types use anyref. *)
   fun tyToWasmType (F.TyVar tv) =
         if
           tv = PrimTypes.Names.int32 orelse tv = PrimTypes.Names.word32
@@ -934,10 +934,8 @@ struct
 
       (* Build environment for function body.
          Params arrive as anyref in the Wasm closure convention.
-         If a param's FSyntax type corresponds to an unboxed numeric type (e.g. int32
-         from CpsUnpackRecordParameter after boxing), allocate an unboxed local and
-         emit preamble instructions to unbox. This handles functions created by
-         CpsUnpackRecordParameter in optimizeCps #3 that bypass CpsBoxing. *)
+         If a param's FSyntax type corresponds to an unboxed numeric type (e.g. int32),
+         allocate an unboxed local and emit preamble instructions to unbox. *)
       val innerEnv = emptyEnv
       val innerEnv = envWithCont (innerEnv, contParam, RETURN)
       val (revParamUnboxPreamble, innerEnv) =
