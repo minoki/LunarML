@@ -69,6 +69,7 @@ sources = \
   src/cps/eta.sml \
   src/cps/erase-poly.sml \
   src/cps/boxing.sml \
+  src/cps/nested-wasm.sml \
   src/backend.sml \
   src/nested.sml \
   src/wasm/syntax.sml \

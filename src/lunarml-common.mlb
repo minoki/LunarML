@@ -58,6 +58,7 @@ cps/erase-poly.sml
 cps/boxing.sml
 backend.sml
 nested.sml
+cps/nested-wasm.sml
 lua/transform.sml
 codegen-lua.sml
 wasm/syntax.sml

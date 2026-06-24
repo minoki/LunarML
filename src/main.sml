@@ -374,11 +374,19 @@ struct
           ()
         end
     | emit (opts as {backend as BACKEND_WASM {output}, ...}: options) _ fileName
-        cont _ cexp export =
+        cont nextId cexp export =
         let
           val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
-          val nested = NSyntax.toNested (backend, NSyntax.fromStat cexp)
+          (* Fuse boxing into the CSyntax -> NSyntax conversion. fromStatWasm
+             only allocates fresh VIds, so nextTyVar is unused here. *)
+          val boxingCtx =
+            { nextTyVar = ref 0
+            , nextVId = nextId
+            , simplificationOccurred = ref false
+            }
+          val nested = NSyntax.toNested
+            (backend, NSyntaxFromCpsWasm.fromStatWasm (boxingCtx, cexp))
           val wasmCtx = CodeGenWasm.initContext ()
           val wasmModule = CodeGenWasm.doProgram wasmCtx cont nested export
           val codegenTime = Time.toMicroseconds
@@ -937,40 +945,23 @@ struct
           CpsErasePoly.transform (context, cexp)
         end
       val () = checkCpsAfterErasure ("after erasePoly", cexp)
-      val cexp =
-        case #backend opts of
-          BACKEND_WASM _ =>
-            let
-              val context =
-                { nextTyVar = nextTyVar
-                , nextVId = nextId
-                , simplificationOccurred = ref false
-                }
-            in
-              CpsBoxing.transform (context, cexp)
-            end
-        | _ => cexp
-      (* After boxing, disable CPS type checks since the checker
-         doesn't fully support BoxedType boundaries. *)
-      val checkCpsAfterBoxing =
-        case #backend opts of
-          BACKEND_WASM _ => (fn _ => ())
-        | _ => checkCpsAfterErasure
-      val () = checkCpsAfterBoxing ("after boxing", cexp)
+      (* For Wasm, boxing is no longer a CPS pass: it is fused into the
+         CSyntax -> NSyntax conversion (NSyntaxFromCpsWasm.fromStatWasm) at
+         emit time. The CPS therefore stays unboxed and type-checkable here. *)
       val cexp =
         optimizeCps
           { nextTyVar = nextTyVar
           , nextVId = nextId
           , printTimings = #printTimings opts
-          } checkCpsAfterBoxing cexp (3 * (#optimizationLevel opts + 3))
-      val () = checkCpsAfterBoxing ("optimization #3", cexp)
+          } checkCpsAfterErasure cexp (3 * (#optimizationLevel opts + 3))
+      val () = checkCpsAfterErasure ("optimization #3", cexp)
       val ctx' =
         { nextTyVar = nextTyVar
         , nextVId = nextId
         , simplificationOccurred = ref false
         }
       val cexp = CpsDeadCodeElimination.goStat (ctx', true, cexp)
-      val () = checkCpsAfterBoxing ("after final DCE", cexp)
+      val () = checkCpsAfterErasure ("after final DCE", cexp)
       val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
       val () =
         if #printTimings opts then
