@@ -11,10 +11,13 @@ sig
     , targetLuaVersion: target_lua_version
     , hasDelimitedContinuations: bool
     }
-  val doProgram: Context -> CSyntax.CVar -> NSyntax.Stat -> LuaSyntax.Block
+  val doProgram: Context
+                 -> CSyntax.CVar
+                 -> FSyntax.Ty NSyntax.stat
+                 -> LuaSyntax.Block
   val doProgramWithContinuations: Context
                                   -> CSyntax.CVar
-                                  -> NSyntax.Stat
+                                  -> FSyntax.Ty NSyntax.stat
                                   -> LuaSyntax.Block
 end =
 struct
@@ -416,9 +419,9 @@ struct
     | doValue ctx (C.Pack {value, ...}) = doValue ctx value
 
   (*:
-  val doExp : Context * Env * N.Exp -> L.Exp
-  val doDecs : Context * Env * C.CVar option * N.Dec list * N.Stat * L.Stat list -> L.Stat list
-  and doStat : Context * Env * C.CVar option * N.Stat -> L.Stat list
+  val doExp : Context * Env * F.Ty N.exp -> L.Exp
+  val doDecs : Context * Env * C.CVar option * F.Ty N.dec list * F.Ty N.stat * L.Stat list -> L.Stat list
+  and doStat : Context * Env * C.CVar option * F.Ty N.stat -> L.Stat list
    *)
   fun doExp (ctx, _, N.Value v) = doValue ctx v
     | doExp (ctx, env, N.PrimOp {primOp, tyargs = _, args}) =
@@ -2784,7 +2787,7 @@ struct
            | N.RecContDec defs =>
                let
                  datatype init =
-                   INIT_WITH_VALUES of C.CVar * N.Exp list
+                   INIT_WITH_VALUES of C.CVar * F.Ty N.exp list
                  | NO_INIT
                  val init =
                    case (decs, finalExp) of

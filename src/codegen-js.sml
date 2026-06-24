@@ -11,24 +11,30 @@ sig
     , contEscapeMap: CpsAnalyze.cont_map
     , imports: ({specs: (string * JsSyntax.Id) list, moduleName: string} list) ref
     }
-  val doProgramDirect: Context -> CSyntax.CVar -> NSyntax.Stat -> JsSyntax.Block
+  val doProgramDirect: Context
+                       -> CSyntax.CVar
+                       -> FSyntax.Ty NSyntax.stat
+                       -> JsSyntax.Block
   val doProgramDirectDefaultExport: Context
                                     -> CSyntax.CVar
-                                    -> NSyntax.Stat
+                                    -> FSyntax.Ty NSyntax.stat
                                     -> JsSyntax.Block
   val doProgramDirectNamedExport: Context
                                   -> CSyntax.CVar
-                                  -> NSyntax.Stat
+                                  -> FSyntax.Ty NSyntax.stat
                                   -> string vector
                                   -> JsSyntax.Block
-  val doProgramCPS: Context -> CSyntax.CVar -> NSyntax.Stat -> JsSyntax.Block
+  val doProgramCPS: Context
+                    -> CSyntax.CVar
+                    -> FSyntax.Ty NSyntax.stat
+                    -> JsSyntax.Block
   val doProgramCPSDefaultExport: Context
                                  -> CSyntax.CVar
-                                 -> NSyntax.Stat
+                                 -> FSyntax.Ty NSyntax.stat
                                  -> JsSyntax.Block
   val doProgramCPSNamedExport: Context
                                -> CSyntax.CVar
-                               -> NSyntax.Stat
+                               -> FSyntax.Ty NSyntax.stat
                                -> string vector
                                -> JsSyntax.Block
 end =
@@ -353,9 +359,9 @@ struct
          | _ => raise CodeGenError "invalid return arity")
     | NONE => raise CodeGenError "undefined continuation"
   (*:
-  val doExp : Context * Env * N.Exp -> J.Exp
-  val doDecs : Context * Env * N.Dec list * N.Stat * J.Stat list -> J.Stat list
-  val doStat : Context -> Env -> N.Stat -> J.Stat list
+  val doExp : Context * Env * F.Ty N.exp -> J.Exp
+  val doDecs : Context * Env * F.Ty N.dec list * F.Ty N.stat * J.Stat list -> J.Stat list
+  val doStat : Context -> Env -> F.Ty N.stat -> J.Stat list
    *)
   fun doExp (ctx, env, N.Value v) =
         doValue (ctx, env) v
@@ -1998,7 +2004,9 @@ struct
                    let
                      datatype init =
                        INIT_WITH_VALUES of
-                         int * (C.Var option * FSyntax.Ty) list * N.Exp list
+                         int
+                         * (C.Var option * FSyntax.Ty) list
+                         * F.Ty N.exp list
                      | NO_INIT
                      val init =
                        case (decs, finalExp) of
@@ -2018,7 +2026,7 @@ struct
                      datatype needs_which =
                        NEED_WHICH of J.Id
                      | NO_WHICH of
-                         C.CVar * (C.Var option * FSyntax.Ty) list * N.Stat
+                         C.CVar * (C.Var option * FSyntax.Ty) list * F.Ty N.stat
                      val maxargs =
                        List.foldl
                          (fn ((_, params, _), n) =>

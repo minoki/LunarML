@@ -6,113 +6,115 @@ structure NSyntax :>
 sig
   type Var = CSyntax.Var
   type CVar = CSyntax.CVar
-  datatype Exp =
+  datatype 'ty exp =
     Value of CSyntax.Value
-  | PrimOp of {primOp: FSyntax.PrimOp, tyargs: FSyntax.Ty list, args: Exp list}
-  | Record of Exp Syntax.LabelMap.map
-  | ExnTag of {name: string, payloadTy: FSyntax.Ty option}
+  | PrimOp of {primOp: FSyntax.PrimOp, tyargs: 'ty list, args: 'ty exp list}
+  | Record of 'ty exp Syntax.LabelMap.map
+  | ExnTag of {name: string, payloadTy: 'ty option}
   | Projection of
       { label: Syntax.Label
-      , record: Exp
-      , fieldTypes: FSyntax.Ty Syntax.LabelMap.map
+      , record: 'ty exp
+      , fieldTypes: 'ty Syntax.LabelMap.map
       }
   | Abs of
       { contParam: CVar
-      , params: (Var * FSyntax.Ty) list
-      , body: Stat
-      , resultTy: FSyntax.Ty
+      , params: (Var * 'ty) list
+      , body: 'ty stat
+      , resultTy: 'ty
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
-  | LogicalAnd of Exp * Exp
-  | LogicalOr of Exp * Exp
+  | LogicalAnd of 'ty exp * 'ty exp
+  | LogicalOr of 'ty exp * 'ty exp
   (* TODO: direct-style function application? *)
-  and Dec =
-    ValDec of {exp: Exp, results: (Var option * FSyntax.Ty) list}
+  and 'ty dec =
+    ValDec of {exp: 'ty exp, results: (Var option * 'ty) list}
   | RecDec of
       { name: Var
       , contParam: CVar
-      , params: (Var * FSyntax.Ty) list
-      , body: Stat
-      , resultTy: FSyntax.Ty
+      , params: (Var * 'ty) list
+      , body: 'ty stat
+      , resultTy: 'ty
       , attr: CSyntax.AbsAttr
       } list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option * FSyntax.Ty) list, body: Stat}
-  | RecContDec of (CVar * (Var option * FSyntax.Ty) list * Stat) list
+  | ContDec of {name: CVar, params: (Var option * 'ty) list, body: 'ty stat}
+  | RecContDec of (CVar * (Var option * 'ty) list * 'ty stat) list
   | ESImportDec of
       { pure: bool
-      , specs: (Syntax.ESImportName * Var * FSyntax.Ty) list
+      , specs: (Syntax.ESImportName * Var * 'ty) list
       , moduleName: string
       }
-  and Stat =
-    Let of {decs: Dec list, cont: Stat}
-  | App of {applied: Exp, cont: CVar, args: Exp list, attr: CSyntax.AppAttr}
-  | AppCont of {applied: CVar, args: Exp list}
-  | If of {cond: Exp, thenCont: Stat, elseCont: Stat}
+  and 'ty stat =
+    Let of {decs: 'ty dec list, cont: 'ty stat}
+  | App of
+      {applied: 'ty exp, cont: CVar, args: 'ty exp list, attr: CSyntax.AppAttr}
+  | AppCont of {applied: CVar, args: 'ty exp list}
+  | If of {cond: 'ty exp, thenCont: 'ty stat, elseCont: 'ty stat}
   | Handle of
-      { body: Stat
-      , handler: Var * Stat
+      { body: 'ty stat
+      , handler: Var * 'ty stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
-      , resultTy: FSyntax.Ty
+      , resultTy: 'ty
       }
-  | Raise of SourcePos.span * Exp
+  | Raise of SourcePos.span * 'ty exp
   | Unreachable
-  val containsApp: Stat -> bool
-  val fromStat: CSyntax.Stat -> Stat
-  val toNested: Backend.backend * Stat -> Stat
+  val containsApp: 'ty stat -> bool
+  val fromStat: CSyntax.Stat -> FSyntax.Ty stat
+  val toNested: Backend.backend * 'ty stat -> 'ty stat
 end =
 struct
   type Var = CSyntax.Var
   type CVar = CSyntax.CVar
-  datatype Exp =
+  datatype 'ty exp =
     Value of CSyntax.Value
-  | PrimOp of {primOp: FSyntax.PrimOp, tyargs: FSyntax.Ty list, args: Exp list}
-  | Record of Exp Syntax.LabelMap.map
-  | ExnTag of {name: string, payloadTy: FSyntax.Ty option}
+  | PrimOp of {primOp: FSyntax.PrimOp, tyargs: 'ty list, args: 'ty exp list}
+  | Record of 'ty exp Syntax.LabelMap.map
+  | ExnTag of {name: string, payloadTy: 'ty option}
   | Projection of
       { label: Syntax.Label
-      , record: Exp
-      , fieldTypes: FSyntax.Ty Syntax.LabelMap.map
+      , record: 'ty exp
+      , fieldTypes: 'ty Syntax.LabelMap.map
       }
   | Abs of
       { contParam: CVar
-      , params: (Var * FSyntax.Ty) list
-      , body: Stat
-      , resultTy: FSyntax.Ty
+      , params: (Var * 'ty) list
+      , body: 'ty stat
+      , resultTy: 'ty
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
-  | LogicalAnd of Exp * Exp
-  | LogicalOr of Exp * Exp
-  and Dec =
-    ValDec of {exp: Exp, results: (Var option * FSyntax.Ty) list}
+  | LogicalAnd of 'ty exp * 'ty exp
+  | LogicalOr of 'ty exp * 'ty exp
+  and 'ty dec =
+    ValDec of {exp: 'ty exp, results: (Var option * 'ty) list}
   | RecDec of
       { name: Var
       , contParam: CVar
-      , params: (Var * FSyntax.Ty) list
-      , body: Stat
-      , resultTy: FSyntax.Ty
+      , params: (Var * 'ty) list
+      , body: 'ty stat
+      , resultTy: 'ty
       , attr: CSyntax.AbsAttr
       } list (* recursive function *)
-  | ContDec of {name: CVar, params: (Var option * FSyntax.Ty) list, body: Stat}
-  | RecContDec of (CVar * (Var option * FSyntax.Ty) list * Stat) list
+  | ContDec of {name: CVar, params: (Var option * 'ty) list, body: 'ty stat}
+  | RecContDec of (CVar * (Var option * 'ty) list * 'ty stat) list
   | ESImportDec of
       { pure: bool
-      , specs: (Syntax.ESImportName * Var * FSyntax.Ty) list
+      , specs: (Syntax.ESImportName * Var * 'ty) list
       , moduleName: string
       }
-  and Stat =
-    Let of {decs: Dec list, cont: Stat}
-  | App of {applied: Exp, cont: CVar, args: Exp list, attr: CSyntax.AppAttr}
-  | AppCont of {applied: CVar, args: Exp list}
-  | If of {cond: Exp, thenCont: Stat, elseCont: Stat}
+  and 'ty stat =
+    Let of {decs: 'ty dec list, cont: 'ty stat}
+  | App of
+      {applied: 'ty exp, cont: CVar, args: 'ty exp list, attr: CSyntax.AppAttr}
+  | AppCont of {applied: CVar, args: 'ty exp list}
+  | If of {cond: 'ty exp, thenCont: 'ty stat, elseCont: 'ty stat}
   | Handle of
-      { body: Stat
-      , handler: Var * Stat
+      { body: 'ty stat
+      , handler: Var * 'ty stat
       , successfulExitIn: CVar
       , successfulExitOut: CVar
-      , resultTy: FSyntax.Ty
+      , resultTy: 'ty
       }
-  | Raise of SourcePos.span * Exp
+  | Raise of SourcePos.span * 'ty exp
   | Unreachable
 
   fun containsAppDec (ValDec _) = false
@@ -231,7 +233,7 @@ struct
   sig
     datatype frequency = NEVER | ONCE | MANY
     type usage_table
-    val analyze: Stat -> usage_table
+    val analyze: 'ty stat -> usage_table
     val get: usage_table * Var -> frequency
   end =
   struct

@@ -52,7 +52,7 @@ sig
   val initContext: unit -> Context
   val doProgram: Context
                  -> CSyntax.CVar
-                 -> NSyntax.Stat
+                 -> FSyntax.Ty NSyntax.stat
                  -> ToFSyntax.export_entity
                  -> WasmSyntax.module
 end =
@@ -574,7 +574,7 @@ struct
 
   (* Scan NSyntax to collect all (modName, fnName, paramWasmTys, resultWasmTys)
      from ForeignCallOp occurrences.  Results are deduplicated by (mod, fn). *)
-  fun collectForeignCallOps (stat: N.Stat) :
+  fun collectForeignCallOps (stat: F.Ty N.stat) :
     (string * string * W.valtype list * W.valtype list) list =
     let
       val seen: (string * string) list ref = ref []
@@ -795,7 +795,7 @@ struct
      emit boxing instructions so the result is anyref-compatible.
      This is needed when storing values into record/tuple struct fields. *)
   and doExpForAnyref (fctx: FuncContext) (env: Env)
-    (exp: N.Exp, acc: W.instr list) : W.instr list =
+    (exp: F.Ty N.exp, acc: W.instr list) : W.instr list =
     let
       val ctx = #ctx fctx
       val ubtOpt =
@@ -829,7 +829,7 @@ struct
       | NONE => doExp fctx env (exp, acc)
     end
 
-  and doExp (fctx: FuncContext) (env: Env) (exp: N.Exp, acc: W.instr list) :
+  and doExp (fctx: FuncContext) (env: Env) (exp: F.Ty N.exp, acc: W.instr list) :
     W.instr list =
     let
       val ctx = #ctx fctx
@@ -902,7 +902,7 @@ struct
   and doAbs (fctx: FuncContext) (env: Env)
     ( contParam: C.CVar
     , params: (C.Var * F.Ty) list
-    , body: N.Stat
+    , body: F.Ty N.stat
     , acc: W.instr list
     ) : W.instr list =
     let
@@ -1047,8 +1047,8 @@ struct
 
   (* ==================== doStat ==================== *)
 
-  and doStat (fctx: FuncContext) (env: Env) (stat: N.Stat, acc: W.instr list) :
-    W.instr list =
+  and doStat (fctx: FuncContext) (env: Env)
+    (stat: F.Ty N.stat, acc: W.instr list) : W.instr list =
     case stat of
       N.Let {decs, cont} => doLetDecs fctx env (decs, cont, acc)
     | N.App {applied, cont, args, attr = _} =>
@@ -1130,8 +1130,11 @@ struct
   (* ==================== Function application ==================== *)
 
   and doApp (fctx: FuncContext) (env: Env)
-    (applied: N.Exp, cont: C.CVar, args: N.Exp list, acc: W.instr list) :
-    W.instr list =
+    ( applied: F.Ty N.exp
+    , cont: C.CVar
+    , args: F.Ty N.exp list
+    , acc: W.instr list
+    ) : W.instr list =
     let
       val ctx = #ctx fctx
       val contRepr = C.CVarMap.find (#continuations env, cont)
@@ -1217,7 +1220,7 @@ struct
   (* ==================== Continuation application ==================== *)
 
   and doAppCont (fctx: FuncContext) (env: Env)
-    (applied: C.CVar, args: N.Exp list, acc: W.instr list) : W.instr list =
+    (applied: C.CVar, args: F.Ty N.exp list, acc: W.instr list) : W.instr list =
     let
       val contRepr = C.CVarMap.find (#continuations env, applied)
     in
@@ -1269,7 +1272,8 @@ struct
   (* Process a Let's dec list, handling ContDec specially by wrapping in block/br.
      For ContDec: generates block around the rest, then continuation body after. *)
   and doLetDecs (fctx: FuncContext) (env: Env)
-    (decs: N.Dec list, finalCont: N.Stat, acc: W.instr list) : W.instr list =
+    (decs: F.Ty N.dec list, finalCont: F.Ty N.stat, acc: W.instr list) :
+    W.instr list =
     case decs of
       [] => doStat fctx env (finalCont, acc)
     | N.ContDec {name, params, body} :: restDecs =>
@@ -1484,7 +1488,7 @@ struct
         in doLetDecs fctx env' (restDecs, finalCont, acc')
         end
 
-  and doDec (fctx: FuncContext) (env: Env) (dec: N.Dec, acc: W.instr list) :
+  and doDec (fctx: FuncContext) (env: Env) (dec: F.Ty N.dec, acc: W.instr list) :
     Env * W.instr list =
     case dec of
       N.ValDec {exp, results} => doValDec fctx env (exp, results, acc)
@@ -1499,7 +1503,7 @@ struct
   (* ==================== ValDec ==================== *)
 
   and doValDec (fctx: FuncContext) (env: Env)
-    (exp: N.Exp, results: (C.Var option * F.Ty) list, acc: W.instr list) :
+    (exp: F.Ty N.exp, results: (C.Var option * F.Ty) list, acc: W.instr list) :
     Env * W.instr list =
     case results of
       [(SOME v, ty)] =>
@@ -1524,7 +1528,7 @@ struct
         { name: C.Var
         , contParam: C.CVar
         , params: (C.Var * F.Ty) list
-        , body: N.Stat
+        , body: F.Ty N.stat
         , resultTy: F.Ty
         , attr: C.AbsAttr
         } list
@@ -1917,7 +1921,7 @@ struct
   and doContDec (fctx: FuncContext) (env: Env)
     ( name: C.CVar
     , params: (C.Var option * F.Ty) list
-    , body: N.Stat
+    , body: F.Ty N.stat
     , acc: W.instr list
     ) : Env * W.instr list =
     let
@@ -1934,7 +1938,7 @@ struct
   (* ==================== RecContDec (recursive continuations) ==================== *)
 
   and doRecContDec (fctx: FuncContext) (env: Env)
-    ( defs: (C.CVar * (C.Var option * F.Ty) list * N.Stat) list
+    ( defs: (C.CVar * (C.Var option * F.Ty) list * F.Ty N.stat) list
     , acc: W.instr list
     ) : Env * W.instr list =
     let
@@ -1973,8 +1977,11 @@ struct
   (* ==================== PrimOp ==================== *)
 
   and doPrimOp (fctx: FuncContext) (env: Env)
-    (primOp: F.PrimOp, tyargs: F.Ty list, args: N.Exp list, acc: W.instr list) :
-    W.instr list =
+    ( primOp: F.PrimOp
+    , tyargs: F.Ty list
+    , args: F.Ty N.exp list
+    , acc: W.instr list
+    ) : W.instr list =
     let
       val ctx = #ctx fctx
     in
@@ -2410,7 +2417,7 @@ struct
   (* ==================== PrimCall ==================== *)
 
   and doPrimCall (fctx: FuncContext) (env: Env)
-    (prim: Primitives.PrimOp, args: N.Exp list, acc: W.instr list) :
+    (prim: Primitives.PrimOp, args: F.Ty N.exp list, acc: W.instr list) :
     W.instr list =
     let
       val ctx = #ctx fctx
@@ -3287,7 +3294,7 @@ struct
       ()
     end
 
-  fun doProgram (ctx: Context) (returnCont: C.CVar) (program: N.Stat)
+  fun doProgram (ctx: Context) (returnCont: C.CVar) (program: F.Ty N.stat)
     (export: ToFSyntax.export_entity) : W.module =
     let
       (* Phase 1: pre-scan for ForeignCallOp and register all imports.
