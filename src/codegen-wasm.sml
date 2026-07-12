@@ -41,7 +41,8 @@ sig
     , revLocalTypes: WasmSyntax.valtype list ref (* reversed *)
     }
 
-  val labelToFieldIndex: Syntax.Label * FSyntax.Ty Syntax.LabelMap.map -> int
+  val labelToFieldIndex: Syntax.Label * WasmRepType.Ty Syntax.LabelMap.map
+                         -> int
 
   val getTupleTypeIdx: Context -> int -> WasmSyntax.typeidx
 
@@ -52,7 +53,7 @@ sig
   val initContext: unit -> Context
   val doProgram: Context
                  -> CSyntax.CVar
-                 -> FSyntax.Ty NSyntax.stat
+                 -> WasmRepType.Ty NSyntax.stat
                  -> ToFSyntax.export_entity
                  -> WasmSyntax.module
 end =
@@ -62,6 +63,7 @@ struct
   structure F = FSyntax
   structure C = CSyntax
   structure N = NSyntax
+  structure R = WasmRepType
   structure W = WasmSyntax
 
   type Context =
@@ -101,44 +103,20 @@ struct
 
   (* ==================== Type Mapping ==================== *)
 
-  (* Map FSyntax.Ty to unboxed type tag, if applicable *)
-  fun tyToUnboxedTy (F.TyVar tv) =
-        if tv = PrimTypes.Names.int32 then SOME F.UBTyInt32
-        else if tv = PrimTypes.Names.word32 then SOME F.UBTyWord32
-        else if tv = PrimTypes.Names.bool then SOME F.UBTyBool
-        else if tv = PrimTypes.Names.char then SOME F.UBTyChar
-        else if tv = PrimTypes.Names.char16 then SOME F.UBTyChar16
-        else if tv = PrimTypes.Names.char32 then SOME F.UBTyChar32
-        else if tv = PrimTypes.Names.int64 then SOME F.UBTyInt64
-        else if tv = PrimTypes.Names.word64 then SOME F.UBTyWord64
-        else if tv = PrimTypes.Names.real then SOME F.UBTyReal
-        else if tv = PrimTypes.Names.wasm_ptr then SOME F.UBTyWasmPtr
-        else NONE
+  (* Map WasmRepType.Ty to unboxed type tag, if applicable *)
+  fun tyToUnboxedTy (R.Unboxed ubt) = SOME ubt
     | tyToUnboxedTy _ = NONE
 
-  (* Convert FSyntax.Ty to Wasm valtype for local variable allocation.
+  (* Convert WasmRepType.Ty to Wasm valtype for local variable allocation.
      After boxing (NSyntaxFromCpsWasm), unboxed types appear in certain
-     positions; boxed types and polymorphic types use anyref. *)
-  fun tyToWasmType (F.TyVar tv) =
-        if
-          tv = PrimTypes.Names.int32 orelse tv = PrimTypes.Names.word32
-          orelse tv = PrimTypes.Names.bool orelse tv = PrimTypes.Names.char
-          orelse tv = PrimTypes.Names.char7 orelse tv = PrimTypes.Names.char16
-          orelse tv = PrimTypes.Names.char32 orelse tv = PrimTypes.Names.uchar
-          orelse tv = PrimTypes.Names.wasm_ptr
-        then W.NumType W.I32
-        else if
-          tv = PrimTypes.Names.int64 orelse tv = PrimTypes.Names.word64
-        then W.NumType W.I64
-        else if
-          tv = PrimTypes.Names.real
-        then W.NumType W.F64
-        else anyref
-    | tyToWasmType (F.RecordType _) = anyref
-    | tyToWasmType (F.MultiFnType _) = anyref
-    | tyToWasmType (F.BoxedType) = anyref
-    | tyToWasmType (F.AnyType _) = anyref
-    | tyToWasmType _ = anyref (* other types default to anyref *)
+     positions; boxed types use anyref. *)
+  fun tyToWasmType (R.Unboxed ubt) =
+        (case ubt of
+           F.UBTyInt64 => W.NumType W.I64
+         | F.UBTyWord64 => W.NumType W.I64
+         | F.UBTyReal => W.NumType W.F64
+         | _ (* I32 family *) => W.NumType W.I32)
+    | tyToWasmType _ = anyref (* boxed types use anyref *)
 
   (* Compute the 0-based field index of a label within a LabelMap *)
   fun labelToFieldIndex (label, fieldTypes) =
@@ -559,9 +537,10 @@ struct
 
   (* ==================== ForeignCallOp import pre-registration ==================== *)
 
-  (* Convert an FSyntax type to a Wasm valtype for a Wasm import parameter/result.
+  (* Convert a representation type to a Wasm valtype for a Wasm import
+     parameter/result.
      Only primitive types are supported; others raise CodeGenError. *)
-  fun foreignTyToWasmType (ty: F.Ty) : W.valtype =
+  fun foreignTyToWasmType (ty: R.Ty) : W.valtype =
     case tyToUnboxedTy ty of
       SOME F.UBTyInt64 => W.NumType W.I64
     | SOME F.UBTyWord64 => W.NumType W.I64
@@ -574,7 +553,7 @@ struct
 
   (* Scan NSyntax to collect all (modName, fnName, paramWasmTys, resultWasmTys)
      from ForeignCallOp occurrences.  Results are deduplicated by (mod, fn). *)
-  fun collectForeignCallOps (stat: F.Ty N.stat) :
+  fun collectForeignCallOps (stat: R.Ty N.stat) :
     (string * string * W.valtype list * W.valtype list) list =
     let
       val seen: (string * string) list ref = ref []
@@ -590,7 +569,7 @@ struct
               val retTy = List.last tyargs
               val resultTys =
                 case retTy of
-                  F.RecordType fields =>
+                  R.Record fields =>
                     if Syntax.LabelMap.isEmpty fields then []
                     else [foreignTyToWasmType retTy]
                 | _ => [foreignTyToWasmType retTy]
@@ -744,7 +723,7 @@ struct
 
   (* Determine the unboxed type produced by a PrimOp, if any.
      Returns NONE for PrimOps that produce ref-typed results. *)
-  and primOpUnboxedTy (primOp: F.PrimOp, tyargs: F.Ty list) : F.UnboxedTy option =
+  and primOpUnboxedTy (primOp: F.PrimOp, tyargs: R.Ty list) : F.UnboxedTy option =
     case primOp of
       F.IntConstOp _ =>
         (case tyargs of
@@ -776,16 +755,24 @@ struct
         in
           case results of
             [resultTy] =>
-              let
-                val subst =
-                  ListPair.foldl
-                    (fn ((tv, _), ty, acc) =>
-                       TypedSyntax.TyVarMap.insert (acc, tv, ty))
-                    TypedSyntax.TyVarMap.empty (vars, tyargs)
-                val resultTy' = #doTy (F.substTy subst) resultTy
-              in
-                tyToUnboxedTy resultTy'
-              end
+              (* The primitive's result type is an FSyntax.Ty over the
+                 primitive's type variables. A full F.substTy is impossible
+                 with WasmRepType arguments, but only a TyVar head can yield
+                 an unboxed type, so substitute at the variable level. *)
+              (case F.forceTy resultTy of
+                 F.TyVar tv =>
+                   let
+                     val subst =
+                       ListPair.foldl
+                         (fn ((tv', _), rep, acc) =>
+                            TypedSyntax.TyVarMap.insert (acc, tv', rep))
+                         TypedSyntax.TyVarMap.empty (vars, tyargs)
+                   in
+                     case TypedSyntax.TyVarMap.find (subst, tv) of
+                       SOME rep => tyToUnboxedTy rep
+                     | NONE => tyToUnboxedTy (R.fromTy (F.TyVar tv))
+                   end
+               | _ => NONE)
           | _ => NONE
         end
     | _ => NONE
@@ -795,7 +782,7 @@ struct
      emit boxing instructions so the result is anyref-compatible.
      This is needed when storing values into record/tuple struct fields. *)
   and doExpForAnyref (fctx: FuncContext) (env: Env)
-    (exp: F.Ty N.exp, acc: W.instr list) : W.instr list =
+    (exp: R.Ty N.exp, acc: W.instr list) : W.instr list =
     let
       val ctx = #ctx fctx
       val ubtOpt =
@@ -829,7 +816,7 @@ struct
       | NONE => doExp fctx env (exp, acc)
     end
 
-  and doExp (fctx: FuncContext) (env: Env) (exp: F.Ty N.exp, acc: W.instr list) :
+  and doExp (fctx: FuncContext) (env: Env) (exp: R.Ty N.exp, acc: W.instr list) :
     W.instr list =
     let
       val ctx = #ctx fctx
@@ -871,7 +858,7 @@ struct
             val fieldTy =
               case Syntax.LabelMap.find (fieldTypes, label) of
                 SOME ty => ty
-              | NONE => F.BoxedType
+              | NONE => R.Boxed
             val unboxInstrs =
               case tyToUnboxedTy fieldTy of
                 SOME ubt => emitUnbox (ubt, ctx)
@@ -901,8 +888,8 @@ struct
 
   and doAbs (fctx: FuncContext) (env: Env)
     ( contParam: C.CVar
-    , params: (C.Var * F.Ty) list
-    , body: F.Ty N.stat
+    , params: (C.Var * R.Ty) list
+    , body: R.Ty N.stat
     , acc: W.instr list
     ) : W.instr list =
     let
@@ -1046,7 +1033,7 @@ struct
   (* ==================== doStat ==================== *)
 
   and doStat (fctx: FuncContext) (env: Env)
-    (stat: F.Ty N.stat, acc: W.instr list) : W.instr list =
+    (stat: R.Ty N.stat, acc: W.instr list) : W.instr list =
     case stat of
       N.Let {decs, cont} => doLetDecs fctx env (decs, cont, acc)
     | N.App {applied, cont, args, attr = _} =>
@@ -1128,9 +1115,9 @@ struct
   (* ==================== Function application ==================== *)
 
   and doApp (fctx: FuncContext) (env: Env)
-    ( applied: F.Ty N.exp
+    ( applied: R.Ty N.exp
     , cont: C.CVar
-    , args: F.Ty N.exp list
+    , args: R.Ty N.exp list
     , acc: W.instr list
     ) : W.instr list =
     let
@@ -1218,7 +1205,7 @@ struct
   (* ==================== Continuation application ==================== *)
 
   and doAppCont (fctx: FuncContext) (env: Env)
-    (applied: C.CVar, args: F.Ty N.exp list, acc: W.instr list) : W.instr list =
+    (applied: C.CVar, args: R.Ty N.exp list, acc: W.instr list) : W.instr list =
     let
       val contRepr = C.CVarMap.find (#continuations env, applied)
     in
@@ -1270,7 +1257,7 @@ struct
   (* Process a Let's dec list, handling ContDec specially by wrapping in block/br.
      For ContDec: generates block around the rest, then continuation body after. *)
   and doLetDecs (fctx: FuncContext) (env: Env)
-    (decs: F.Ty N.dec list, finalCont: F.Ty N.stat, acc: W.instr list) :
+    (decs: R.Ty N.dec list, finalCont: R.Ty N.stat, acc: W.instr list) :
     W.instr list =
     case decs of
       [] => doStat fctx env (finalCont, acc)
@@ -1486,7 +1473,7 @@ struct
         in doLetDecs fctx env' (restDecs, finalCont, acc')
         end
 
-  and doDec (fctx: FuncContext) (env: Env) (dec: F.Ty N.dec, acc: W.instr list) :
+  and doDec (fctx: FuncContext) (env: Env) (dec: R.Ty N.dec, acc: W.instr list) :
     Env * W.instr list =
     case dec of
       N.ValDec {exp, results} => doValDec fctx env (exp, results, acc)
@@ -1501,7 +1488,7 @@ struct
   (* ==================== ValDec ==================== *)
 
   and doValDec (fctx: FuncContext) (env: Env)
-    (exp: F.Ty N.exp, results: (C.Var option * F.Ty) list, acc: W.instr list) :
+    (exp: R.Ty N.exp, results: (C.Var option * R.Ty) list, acc: W.instr list) :
     Env * W.instr list =
     case results of
       [(SOME v, ty)] =>
@@ -1525,9 +1512,9 @@ struct
     ( decs:
         { name: C.Var
         , contParam: C.CVar
-        , params: (C.Var * F.Ty) list
-        , body: F.Ty N.stat
-        , resultTy: F.Ty
+        , params: (C.Var * R.Ty) list
+        , body: R.Ty N.stat
+        , resultTy: R.Ty
         , attr: C.AbsAttr
         } list
     , acc: W.instr list
@@ -1918,8 +1905,8 @@ struct
 
   and doContDec (fctx: FuncContext) (env: Env)
     ( name: C.CVar
-    , params: (C.Var option * F.Ty) list
-    , body: F.Ty N.stat
+    , params: (C.Var option * R.Ty) list
+    , body: R.Ty N.stat
     , acc: W.instr list
     ) : Env * W.instr list =
     let
@@ -1936,7 +1923,7 @@ struct
   (* ==================== RecContDec (recursive continuations) ==================== *)
 
   and doRecContDec (fctx: FuncContext) (env: Env)
-    ( defs: (C.CVar * (C.Var option * F.Ty) list * F.Ty N.stat) list
+    ( defs: (C.CVar * (C.Var option * R.Ty) list * R.Ty N.stat) list
     , acc: W.instr list
     ) : Env * W.instr list =
     let
@@ -1976,8 +1963,8 @@ struct
 
   and doPrimOp (fctx: FuncContext) (env: Env)
     ( primOp: F.PrimOp
-    , tyargs: F.Ty list
-    , args: F.Ty N.exp list
+    , tyargs: R.Ty list
+    , args: R.Ty N.exp list
     , acc: W.instr list
     ) : W.instr list =
     let
@@ -2415,7 +2402,7 @@ struct
   (* ==================== PrimCall ==================== *)
 
   and doPrimCall (fctx: FuncContext) (env: Env)
-    (prim: Primitives.PrimOp, args: F.Ty N.exp list, acc: W.instr list) :
+    (prim: Primitives.PrimOp, args: R.Ty N.exp list, acc: W.instr list) :
     W.instr list =
     let
       val ctx = #ctx fctx
@@ -3292,7 +3279,7 @@ struct
       ()
     end
 
-  fun doProgram (ctx: Context) (returnCont: C.CVar) (program: F.Ty N.stat)
+  fun doProgram (ctx: Context) (returnCont: C.CVar) (program: R.Ty N.stat)
     (export: ToFSyntax.export_entity) : W.module =
     let
       (* Phase 1: pre-scan for ForeignCallOp and register all imports.

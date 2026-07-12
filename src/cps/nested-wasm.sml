@@ -14,18 +14,21 @@
  * Because it runs after all CPS optimizations (at emit time, the same point
  * NSyntax.fromStat runs), boxing sees fully-inlined code, so no wasted
  * boundaries are created and the CPS type checker can stay enabled through
- * the whole CPS pipeline. The output type matches NSyntax.fromStat
- * (FSyntax.Ty NSyntax.stat); the machine-oriented RepType is a later step. *)
+ * the whole CPS pipeline. Unlike NSyntax.fromStat, the output is annotated
+ * with the machine-oriented WasmRepType.Ty: the environment is kept in
+ * FSyntax.Ty (needed to decide boxing), and annotations are converted with
+ * WasmRepType.fromTy at emission points. *)
 structure NSyntaxFromCpsWasm:
 sig
   val fromStatWasm: CpsSimplify.Context * CSyntax.Stat
-                    -> FSyntax.Ty NSyntax.stat
+                    -> WasmRepType.Ty NSyntax.stat
 end =
 struct
   local
     structure F = FSyntax
     structure C = CSyntax
     structure N = NSyntax
+    structure R = WasmRepType
     structure TyVarMap = TypedSyntax.TyVarMap
     structure VIdMap = TypedSyntax.VIdMap
   in
@@ -113,39 +116,40 @@ struct
     fun prependDec (dec, body) =
       prependDecs ([dec], body)
     (* Box a value (as an inline NSyntax exp) if its type is unboxed. *)
-    fun boxArg (env: env) (v: C.Value) : F.Ty N.exp =
+    fun boxArg (env: env) (v: C.Value) : R.Ty N.exp =
       case tyToUnboxedTy (typeOfValue env v) of
         SOME ubt =>
           N.PrimOp {primOp = F.BoxOp ubt, tyargs = [], args = [N.Value v]}
       | NONE => N.Value v
     fun boxArgs env vals =
       List.map (boxArg env) vals
-    (* Unbox a param: if unboxed, rename to fresh BoxedType and prepend an
+    (* Unbox a param: if unboxed, rename to fresh boxed param and prepend an
        UnboxOp dec binding the original var.
-       Returns (newParam, prependedDecs, envUpdate). *)
+       Returns (newParam, prependedDecs, envUpdate); the param annotation is
+       WasmRepType.Ty while the envUpdate keeps the FSyntax.Ty. *)
     fun unboxParam (ctx: Context) (v: TypedSyntax.VId option, ty: F.Ty) :
-      (TypedSyntax.VId option * F.Ty)
-      * F.Ty N.dec list
+      (TypedSyntax.VId option * R.Ty)
+      * R.Ty N.dec list
       * (TypedSyntax.VId * F.Ty) option =
       case (v, tyToUnboxedTy ty) of
         (SOME vid, SOME ubt) =>
           let
             val fresh = CpsSimplify.renewVId (ctx, vid)
           in
-            ( (SOME fresh, F.BoxedType)
+            ( (SOME fresh, R.Boxed)
             , [N.ValDec
                  { exp = N.PrimOp
                      { primOp = F.UnboxOp ubt
                      , tyargs = []
                      , args = [N.Value (C.Var fresh)]
                      }
-                 , results = [(SOME vid, ty)]
+                 , results = [(SOME vid, R.Unboxed ubt)]
                  }]
             , SOME (vid, ty)
             )
           end
-      | (SOME vid, NONE) => ((SOME vid, ty), [], SOME (vid, ty))
-      | (NONE, _) => ((NONE, ty), [], NONE)
+      | (SOME vid, NONE) => ((SOME vid, R.fromTy ty), [], SOME (vid, ty))
+      | (NONE, _) => ((NONE, R.fromTy ty), [], NONE)
     fun unboxParams ctx params =
       let
         val results = List.map (unboxParam ctx) params
@@ -182,14 +186,16 @@ struct
                 (fn (SOME v, ty) => SOME (v, ty) | (NONE, _) => NONE) results
             )
         fun boundResultTy resultTy =
-          if F.isUnboxedTy resultTy then F.BoxedType else resultTy
+          if F.isUnboxedTy resultTy then R.Boxed else R.fromTy resultTy
         fun goDecs (env as {tyMap, varTys}, dec :: decs, cont) =
               (case dec of
                  C.ValDec {exp, results} =>
                    let
+                     val results' =
+                       List.map (fn (v, ty) => (v, R.fromTy ty)) results
                      fun simple exp' =
                        prependDec
-                         ( N.ValDec {exp = exp', results = results}
+                         ( N.ValDec {exp = exp', results = results'}
                          , goDecs (addResults (env, results), decs, cont)
                          )
                    in
@@ -197,7 +203,7 @@ struct
                        C.PrimOp {primOp, tyargs, args} =>
                          simple (N.PrimOp
                            { primOp = primOp
-                           , tyargs = tyargs
+                           , tyargs = List.map R.fromTy tyargs
                            , args = List.map N.Value args
                            })
                      | C.Record fields =>
@@ -205,15 +211,17 @@ struct
                      | C.ExnTag {name, payloadTy} =>
                          simple (N.ExnTag
                            { name = name
-                           , payloadTy = Option.map (goTy tyMap) payloadTy
+                           , payloadTy =
+                               Option.map (fn ty => R.fromTy (goTy tyMap ty))
+                                 payloadTy
                            })
                      | C.Projection {label, record, fieldTypes} =>
-                         simple
-                           (N.Projection
-                              { label = label
-                              , record = N.Value record
-                              , fieldTypes = fieldTypes
-                              })
+                         simple (N.Projection
+                           { label = label
+                           , record = N.Value record
+                           , fieldTypes =
+                               Syntax.LabelMap.map R.fromTy fieldTypes
+                           })
                      | C.Abs
                          { contParam
                          , tyParams
@@ -239,7 +247,8 @@ struct
                                         { name = contParam
                                         , params =
                                             List.map
-                                              (fn (v, ty) => (v, goTy tyMap' ty))
+                                              (fn (v, ty) =>
+                                                 (v, R.fromTy (goTy tyMap' ty)))
                                               results
                                         , body = goDecs (env, decs, cont)
                                         }]
@@ -265,7 +274,7 @@ struct
                                            , resultTy = boundResultTy resultTy
                                            , attr = attr
                                            }
-                                       , results = results
+                                       , results = results'
                                        }
                                    , goDecs
                                        (addResults (env, results), decs, cont)
@@ -414,7 +423,9 @@ struct
                | C.ESImportDec {pure, specs, moduleName} =>
                    let
                      val specs' =
-                       List.map (fn (n, v, ty) => (n, v, goTy tyMap ty)) specs
+                       List.map
+                         (fn (n, v, ty) => (n, v, R.fromTy (goTy tyMap ty)))
+                         specs
                      val envUpdates = List.map (fn (_, v, ty) => (v, ty)) specs
                      val env' = addToVarEnv (env, envUpdates)
                    in
@@ -464,7 +475,7 @@ struct
                 , handler = (e, goStat (env, h))
                 , successfulExitIn = successfulExitIn
                 , successfulExitOut = successfulExitOut
-                , resultTy = goTy tyMap resultTy
+                , resultTy = R.fromTy (goTy tyMap resultTy)
                 }
           | goStat (_, C.Raise (span, x)) =
               N.Raise (span, N.Value x)
