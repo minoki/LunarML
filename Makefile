@@ -68,6 +68,7 @@ sources = \
   src/cps/unpack-record-parameter.sml \
   src/cps/eta.sml \
   src/cps/erase-poly.sml \
+  src/wasm/rep-type.sml \
   src/cps/nested-wasm.sml \
   src/backend.sml \
   src/nested.sml \

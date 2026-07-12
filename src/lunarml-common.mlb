@@ -57,6 +57,7 @@ cps/eta.sml
 cps/erase-poly.sml
 backend.sml
 nested.sml
+wasm/rep-type.sml
 cps/nested-wasm.sml
 lua/transform.sml
 codegen-lua.sml
