@@ -1,5 +1,6 @@
 structure Array = struct
 datatype array = datatype array
+val maxLen : int = 0x7fffffff
 fun length arr = _primCall "Array.length" (arr)
 fun sub (arr, i) = if i < 0 orelse length arr <= i then
                        raise Subscript

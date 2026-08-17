@@ -33,10 +33,8 @@ signature WORD = sig
     val ~ : word -> word
     val min : word * word -> word
     val max : word * word -> word
-    (*
     val fmt : StringCvt.radix -> word -> string
     val toString : word -> string
-    *)
     (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader; defined in scan-num.sml *)
     (* val fromString : string -> word option; defined in scan-num.sml *)
 end;
@@ -81,7 +79,107 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
-(* fmt, toString, scan, fromString *)
+local
+  infix 6 +! -!
+  fun x +! y = _primCall "Int.+.wrapping" (x, y)
+  fun x -! y = _primCall "Int.-.wrapping" (x, y)
+  fun ~! x = _primCall "Int.~.wrapping" (x)
+  fun div' (x, y) = _primCall "Word.div.unchecked" (x, y)
+  fun mod' (x, y) = _primCall "Word.mod.unchecked" (x, y)
+  fun wordToDigit i =
+    _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! _primCall "Word.toInt.unchecked" (i))
+  fun wordToHexDigit i =
+    if i < 0w10 then
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! _primCall "Word.toInt.unchecked" (i))
+    else
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"A") -! 10 +! _primCall "Word.toInt.unchecked" (i))
+  fun fmtBIN 0w0 = "0"
+    | fmtBIN x =
+        let
+          val initialBufSize = 32
+          val radix = 0w2
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtOCT 0w0 = "0"
+    | fmtOCT x =
+        let
+          (* 37777777777 *)
+          val initialBufSize = 11
+          val radix = 0w8
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtDEC 0w0 = "0"
+    | fmtDEC x =
+        let
+          (* 4294967295 *)
+          val initialBufSize = 10
+          val radix = 0w10
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtHEX 0w0 = "0"
+    | fmtHEX x =
+        let
+          (* ffffffff *)
+          val initialBufSize = 8
+          val radix = 0w16
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToHexDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+in
+  val toString = fmtHEX
+  fun fmt StringCvt.BIN = fmtBIN
+    | fmt StringCvt.OCT = fmtOCT
+    | fmt StringCvt.DEC = fmtDEC
+    | fmt StringCvt.HEX = fmtHEX
+end
+(* scan, fromString *)
 end; (* structure Word *)
 
 structure Word64 :> WORD where type word = Word64.word = struct
@@ -102,17 +200,17 @@ val << : word * Word.word -> word = fn (x, y) =>
     if y .Word.>=. 0w64 then
         0w0
     else
-        _primCall "Word64.<<.unchecked" (x, y)
+        _primCall "Word64.<<.unchecked.w64" (x, _primCall "Word.toWord64" (y))
 val >> : word * Word.word -> word = fn (x, y) =>
     if y .Word.>=. 0w64 then
         0w0
     else
-        _primCall "Word64.>>.unchecked" (x, y)
+        _primCall "Word64.>>.unchecked.w64" (x, _primCall "Word.toWord64" (y))
 val ~>> : word * Word.word -> word = fn (x, y) =>
     if y .Word.>=. 0w63 then
-        _primCall "Word64.~>>.unchecked" (x, 0w31)
+        _primCall "Word64.~>>.unchecked.w64" (x, 0w63)
     else
-        _primCall "Word64.~>>.unchecked" (x, y)
+        _primCall "Word64.~>>.unchecked.w64" (x, _primCall "Word.toWord64" (y))
 val compare : word * word -> order = fn (x, y) => if x = y then
                                                       EQUAL
                                                   else if x < y then
@@ -127,5 +225,105 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
-(* fmt, toString, scan, fromString *)
-end; (* structure Word *)
+local
+  infix 6 +! -!
+  fun x +! y = _primCall "Int.+.wrapping" (x, y)
+  fun x -! y = _primCall "Int.-.wrapping" (x, y)
+  fun ~! x = _primCall "Int.~.wrapping" (x)
+  fun div' (x, y) = _primCall "Word64.div.unchecked" (x, y)
+  fun mod' (x, y) = _primCall "Word64.mod.unchecked" (x, y)
+  fun wordToDigit i =
+    _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! _primCall "Word64.toInt.unchecked" (i))
+  fun wordToHexDigit i =
+    if i < 0w10 then
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"0") +! _primCall "Word64.toInt.unchecked" (i))
+    else
+      _primCall "Char.chr.unchecked" (_primCall "Char.ord" (#"A") -! 10 +! _primCall "Word64.toInt.unchecked" (i))
+  fun fmtBIN 0w0 = "0"
+    | fmtBIN x =
+        let
+          val initialBufSize = 64
+          val radix = 0w2
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtOCT 0w0 = "0"
+    | fmtOCT x =
+        let
+          (* 1777777777777777777777 *)
+          val initialBufSize = 22
+          val radix = 0w8
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtDEC 0w0 = "0"
+    | fmtDEC x =
+        let
+          (* 18446744073709551615 *)
+          val initialBufSize = 20
+          val radix = 0w10
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+  fun fmtHEX 0w0 = "0"
+    | fmtHEX x =
+        let
+          (* ffffffffffffffff *)
+          val initialBufSize = 16
+          val radix = 0w16
+          val buf = _primCall "CharArray.alloc" (initialBufSize)
+          fun go (i, 0w0) = i +! 1
+            | go (i, x) =
+                let val r = mod' (x, radix)
+                in _primCall "Unsafe.CharArray.update" (buf, i, wordToHexDigit r)
+                 ; go (i -! 1, div' (x, radix))
+                end
+          val i = go (initialBufSize -! 1, x)
+          val n = initialBufSize -! i
+          val buf2 = _primCall "CharArray.alloc" (n)
+        in
+          _primCall "CharArray.copy" (buf2, 0, buf, i, n)
+        ; _primCall "CharArray.unsafeFreeze" (buf2)
+        end
+in
+  val toString = fmtHEX
+  fun fmt StringCvt.BIN = fmtBIN
+    | fmt StringCvt.OCT = fmtOCT
+    | fmt StringCvt.DEC = fmtDEC
+    | fmt StringCvt.HEX = fmtHEX
+end
+(* scan, fromString *)
+end; (* structure Word64 *)

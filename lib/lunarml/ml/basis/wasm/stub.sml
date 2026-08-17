@@ -14,7 +14,6 @@ signature PACK_REAL = sig end
 signature PACK_WORD = sig end
 signature REAL = sig end
 signature STRING = sig end
-signature SUBSTRING = sig end
 signature TEXT = sig end
 signature TIME = sig end
 signature TIMER = sig end
@@ -86,12 +85,6 @@ structure RealArray = struct end
 structure RealArraySlice = struct end
 structure RealVector = struct end
 structure RealVectorSlice = struct end
-structure String = struct
-  val explode : string -> char list = fn _ => raise Fail "String.explode: not implemented yet"
-  val substring : string * int * int -> string = fn _ => raise Fail "String.substring: not implemented yet"
-  open String
-end
-structure Substring = struct type substring = unit end
 structure Text = struct end
 structure Time = struct end
 structure Timer = struct end

@@ -31,10 +31,8 @@ structure WordImpl :> sig
                             val ~ : word -> word
                             val min : word * word -> word
                             val max : word * word -> word
-                            (*
                             val fmt : StringCvt.radix -> word -> string
                             val toString : word -> string
-                            *)
                         end
                 structure Word8 : sig
                             eqtype word
@@ -68,10 +66,8 @@ structure WordImpl :> sig
                             val ~ : word -> word
                             val min : word * word -> word
                             val max : word * word -> word
-                            (*
                             val fmt : StringCvt.radix -> word -> string
                             val toString : word -> string
-                            *)
                         end
                 structure Word16 : sig
                             eqtype word
@@ -105,10 +101,8 @@ structure WordImpl :> sig
                             val ~ : word -> word
                             val min : word * word -> word
                             val max : word * word -> word
-                            (*
                             val fmt : StringCvt.radix -> word -> string
                             val toString : word -> string
-                            *)
                         end
                 structure Word32 : sig
                             eqtype word
@@ -142,10 +136,8 @@ structure WordImpl :> sig
                             val ~ : word -> word
                             val min : word * word -> word
                             val max : word * word -> word
-                            (*
                             val fmt : StringCvt.radix -> word -> string
                             val toString : word -> string
-                            *)
                         end
                 structure Word64 : sig
                             eqtype word
@@ -179,10 +171,8 @@ structure WordImpl :> sig
                             val ~ : word -> word
                             val min : word * word -> word
                             val max : word * word -> word
-                            (*
                             val fmt : StringCvt.radix -> word -> string
                             val toString : word -> string
-                            *)
                         end
                 sharing type LargeWord.word = Word64.word
                 val wordToWord8 : Word.word -> Word8.word
@@ -250,10 +240,8 @@ val op >= = Word.>=
 fun ~ x = Word.andb (Word.~ x, FULL)
 val min = Word.min
 val max = Word.max
-(*
 val fmt = Word.fmt
 val toString = Word.toString
-*)
 val toLargeWord = toLarge
 val toLargeWordX = toLargeX
 val fromLargeWord = fromLarge
@@ -297,10 +285,8 @@ val op >= = Word.>=
 fun ~ x = Word.andb (Word.~ x, FULL)
 val min = Word.min
 val max = Word.max
-(*
 val fmt = Word.fmt
 val toString = Word.toString
-*)
 val toLargeWord = toLarge
 val toLargeWordX = toLargeX
 val fromLargeWord = fromLarge

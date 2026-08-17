@@ -36,6 +36,8 @@ math.sig
 mono-sequence.sml
 wasm/array-prim.sml
 wasm/vector-prim.sml
+substring.sml
+wasm/char-1.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
