@@ -678,8 +678,12 @@ struct
         raise CodeGenError "doValue: INT should have been lowered to I32"
     | C.IntConst (Primitives.INT_INF, _) =>
         raise CodeGenError "doValue: INT_INF not supported in Wasm"
-    | C.WordConst (Primitives.W32, n) => W.I32_CONST (Int32.fromLarge n) :: acc
-    | C.WordConst (Primitives.W64, n) => W.I64_CONST (Int64.fromLarge n) :: acc
+    | C.WordConst (Primitives.W32, n) =>
+        W.I32_CONST (Int32.fromLarge
+          (Word32.toLargeIntX (Word32.fromLargeInt n))) :: acc
+    | C.WordConst (Primitives.W64, n) =>
+        W.I64_CONST (Int64.fromLarge
+          (Word64.toLargeIntX (Word64.fromLargeInt n))) :: acc
     | C.WordConst (Primitives.WORD, _) =>
         raise CodeGenError "doValue: WORD should have been lowered to W32"
     | C.CharConst (_, c) => W.I32_CONST (Int32.fromInt c) :: acc
@@ -2557,11 +2561,11 @@ struct
           doUnary [W.I32_CONST ~1, W.I32_BINOP W.XOR] args
 
       (* ---- Word32 shift ---- *)
-      | Primitives.Word_LSHIFT_unchecked (Primitives.W32, _) =>
+      | Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.W32) =>
           doBinary [W.I32_BINOP W.SHL] args
-      | Primitives.Word_RSHIFT_unchecked (Primitives.W32, _) =>
+      | Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.W32) =>
           doBinary [W.I32_BINOP W.SHR_U] args
-      | Primitives.Word_ARSHIFT_unchecked (Primitives.W32, _) =>
+      | Primitives.Word_ARSHIFT_unchecked (Primitives.W32, Primitives.W32) =>
           doBinary [W.I32_BINOP W.SHR_S] args
 
       (* ---- Word64 arithmetic ---- *)
@@ -2576,6 +2580,11 @@ struct
       | Primitives.Word_mod_unchecked Primitives.W64 =>
           (* division by zero: trap *)
           doBinary [W.I64_BINOP W.REM_U] args
+      | Primitives.Word_TILDE Primitives.W64 =>
+          (case args of
+             [arg] =>
+               W.I64_BINOP W.SUB :: doExp fctx env (arg, W.I64_CONST 0 :: acc)
+           | _ => raise CodeGenError "Word_TILDE: expected 1 arg")
 
       (* ---- Word64 comparison ---- *)
       | Primitives.Word_EQUAL Primitives.W64 =>
@@ -2593,11 +2602,11 @@ struct
           doUnary [W.I64_CONST ~1, W.I64_BINOP W.XOR] args
 
       (* ---- Word64 shift ---- *)
-      | Primitives.Word_LSHIFT_unchecked (Primitives.W64, _) =>
+      | Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.W64) =>
           doBinary [W.I64_BINOP W.SHL] args
-      | Primitives.Word_RSHIFT_unchecked (Primitives.W64, _) =>
+      | Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W64) =>
           doBinary [W.I64_BINOP W.SHR_U] args
-      | Primitives.Word_ARSHIFT_unchecked (Primitives.W64, _) =>
+      | Primitives.Word_ARSHIFT_unchecked (Primitives.W64, Primitives.W64) =>
           doBinary [W.I64_BINOP W.SHR_S] args
 
       (* ---- Word conversion ---- *)
