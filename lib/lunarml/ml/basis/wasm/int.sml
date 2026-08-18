@@ -144,15 +144,44 @@ val precision : Int.int option = SOME 64
 val MIN : int = ~0x8000_0000_0000_0000
 val minInt : int option = SOME MIN
 val maxInt : int option = SOME 0x7fff_ffff_ffff_ffff
-fun ~ x = _primCall "Int64.~" (x) (* TODO: check overflow *)
-fun abs x = _primCall "Int64.abs" (x) (* TODO: check overflow *)
-fun x + y = _primCall "Int64.+" (x, y) (* TODO: check overflow *)
-fun x - y = _primCall "Int64.-" (x, y) (* TODO: check overflow *)
-fun x * y = _primCall "Int64.*" (x, y) (* TODO: check overflow *)
 fun x < y = _primCall "Int64.<" (x, y)
 fun x <= y = _primCall "Int64.<=" (x, y)
 fun x > y = _primCall "Int64.>" (x, y)
 fun x >= y = _primCall "Int64.>=" (x, y)
+fun ~ (x : int) =
+  if x = MIN then
+    raise Overflow
+  else
+    _primCall "Int64.~.wrapping" (x)
+fun abs (x : int) =
+  if x >= 0 then
+    x
+  else
+    ~x
+fun x + y =
+  let val z = _primCall "Int64.+.wrapping" (x, y)
+  in
+    if (y > 0 andalso z < x) orelse (y < 0 andalso z > x) then
+      raise Overflow
+    else
+      z
+  end
+fun x - y =
+  let val z = _primCall "Int64.-.wrapping" (x, y)
+  in
+    if (y < 0 andalso z < x) orelse (y > 0 andalso z > x) then
+      raise Overflow
+    else
+      z
+  end
+fun x * y =
+  let val z = _primCall "Int64.*.wrapping" (x, y)
+  in
+    if (x = MIN andalso y = ~1) orelse (y = MIN andalso x = ~1) orelse (x <> 0 andalso _primCall "Int64.quot.unchecked" (z, x) <> y) orelse (y <> 0 andalso _primCall "Int64.quot.unchecked" (z, y) <> x) then
+      raise Overflow
+    else
+      z
+  end
 fun quot (x, y) =
   if y = 0 then
     raise Div
@@ -188,7 +217,12 @@ fun x mod y =
          _primCall "Int64.+.wrapping" (r, y)
     end
 fun fromInt (x : Int.int) = _primCall "Int.toInt64.unchecked" (x)
-val toInt : int -> Int.int = fn x => _primCall "Int64.toInt.unchecked" (x) (* TODO: check overflow *)
+val toInt : int -> Int.int =
+  fn x =>
+    if ~0x8000_0000 <= x andalso x <= 0x7fff_ffff then
+      _primCall "Int64.toInt.unchecked" (x)
+    else
+      raise Overflow
 val compare : int * int -> order = fn (x, y) => if x = y then
                                                     EQUAL
                                                 else if x < y then

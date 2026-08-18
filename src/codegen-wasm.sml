@@ -2425,13 +2425,10 @@ struct
       | Primitives.Bool_EQUAL => doBinary [W.I32_RELOP W.IEQ] args
 
       (* ---- Int32 arithmetic ---- *)
-      | Primitives.Int_PLUS Primitives.I32 => doBinary [W.I32_BINOP W.ADD] args
       | Primitives.Int_PLUS_wrapping Primitives.I32 =>
           doBinary [W.I32_BINOP W.ADD] args
-      | Primitives.Int_MINUS Primitives.I32 => doBinary [W.I32_BINOP W.SUB] args
       | Primitives.Int_MINUS_wrapping Primitives.I32 =>
           doBinary [W.I32_BINOP W.SUB] args
-      | Primitives.Int_TIMES Primitives.I32 => doBinary [W.I32_BINOP W.MUL] args
       | Primitives.Int_TIMES_wrapping Primitives.I32 =>
           doBinary [W.I32_BINOP W.MUL] args
       | Primitives.Int_quot_unchecked Primitives.I32 =>
@@ -2440,12 +2437,6 @@ struct
       | Primitives.Int_rem_unchecked Primitives.I32 =>
           (* division by zero: trap *)
           doBinary [W.I32_BINOP W.REM_S] args
-      | Primitives.Int_TILDE Primitives.I32 =>
-          (* 0 - x *)
-          (case args of
-             [arg] =>
-               W.I32_BINOP W.SUB :: doExp fctx env (arg, W.I32_CONST 0 :: acc)
-           | _ => raise CodeGenError "Int_TILDE: expected 1 arg")
       | Primitives.Int_TILDE_unchecked Primitives.I32 =>
           (case args of
              [arg] =>
@@ -2456,24 +2447,6 @@ struct
              [arg] =>
                W.I32_BINOP W.SUB :: doExp fctx env (arg, W.I32_CONST 0 :: acc)
            | _ => raise CodeGenError "Int_TILDE_wrapping: expected 1 arg")
-      | Primitives.Int_abs Primitives.I32 =>
-          (* abs(x) = if x < 0 then -x else x *)
-          (case args of
-             [arg] =>
-               let
-                 val localIdx = allocLocal fctx (W.NumType W.I32)
-                 val acc = doExp fctx env (arg, acc)
-                 val acc = W.LOCAL_TEE localIdx :: acc
-                 val acc = W.I32_CONST 0 :: acc
-                 val acc = W.I32_RELOP W.LT_S :: acc
-               in
-                 W.IF
-                   ( W.BlockTypeVal (W.NumType W.I32)
-                   , [W.I32_CONST 0, W.LOCAL_GET localIdx, W.I32_BINOP W.SUB]
-                   , [W.LOCAL_GET localIdx]
-                   ) :: acc
-               end
-           | _ => raise CodeGenError "Int_abs: expected 1 arg")
 
       (* ---- Int32 comparison ---- *)
       | Primitives.Int_EQUAL Primitives.I32 => doBinary [W.I32_RELOP W.IEQ] args
@@ -2483,13 +2456,10 @@ struct
       | Primitives.Int_GE Primitives.I32 => doBinary [W.I32_RELOP W.GE_S] args
 
       (* ---- Int64 arithmetic ---- *)
-      | Primitives.Int_PLUS Primitives.I64 => doBinary [W.I64_BINOP W.ADD] args
       | Primitives.Int_PLUS_wrapping Primitives.I64 =>
           doBinary [W.I64_BINOP W.ADD] args
-      | Primitives.Int_MINUS Primitives.I64 => doBinary [W.I64_BINOP W.SUB] args
       | Primitives.Int_MINUS_wrapping Primitives.I64 =>
           doBinary [W.I64_BINOP W.SUB] args
-      | Primitives.Int_TIMES Primitives.I64 => doBinary [W.I64_BINOP W.MUL] args
       | Primitives.Int_TIMES_wrapping Primitives.I64 =>
           doBinary [W.I64_BINOP W.MUL] args
       | Primitives.Int_quot_unchecked Primitives.I64 =>
@@ -2498,11 +2468,6 @@ struct
       | Primitives.Int_rem_unchecked Primitives.I64 =>
           (* division by zero: trap *)
           doBinary [W.I64_BINOP W.REM_S] args
-      | Primitives.Int_TILDE Primitives.I64 =>
-          (case args of
-             [arg] =>
-               W.I64_BINOP W.SUB :: doExp fctx env (arg, W.I64_CONST 0 :: acc)
-           | _ => raise CodeGenError "Int_TILDE I64: expected 1 arg")
       | Primitives.Int_TILDE_unchecked Primitives.I64 =>
           (case args of
              [arg] =>
