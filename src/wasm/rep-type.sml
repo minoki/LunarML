@@ -12,6 +12,13 @@
  * Unboxed scalars are kept at UnboxedTy granularity (not collapsed to
  * i32/i64/f64) because the boxed representation differs within one Wasm type,
  * e.g. bool/char use i31 while int32 uses a dedicated struct.
+ *
+ * The annotation describes the machine representation, not the SML type: a
+ * WasmGC struct field and a closure parameter/result are always anyref, so
+ * record fields and function parameters/results are Boxed regardless of the
+ * FSyntax type they come from.  Whenever an unboxed value flows into or out of
+ * such a slot, NSyntaxFromCpsWasm inserts an explicit BoxOp/UnboxOp, so the
+ * code generator never has to infer boxing from the annotations.
  *)
 structure WasmRepType :>
 sig
@@ -61,9 +68,11 @@ struct
              SOME ubt => Unboxed ubt
            | NONE => Boxed)
       | fromTy (F.RecordType fields) =
-          Record (Syntax.LabelMap.map fromTy fields)
+          (* struct fields are anyref *)
+          Record (Syntax.LabelMap.map (fn _ => Boxed) fields)
       | fromTy (F.MultiFnType (params, result)) =
-          Function {params = List.map fromTy params, result = fromTy result}
+          (* the closure calling convention is uniformly anyref *)
+          Function {params = List.map (fn _ => Boxed) params, result = Boxed}
       | fromTy (ty as F.DelayedSubst _) =
           fromTy (F.forceTy ty)
       | fromTy (F.AppType _) = Boxed

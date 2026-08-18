@@ -6,10 +6,19 @@
  * (formerly CpsBoxing in cps/boxing.sml) into the nesting reconstruction.
  *
  * Unlike NSyntax.fromStat (used by the Lua/JS backends, a pure structural
- * map), this pass threads a type environment and inserts BoxOp/UnboxOp at
- * function/continuation boundaries: arguments of unboxed type are boxed at
- * App/AppCont sites, and unboxed parameters are renamed to BoxedType with an
- * UnboxOp prepended to the body.
+ * map), this pass threads a type environment and inserts BoxOp/UnboxOp
+ * wherever an unboxed value meets a slot that the Wasm representation keeps
+ * boxed (anyref):
+ *   - function/continuation boundaries: arguments of unboxed type are boxed at
+ *     App/AppCont sites, and unboxed parameters are renamed to BoxedType with
+ *     an UnboxOp prepended to the body;
+ *   - WasmGC struct fields: record construction boxes its fields, and a
+ *     projection whose field type is unboxed is followed by an UnboxOp;
+ *   - polymorphic primitive operations: every type variable of a primitive is
+ *     instantiated as boxed (their tyargs become WasmRepType.Boxed), so
+ *     operands in such positions are boxed and results are unboxed again.
+ * The code generator therefore never has to infer boxing from the shape of an
+ * expression.
  *
  * Because it runs after all CPS optimizations (at emit time, the same point
  * NSyntax.fromStat runs), boxing sees fully-inlined code, so no wasted
@@ -115,12 +124,15 @@ struct
       | prependDecs (decs, body) = N.Let {decs = decs, cont = body}
     fun prependDec (dec, body) =
       prependDecs ([dec], body)
-    (* Box a value (as an inline NSyntax exp) if its type is unboxed. *)
-    fun boxArg (env: env) (v: C.Value) : R.Ty N.exp =
-      case tyToUnboxedTy (typeOfValue env v) of
+    (* Box a value (as an inline NSyntax exp) if the given type is unboxed. *)
+    fun boxValue (ty: F.Ty, v: C.Value) : R.Ty N.exp =
+      case tyToUnboxedTy ty of
         SOME ubt =>
           N.PrimOp {primOp = F.BoxOp ubt, tyargs = [], args = [N.Value v]}
       | NONE => N.Value v
+    (* Box a value if its own type is unboxed. *)
+    fun boxArg (env: env) (v: C.Value) : R.Ty N.exp =
+      boxValue (typeOfValue env v, v)
     fun boxArgs env vals =
       List.map (boxArg env) vals
     (* Unbox a param: if unboxed, rename to fresh boxed param and prepend an
@@ -149,7 +161,8 @@ struct
             )
           end
       | (SOME vid, NONE) => ((SOME vid, R.fromTy ty), [], SOME (vid, ty))
-      | (NONE, _) => ((NONE, R.fromTy ty), [], NONE)
+      | (NONE, SOME _) => ((NONE, R.Boxed), [], NONE)
+      | (NONE, NONE) => ((NONE, R.fromTy ty), [], NONE)
     fun unboxParams ctx params =
       let
         val results = List.map (unboxParam ctx) params
@@ -170,6 +183,134 @@ struct
               | (NONE, _) => raise Fail "unexpected NONE") params'
       in
         (params'', decs, envUpdates)
+      end
+    (* Translate a PrimOp's type and value arguments.
+       A primitive's own type variables are always instantiated as boxed, so
+       every tyarg that fills such a variable becomes R.Boxed, an operand
+       flowing into such a position is boxed here, and `boxedResult` says that
+       the operation yields a boxed value (the caller then unboxes it if the
+       CPS result type is unboxed).  Type arguments that select a
+       representation rather than instantiate a type variable (the width of
+       IntConstOp, the argument/result types of ForeignCallOp, the data type of
+       a constructor operation, ...) are left alone. *)
+    fun goPrimOp
+      (env: env, primOp: F.PrimOp, tyargs: F.Ty list, args: C.Value list) :
+      {tyargs: R.Ty list, args: R.Ty N.exp list, boxedResult: bool} =
+      let
+        fun keep () =
+          { tyargs = List.map R.fromTy tyargs
+          , args = List.map N.Value args
+          , boxedResult = false
+          }
+        val allBoxed = List.map (fn _ => R.Boxed) tyargs
+        (* The element/payload type is normally given as a type argument; fall
+           back to the operand's own type if it is not. *)
+        fun boxByTyarg tyOpt =
+          case tyOpt of
+            SOME ty => (fn v => boxValue (ty, v))
+          | NONE => boxArg env
+      in
+        case (primOp, tyargs) of
+          (F.PrimCall p, _) =>
+            let
+              val {vars, args = formalArgs, results = formalResults} =
+                CheckF.TypeOfPrimitives.typeOf p
+            in
+              if
+                List.length vars <> List.length tyargs
+                orelse Vector.length formalArgs <> List.length args
+              then
+                keep () (* arity mismatch: leave the operation alone *)
+              else
+                let
+                  val subst =
+                    ListPair.foldl
+                      (fn ((tv, _), ty, m) => TyVarMap.insert (m, tv, ty))
+                      TyVarMap.empty (vars, tyargs)
+                  (* If a formal type is one of the primitive's type variables,
+                     the operand/result is boxed; the type it was instantiated
+                     with tells us how to box or unbox it. *)
+                  fun instantiated ty =
+                    case F.forceTy ty of
+                      F.TyVar tv => TyVarMap.find (subst, tv)
+                    | _ => NONE
+                  val args' =
+                    ListPair.map
+                      (fn (formal, v) =>
+                         case instantiated formal of
+                           SOME ty => boxValue (ty, v)
+                         | NONE => N.Value v)
+                      (Vector.foldr (op::) [] formalArgs, args)
+                  val boxedResult =
+                    case formalResults of
+                      [result] => Option.isSome (instantiated result)
+                    | _ => false
+                in
+                  {tyargs = allBoxed, args = args', boxedResult = boxedResult}
+                end
+            end
+        | (F.ListOp, _) =>
+            let
+              val box = boxByTyarg
+                (case tyargs of
+                   [elemTy] => SOME elemTy
+                 | _ => NONE)
+            in
+              {tyargs = allBoxed, args = List.map box args, boxedResult = false}
+            end
+        | (F.VectorOp, _) =>
+            let
+              val box = boxByTyarg
+                (case tyargs of
+                   [elemTy] => SOME elemTy
+                 | _ => NONE)
+            in
+              {tyargs = allBoxed, args = List.map box args, boxedResult = false}
+            end
+        | (F.ConstructValWithPayloadOp _, _) =>
+            let
+              val box = boxByTyarg
+                (case tyargs of
+                   [_, payloadTy] => SOME payloadTy
+                 | _ => NONE)
+            in
+              { tyargs =
+                  (case tyargs of
+                     [dataTy, _] => [R.fromTy dataTy, R.Boxed]
+                   | _ => allBoxed)
+              , args = List.map box args
+              , boxedResult = false
+              }
+            end
+        | (F.DataPayloadOp _, _) =>
+            { tyargs =
+                (case tyargs of
+                   [dataTy, _] => [R.fromTy dataTy, R.Boxed]
+                 | _ => allBoxed)
+            , args = List.map N.Value args
+            , boxedResult = true
+            }
+        | (F.ExnPayloadOp, _) =>
+            { tyargs = allBoxed
+            , args = List.map N.Value args
+            , boxedResult = true
+            }
+        | (F.ConstructExnWithPayloadOp, _) =>
+            let
+              val box = boxByTyarg
+                (case tyargs of
+                   [payloadTy] => SOME payloadTy
+                 | _ => NONE)
+            in
+              { tyargs = allBoxed
+              , args =
+                  (case args of
+                     [tag, payload] => [N.Value tag, box payload]
+                   | _ => List.map N.Value args)
+              , boxedResult = false
+              }
+            end
+        | _ => keep ()
       end
     fun fromStatWasm (ctx: Context, program) =
       let
@@ -193,21 +334,43 @@ struct
                    let
                      val results' =
                        List.map (fn (v, ty) => (v, R.fromTy ty)) results
+                     fun rest () =
+                       goDecs (addResults (env, results), decs, cont)
                      fun simple exp' =
                        prependDec
-                         ( N.ValDec {exp = exp', results = results'}
-                         , goDecs (addResults (env, results), decs, cont)
-                         )
+                         (N.ValDec {exp = exp', results = results'}, rest ())
+                     (* The expression yields boxed values: bind them to fresh
+                        boxed variables and recover the results whose CPS type
+                        is unboxed with an UnboxOp. *)
+                     fun boxedResult exp' =
+                       let
+                         val (results'', unboxDecs, _) = unboxParams ctx results
+                       in
+                         prependDecs
+                           ( N.ValDec {exp = exp', results = results''}
+                             :: unboxDecs
+                           , rest ()
+                           )
+                       end
                    in
                      case exp of
                        C.PrimOp {primOp, tyargs, args} =>
-                         simple (N.PrimOp
-                           { primOp = primOp
-                           , tyargs = List.map R.fromTy tyargs
-                           , args = List.map N.Value args
-                           })
+                         let
+                           val
+                             { tyargs = tyargs'
+                             , args = args'
+                             , boxedResult = isBoxed
+                             } = goPrimOp (env, primOp, tyargs, args)
+                           val exp' =
+                             N.PrimOp
+                               {primOp = primOp, tyargs = tyargs', args = args'}
+                         in
+                           if isBoxed then boxedResult exp' else simple exp'
+                         end
                      | C.Record fields =>
-                         simple (N.Record (Syntax.LabelMap.map N.Value fields))
+                         (* struct fields are anyref *)
+                         simple (N.Record
+                           (Syntax.LabelMap.map (boxArg env) fields))
                      | C.ExnTag {name, payloadTy} =>
                          simple (N.ExnTag
                            { name = name
@@ -216,7 +379,8 @@ struct
                                  payloadTy
                            })
                      | C.Projection {label, record, fieldTypes} =>
-                         simple (N.Projection
+                         (* struct fields are anyref *)
+                         boxedResult (N.Projection
                            { label = label
                            , record = N.Value record
                            , fieldTypes =
@@ -241,19 +405,28 @@ struct
                            case (params, typeOnly) of
                              ([], true) =>
                                (* Type-only abstraction: eliminate like erase-poly *)
-                               N.Let
-                                 { decs =
-                                     [N.ContDec
-                                        { name = contParam
-                                        , params =
-                                            List.map
-                                              (fn (v, ty) =>
-                                                 (v, R.fromTy (goTy tyMap' ty)))
-                                              results
-                                        , body = goDecs (env, decs, cont)
-                                        }]
-                                 , cont = goStat (env', body)
-                                 }
+                               let
+                                 val (params', unboxDecs, paramEnvUpdates) =
+                                   unboxParams ctx
+                                     (List.map
+                                        (fn (v, ty) => (v, goTy tyMap' ty))
+                                        results)
+                                 val contEnv =
+                                   addToVarEnv (env, paramEnvUpdates)
+                               in
+                                 N.Let
+                                   { decs =
+                                       [N.ContDec
+                                          { name = contParam
+                                          , params = params'
+                                          , body = prependDecs
+                                              ( unboxDecs
+                                              , goDecs (contEnv, decs, cont)
+                                              )
+                                          }]
+                                   , cont = goStat (env', body)
+                                   }
+                               end
                            | (_ :: _, true) =>
                                raise Fail "invalid type abstraction"
                            | (_, false) =>
@@ -475,7 +648,7 @@ struct
                 , handler = (e, goStat (env, h))
                 , successfulExitIn = successfulExitIn
                 , successfulExitOut = successfulExitOut
-                , resultTy = R.fromTy (goTy tyMap resultTy)
+                , resultTy = boundResultTy (goTy tyMap resultTy)
                 }
           | goStat (_, C.Raise (span, x)) =
               N.Raise (span, N.Value x)

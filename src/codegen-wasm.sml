@@ -725,101 +725,6 @@ struct
 
   (* ==================== doExp ==================== *)
 
-  (* Determine the unboxed type produced by a PrimOp, if any.
-     Returns NONE for PrimOps that produce ref-typed results. *)
-  and primOpUnboxedTy (primOp: F.PrimOp, tyargs: R.Ty list) : F.UnboxedTy option =
-    case primOp of
-      F.IntConstOp _ =>
-        (case tyargs of
-           [ty] => tyToUnboxedTy ty
-         | _ => NONE)
-    | F.WordConstOp _ =>
-        (case tyargs of
-           [ty] => tyToUnboxedTy ty
-         | _ => NONE)
-    | F.RealConstOp _ => SOME F.UBTyReal
-    | F.Char7ConstOp _ => SOME F.UBTyChar
-    | F.Char8ConstOp _ => SOME F.UBTyChar
-    | F.Char16ConstOp _ => SOME F.UBTyChar16
-    | F.Char32ConstOp _ => SOME F.UBTyChar32
-    | F.UCharConstOp _ => SOME F.UBTyChar
-    | F.UnboxOp ubt => SOME ubt
-    | F.DataTagAsInt32Op _ => SOME F.UBTyInt32
-    | F.DataPayloadOp _ =>
-        (case tyargs of
-           [_, payloadTy] => tyToUnboxedTy payloadTy
-         | _ => NONE)
-    | F.ExnPayloadOp =>
-        (case tyargs of
-           [payloadTy] => tyToUnboxedTy payloadTy
-         | _ => NONE)
-    | F.PrimCall p =>
-        let
-          val {vars, results, ...} = CheckF.TypeOfPrimitives.typeOf p
-        in
-          case results of
-            [resultTy] =>
-              (* The primitive's result type is an FSyntax.Ty over the
-                 primitive's type variables. A full F.substTy is impossible
-                 with WasmRepType arguments, but only a TyVar head can yield
-                 an unboxed type, so substitute at the variable level. *)
-              (case F.forceTy resultTy of
-                 F.TyVar tv =>
-                   let
-                     val subst =
-                       ListPair.foldl
-                         (fn ((tv', _), rep, acc) =>
-                            TypedSyntax.TyVarMap.insert (acc, tv', rep))
-                         TypedSyntax.TyVarMap.empty (vars, tyargs)
-                   in
-                     case TypedSyntax.TyVarMap.find (subst, tv) of
-                       SOME rep => tyToUnboxedTy rep
-                     | NONE => tyToUnboxedTy (R.fromTy (F.TyVar tv))
-                   end
-               | _ => NONE)
-          | _ => NONE
-        end
-    | _ => NONE
-
-  (* Evaluate an expression that must produce an anyref value.
-     If the expression produces an unboxed type (e.g., i32 constants),
-     emit boxing instructions so the result is anyref-compatible.
-     This is needed when storing values into record/tuple struct fields. *)
-  and doExpForAnyref (fctx: FuncContext) (env: Env)
-    (exp: R.Ty N.exp, acc: W.instr list) : W.instr list =
-    let
-      val ctx = #ctx fctx
-      val ubtOpt =
-        case exp of
-          N.Value (C.IntConst (Primitives.I32, _)) => SOME F.UBTyInt32
-        | N.Value (C.IntConst (Primitives.I64, _)) => SOME F.UBTyInt64
-        | N.Value (C.WordConst (Primitives.W32, _)) => SOME F.UBTyWord32
-        | N.Value (C.WordConst (Primitives.W64, _)) => SOME F.UBTyWord64
-        | N.Value (C.BoolConst _) => SOME F.UBTyBool
-        | N.Value (C.CharConst (C.C8, _)) => SOME F.UBTyChar
-        | N.Value (C.CharConst (C.C16, _)) => SOME F.UBTyChar16
-        | N.Value (C.CharConst (C.C32, _)) => SOME F.UBTyChar32
-        (* Handle variables with unboxed types in the environment *)
-        | N.Value (C.Var vid) =>
-            (case TypedSyntax.VIdMap.find (#vars env, vid) of
-               SOME (_, ubt_opt) => ubt_opt
-             | NONE => NONE)
-        (* PrimOps may also yield unboxed results.  After nestify, an
-           expression like (a + b) appears directly in a record field, so we
-           cannot rely on the value-level boxing performed for Var/const
-           cases above. *)
-        | N.PrimOp {primOp, tyargs, args = _} =>
-            primOpUnboxedTy (primOp, tyargs)
-        | N.LogicalAnd _ => SOME F.UBTyBool
-        | N.LogicalOr _ => SOME F.UBTyBool
-        | _ => NONE
-    in
-      case ubtOpt of
-        SOME ubt =>
-          List.revAppend (emitBox (ubt, ctx), doExp fctx env (exp, acc))
-      | NONE => doExp fctx env (exp, acc)
-    end
-
   and doExp (fctx: FuncContext) (env: Env) (exp: R.Ty N.exp, acc: W.instr list) :
     W.instr list =
     let
@@ -838,11 +743,11 @@ struct
             else
               let
                 val tupleIdx = getTupleTypeIdx ctx n
-                (* Use doExpForAnyref to auto-box unboxed constant values
-                   (e.g., integer literals stored as record fields) *)
+                (* Struct fields are anyref; NSyntaxFromCpsWasm has already
+                   boxed any field of unboxed type. *)
                 val acc' =
-                  Syntax.LabelMap.foldl
-                    (fn (e, a) => doExpForAnyref fctx env (e, a)) acc fields
+                  Syntax.LabelMap.foldl (fn (e, a) => doExp fctx env (e, a)) acc
+                    fields
               in
                 W.STRUCT_NEW tupleIdx :: acc'
               end
@@ -850,31 +755,7 @@ struct
       | N.ExnTag _ =>
           (* Create a fresh ExnTagType struct instance for unique identity via ref.eq *)
           W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
-      | N.Projection {label, record, fieldTypes} =>
-          let
-            val n = Syntax.LabelMap.numItems fieldTypes
-            val tupleIdx = getTupleTypeIdx ctx n
-            val fieldIdx = labelToFieldIndex (label, fieldTypes)
-            (* Tuple struct fields are always anyref, so struct.get returns anyref.
-               If the field's original type is unboxable (e.g., int32), we need to
-               unbox the result since the CPS type system still expects the
-               unboxed type. *)
-            val fieldTy =
-              case Syntax.LabelMap.find (fieldTypes, label) of
-                SOME ty => ty
-              | NONE => R.Boxed
-            val unboxInstrs =
-              case tyToUnboxedTy fieldTy of
-                SOME ubt => emitUnbox (ubt, ctx)
-              | NONE => []
-          in
-            List.revAppend
-              ( unboxInstrs
-              , W.STRUCT_GET (tupleIdx, fieldIdx)
-                :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
-                :: doExp fctx env (record, acc)
-              )
-          end
+      | N.Projection projection => doProjection fctx env (projection, acc)
       | N.Abs {contParam, params, body, resultTy = _, attr = _} =>
           doAbs fctx env (contParam, params, body, acc)
       | N.LogicalAnd (e1, e2) =>
@@ -886,6 +767,28 @@ struct
       | N.LogicalOr (e1, e2) =>
           W.IF (W.BlockTypeVal (W.NumType W.I32), [W.I32_CONST 1], List.rev
             (doExp fctx env (e2, []))) :: doExp fctx env (e1, acc)
+    end
+
+  (* Emit a record/tuple projection.
+     Tuple struct fields are always anyref, so struct.get returns anyref;
+     NSyntaxFromCpsWasm unboxes the result where the field type is unboxed. *)
+  and doProjection (fctx: FuncContext) (env: Env)
+    ( {label, record, fieldTypes}:
+        { label: Syntax.Label
+        , record: R.Ty N.exp
+        , fieldTypes: R.Ty Syntax.LabelMap.map
+        }
+    , acc: W.instr list
+    ) : W.instr list =
+    let
+      val ctx = #ctx fctx
+      val n = Syntax.LabelMap.numItems fieldTypes
+      val tupleIdx = getTupleTypeIdx ctx n
+      val fieldIdx = labelToFieldIndex (label, fieldTypes)
+    in
+      W.STRUCT_GET (tupleIdx, fieldIdx)
+      :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
+      :: doExp fctx env (record, acc)
     end
 
   (* ==================== Closure generation (Abs) ==================== *)
@@ -1141,8 +1044,7 @@ struct
               {nullable = false, heaptype = W.TypeIdx (#closureBaseTypeIdx ctx)}
             :: acc'
           val acc' =
-            List.foldl (fn (arg', a) => doExpForAnyref fctx env (arg', a)) acc'
-              args'
+            List.foldl (fn (arg', a) => doExp fctx env (arg', a)) acc' args'
           val acc' = W.LOCAL_GET closureLocal' :: acc'
           val acc' =
             W.REF_CAST
@@ -1336,22 +1238,13 @@ struct
                 val acc =
                   let
                     fun go ([], [], [], a) = a
-                      | go (lOpt :: lRest, (_, ty) :: pRest, arg :: aRest, a) =
+                      | go (lOpt :: lRest, _ :: pRest, arg :: aRest, a) =
                           let
                             val a' =
                               case lOpt of
                                 SOME lIdx =>
                                   W.LOCAL_SET lIdx
-                                  ::
-                                  (case tyToWasmType ty of
-                                     W.NumType W.I32 =>
-                                       doExp fctx envAfterRest (arg, a)
-                                   | W.NumType W.I64 =>
-                                       doExp fctx envAfterRest (arg, a)
-                                   | W.NumType W.F64 =>
-                                       doExp fctx envAfterRest (arg, a)
-                                   | _ =>
-                                       doExpForAnyref fctx envAfterRest (arg, a))
+                                  :: doExp fctx envAfterRest (arg, a)
                               | NONE =>
                                   W.DROP :: doExp fctx envAfterRest (arg, a)
                           in
@@ -2014,8 +1907,31 @@ struct
           raise CodeGenError "doPrimOp: String32ConstOp not yet implemented"
 
       (* ---- Box/Unbox ---- *)
+      (* Nesting a boxed value into an unboxed slot and vice versa (a common
+         result of inlining a continuation, or of reading a struct field and
+         storing it into another one) leaves a box/unbox round trip; emit the
+         inner expression instead.  Boxed scalars have no observable identity,
+         so dropping the reallocation is safe. *)
+      | ( F.BoxOp ubt
+        , _
+        , [N.PrimOp {primOp = F.UnboxOp ubt', tyargs = _, args = [inner]}]
+        ) =>
+          if ubt = ubt' then
+            doExp fctx env (inner, acc)
+          else
+            List.revAppend (emitBox (ubt, ctx), List.revAppend
+              (emitUnbox (ubt', ctx), doExp fctx env (inner, acc)))
       | (F.BoxOp ubt, _, [arg]) =>
           List.revAppend (emitBox (ubt, ctx), doExp fctx env (arg, acc))
+      | ( F.UnboxOp ubt
+        , _
+        , [N.PrimOp {primOp = F.BoxOp ubt', tyargs = _, args = [inner]}]
+        ) =>
+          if ubt = ubt' then
+            doExp fctx env (inner, acc)
+          else
+            List.revAppend (emitUnbox (ubt, ctx), List.revAppend
+              (emitBox (ubt', ctx), doExp fctx env (inner, acc)))
       | (F.UnboxOp ubt, _, [arg]) =>
           List.revAppend (emitUnbox (ubt, ctx), doExp fctx env (arg, acc))
 
@@ -2043,7 +1959,8 @@ struct
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for ConstructValOp")
-      | (F.ConstructValWithPayloadOp info, [_, payloadTy], [payload]) =>
+      | (F.ConstructValWithPayloadOp info, [_, _], [payload]) =>
+          (* The payload is boxed by NSyntaxFromCpsWasm. *)
           (case #representation info of
              Syntax.REP_BOXED =>
                (* Boxed constructor with payload: TaggedData{tag=idx, payload=boxed} *)
@@ -2052,55 +1969,36 @@ struct
                  val tagIdx = constructorTagIndex info
                  val acc = W.I32_CONST (Int32.fromInt tagIdx) :: acc
                  val acc = doExp fctx env (payload, acc)
-                 val acc =
-                   case tyToUnboxedTy payloadTy of
-                     SOME ubt => List.revAppend (emitBox (ubt, ctx), acc)
-                   | NONE => acc
                in
                  W.STRUCT_NEW taggedDataIdx :: acc
                end
            | Syntax.REP_ALIAS =>
-               (* REP_ALIAS: result is the payload itself.  Box if the payload
-                  type is unboxed (e.g. real → f64) so the result is always
-                  anyref-compatible, matching the variable's wasm type. *)
-               (case tyToUnboxedTy payloadTy of
-                  SOME ubt =>
-                    List.revAppend
-                      (emitBox (ubt, ctx), doExp fctx env (payload, acc))
-                | NONE => doExpForAnyref fctx env (payload, acc))
+               (* REP_ALIAS: the result is the (boxed) payload itself *)
+               doExp fctx env (payload, acc)
            | Syntax.REP_LIST =>
                doExp fctx env
                  (payload, acc) (* payload is already a cons cell from the IR *)
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for ConstructValWithPayloadOp")
-      | (F.DataPayloadOp info, [_, payloadTy], [arg]) =>
+      | (F.DataPayloadOp info, [_, _], [arg]) =>
+          (* The payload is stored boxed; NSyntaxFromCpsWasm unboxes the
+             result where the payload type is unboxed. *)
           (case #representation info of
              Syntax.REP_BOXED =>
-               (* Extract payload from TaggedData: cast + struct.get(1) + optional unbox *)
+               (* Extract payload from TaggedData: cast + struct.get(1) *)
                let
                  val taggedDataIdx = #taggedDataTypeIdx ctx
-                 val baseAcc =
-                   W.STRUCT_GET (taggedDataIdx, 1)
-                   ::
-                   W.REF_CAST
-                     {nullable = false, heaptype = W.TypeIdx taggedDataIdx}
-                   :: doExp fctx env (arg, acc)
                in
-                 case tyToUnboxedTy payloadTy of
-                   SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-                 | NONE => baseAcc
+                 W.STRUCT_GET (taggedDataIdx, 1)
+                 ::
+                 W.REF_CAST
+                   {nullable = false, heaptype = W.TypeIdx taggedDataIdx}
+                 :: doExp fctx env (arg, acc)
                end
            | Syntax.REP_ALIAS =>
-               (* REP_ALIAS: the value is stored boxed (see ConstructValWithPayloadOp).
-                  Unbox to the payload type if it is an unboxed type. *)
-               let
-                 val baseAcc = doExp fctx env (arg, acc)
-               in
-                 case tyToUnboxedTy payloadTy of
-                   SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-                 | NONE => baseAcc
-               end
+               (* REP_ALIAS: the value is the payload (see ConstructValWithPayloadOp) *)
+               doExp fctx env (arg, acc)
            | _ =>
                raise CodeGenError
                  "doPrimOp: unexpected representation for DataPayloadOp")
@@ -2129,25 +2027,19 @@ struct
           raise CodeGenError "DataTagAsStringOp not supported for Wasm target"
       | (F.DataTagAsString16Op _, _, [_]) =>
           raise CodeGenError "DataTagAsString16Op not supported for Wasm target"
-      | (F.ExnPayloadOp, [payloadTy], [arg]) =>
-          (* Extract payload (field 1) from $SmlExn struct.
-             The payload is stored as anyref; if the caller expects an unboxed
-             type, emit unbox instructions after extracting.
+      | (F.ExnPayloadOp, [_], [arg]) =>
+          (* Extract payload (field 1) from $SmlExn struct.  The payload is
+             stored as anyref; NSyntaxFromCpsWasm unboxes the result where the
+             payload type is unboxed.
              NOTE: acc is a reversed accumulator; instructions are prepended in
              reverse execution order. The desired execution order is:
-               arg → ref.cast($SmlExn) → struct.get(5,1) → [unbox] *)
+               arg → ref.cast($SmlExn) → struct.get(5,1) *)
           let
             val smlExnTypeIdx = #smlExnTypeIdx ctx
-            (* Base: push arg, cast to $SmlExn, get payload field *)
-            val baseAcc =
-              W.STRUCT_GET (smlExnTypeIdx, 1)
-              ::
-              W.REF_CAST {nullable = false, heaptype = W.TypeIdx smlExnTypeIdx}
-              :: doExp fctx env (arg, acc)
           in
-            case tyToUnboxedTy payloadTy of
-              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-            | NONE => baseAcc
+            W.STRUCT_GET (smlExnTypeIdx, 1)
+            :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx smlExnTypeIdx}
+            :: doExp fctx env (arg, acc)
           end
       | (F.ConstructExnOp, _, [tag]) =>
           (* Build $SmlExn struct with tag and null payload *)
@@ -2158,17 +2050,13 @@ struct
           in
             W.STRUCT_NEW smlExnTypeIdx :: acc
           end
-      | (F.ConstructExnWithPayloadOp, [payloadTy], [tag, payload]) =>
-          (* Build $SmlExn struct with tag and payload (anyref).
-             If the payload is an unboxed type (e.g., int), box it first. *)
+      | (F.ConstructExnWithPayloadOp, [_], [tag, payload]) =>
+          (* Build $SmlExn struct with tag and payload (anyref);
+             the payload is boxed by NSyntaxFromCpsWasm. *)
           let
             val smlExnTypeIdx = #smlExnTypeIdx ctx
             val acc = doExp fctx env (tag, acc)
             val acc = doExp fctx env (payload, acc)
-            val acc =
-              case tyToUnboxedTy payloadTy of
-                SOME ubt => List.revAppend (emitBox (ubt, ctx), acc)
-              | NONE => acc
           in
             W.STRUCT_NEW smlExnTypeIdx :: acc
           end
@@ -2176,33 +2064,14 @@ struct
           raise CodeGenError "doPrimOp: RaiseOp should not appear in NSyntax"
 
       (* ---- List operations ---- *)
-      | (F.ListOp, [elemTy], []) =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
       | (F.ListOp, _, []) => W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
-      | (F.ListOp, [elemTy], elems) =>
-          (* Build a cons-cell chain from left to right, using element type for boxing. *)
-          let
-            val tupleIdx = getTupleTypeIdx ctx 2
-            val doElem =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  (fn (e, a) =>
-                     List.revAppend (emitBox (ubt, ctx), doExp fctx env (e, a)))
-              | NONE => doExpForAnyref fctx env
-            val acc = List.foldl doElem acc elems
-            val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
-            val acc =
-              List.foldl (fn (_, a) => W.STRUCT_NEW tupleIdx :: a) acc elems
-          in
-            acc
-          end
       | (F.ListOp, _, elems) =>
-          (* Fallback: element type not available, use doExpForAnyref for auto-boxing. *)
+          (* Build a cons-cell chain from left to right.
+             The elements are boxed by NSyntaxFromCpsWasm. *)
           let
             val tupleIdx = getTupleTypeIdx ctx 2
             val acc =
-              List.foldl (fn (elem, a) => doExpForAnyref fctx env (elem, a)) acc
-                elems
+              List.foldl (fn (elem, a) => doExp fctx env (elem, a)) acc elems
             val acc = W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc
             val acc =
               List.foldl (fn (_, a) => W.STRUCT_NEW tupleIdx :: a) acc elems
@@ -2216,52 +2085,25 @@ struct
             val arrayTypeIdx = #arrayTypeIdx ctx
             val n = List.length args
             val argsAcc =
-              List.foldl (fn (a, prev) => doExpForAnyref fctx env (a, prev)) acc
-                args
+              List.foldl (fn (a, prev) => doExp fctx env (a, prev)) acc args
           in
             W.ARRAY_NEW_FIXED (arrayTypeIdx, n) :: argsAcc
           end
 
-      (* ---- PrimCall (type-aware overrides for Vector) ---- *)
-      | (F.PrimCall (Primitives.Unsafe_Vector_sub _), [elemTy], [v, idx]) =>
+      (* ---- Vector/list/ref/array element access ----
+         The element type of these containers is always boxed (anyref), so no
+         boxing happens here: NSyntaxFromCpsWasm has boxed the operands and
+         unboxes the results where the element type is unboxed. *)
+      | (F.PrimCall (Primitives.Unsafe_Vector_sub _), [_], [v, idx]) =>
           let
             val arrayTypeIdx = #arrayTypeIdx ctx
             val castV =
               W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
-            val baseAcc =
-              W.ARRAY_GET arrayTypeIdx
-              :: doExp fctx env (idx, castV :: doExp fctx env (v, acc))
           in
-            case tyToUnboxedTy elemTy of
-              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-            | NONE => baseAcc
+            W.ARRAY_GET arrayTypeIdx
+            :: doExp fctx env (idx, castV :: doExp fctx env (v, acc))
           end
 
-      (* ---- PrimCall (type-aware overrides) ---- *)
-      | (F.PrimCall Primitives.List_cons, [elemTy], [hd, tl]) =>
-          let
-            val tupleIdx = getTupleTypeIdx ctx 2
-            val hdAcc =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (hd, acc))
-              | NONE => doExpForAnyref fctx env (hd, acc)
-            val tlAcc = doExp fctx env (tl, hdAcc)
-          in
-            W.STRUCT_NEW tupleIdx :: tlAcc
-          end
-      | (F.PrimCall Primitives.List_unsafeHead, [elemTy], [lst]) =>
-          let
-            val tupleIdx = getTupleTypeIdx ctx 2
-            val baseAcc =
-              W.STRUCT_GET (tupleIdx, 0)
-              :: W.REF_CAST {nullable = false, heaptype = W.TypeIdx tupleIdx}
-              :: doExp fctx env (lst, acc)
-          in
-            case tyToUnboxedTy elemTy of
-              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-            | NONE => baseAcc
-          end
       | (F.PrimCall Primitives.List_unsafeTail, [_], [lst]) =>
           let
             val tupleIdx = getTupleTypeIdx ctx 2
@@ -2271,92 +2113,60 @@ struct
             :: doExp fctx env (lst, acc)
           end
 
-      (* ---- Ref cells (type-aware) ---- *)
-      | (F.PrimCall Primitives.Ref_ref, [elemTy], [arg]) =>
-          let
-            val refTypeIdx = #refTypeIdx ctx
-            val argAcc =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  List.revAppend (emitBox (ubt, ctx), doExp fctx env (arg, acc))
-              | NONE => doExpForAnyref fctx env (arg, acc)
-          in
-            W.STRUCT_NEW refTypeIdx :: argAcc
+      (* ---- Ref cells ---- *)
+      | (F.PrimCall Primitives.Ref_ref, [_], [arg]) =>
+          let val refTypeIdx = #refTypeIdx ctx
+          in W.STRUCT_NEW refTypeIdx :: doExp fctx env (arg, acc)
           end
-      | (F.PrimCall Primitives.Ref_set, [elemTy], [r, v]) =>
+      | (F.PrimCall Primitives.Ref_set, [_], [r, v]) =>
           let
             val refTypeIdx = #refTypeIdx ctx
             val castRef =
               W.REF_CAST {nullable = false, heaptype = W.TypeIdx refTypeIdx}
             val accAfterRef = castRef :: doExp fctx env (r, acc)
-            val accAfterValue =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  List.revAppend
-                    (emitBox (ubt, ctx), doExp fctx env (v, accAfterRef))
-              | NONE => doExpForAnyref fctx env (v, accAfterRef)
           in
-            W.STRUCT_SET (refTypeIdx, 0) :: accAfterValue
+            W.STRUCT_SET (refTypeIdx, 0) :: doExp fctx env (v, accAfterRef)
           end
-      | (F.PrimCall Primitives.Ref_read, [elemTy], [r]) =>
+      | (F.PrimCall Primitives.Ref_read, [_], [r]) =>
           let
             val refTypeIdx = #refTypeIdx ctx
             val castRef =
               W.REF_CAST {nullable = false, heaptype = W.TypeIdx refTypeIdx}
-            val baseAcc =
-              W.STRUCT_GET (refTypeIdx, 0) :: castRef :: doExp fctx env (r, acc)
           in
-            case tyToUnboxedTy elemTy of
-              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-            | NONE => baseAcc
+            W.STRUCT_GET (refTypeIdx, 0) :: castRef :: doExp fctx env (r, acc)
           end
 
-      (* ---- Array operations (type-aware) ---- *)
-      | (F.PrimCall (Primitives.Array_array _), [elemTy], [n, init]) =>
+      (* ---- Array operations ---- *)
+      | (F.PrimCall (Primitives.Array_array _), [_], [n, init]) =>
           let
             val arrayTypeIdx = #arrayTypeIdx ctx
-            val initAcc =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  List.revAppend
-                    (emitBox (ubt, ctx), doExp fctx env (init, acc))
-              | NONE => doExpForAnyref fctx env (init, acc)
           in
-            W.ARRAY_NEW arrayTypeIdx :: doExp fctx env (n, initAcc)
+            W.ARRAY_NEW arrayTypeIdx
+            :: doExp fctx env (n, doExp fctx env (init, acc))
           end
 
       | (F.PrimCall (Primitives.Array_allocUninitialized _), [_], [n]) =>
           W.ARRAY_NEW_DEFAULT (#arrayTypeIdx ctx) :: doExp fctx env (n, acc)
 
-      | (F.PrimCall (Primitives.Unsafe_Array_sub _), [elemTy], [arr, idx]) =>
+      | (F.PrimCall (Primitives.Unsafe_Array_sub _), [_], [arr, idx]) =>
           let
             val arrayTypeIdx = #arrayTypeIdx ctx
             val castArr =
               W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
-            val baseAcc =
-              W.ARRAY_GET arrayTypeIdx
-              :: doExp fctx env (idx, castArr :: doExp fctx env (arr, acc))
           in
-            case tyToUnboxedTy elemTy of
-              SOME ubt => List.revAppend (emitUnbox (ubt, ctx), baseAcc)
-            | NONE => baseAcc
+            W.ARRAY_GET arrayTypeIdx
+            :: doExp fctx env (idx, castArr :: doExp fctx env (arr, acc))
           end
 
-      | (F.PrimCall (Primitives.Unsafe_Array_update _), [elemTy], [arr, idx, v]) =>
+      | (F.PrimCall (Primitives.Unsafe_Array_update _), [_], [arr, idx, v]) =>
           let
             val arrayTypeIdx = #arrayTypeIdx ctx
             val castArr =
               W.REF_CAST {nullable = false, heaptype = W.TypeIdx arrayTypeIdx}
             val arrAcc = castArr :: doExp fctx env (arr, acc)
             val idxAcc = doExp fctx env (idx, arrAcc)
-            val vAcc =
-              case tyToUnboxedTy elemTy of
-                SOME ubt =>
-                  List.revAppend
-                    (emitBox (ubt, ctx), doExp fctx env (v, idxAcc))
-              | NONE => doExpForAnyref fctx env (v, idxAcc)
           in
-            W.ARRAY_SET arrayTypeIdx :: vAcc
+            W.ARRAY_SET arrayTypeIdx :: doExp fctx env (v, idxAcc)
           end
 
       (* ---- PrimCall ---- *)
@@ -2382,20 +2192,15 @@ struct
           raise CodeGenError "LuaMethodNOp not supported in Wasm"
 
       (* ---- Wasm function imports ---- *)
-      | (F.ForeignCallOp (modName, fnName, _), tyargs, args) =>
+      | (F.ForeignCallOp (modName, fnName, _), _, args) =>
           let
             val ctx = #ctx fctx
             val funcIdx = lookupForeignImport ctx (modName, fnName)
-            (* Evaluate each argument; choose doExp vs doExpForAnyref based on type.
-               The args are paired with their FSyntax types in tyargs. *)
-            val argTys = List.take (tyargs, List.length args)
+            (* The argument and result types of a Wasm import are primitive
+               (see foreignTyToWasmType), so the arguments are passed as they
+               are. *)
             val acc =
-              List.foldl
-                (fn ((arg, argTy), a) =>
-                   case tyToUnboxedTy argTy of
-                     SOME _ => doExp fctx env (arg, a)
-                   | NONE => doExpForAnyref fctx env (arg, a)) acc
-                (ListPair.zip (args, argTys))
+              List.foldl (fn (arg, a) => doExp fctx env (arg, a)) acc args
           in
             W.CALL funcIdx :: acc
           end
@@ -2827,8 +2632,8 @@ struct
              [hd, tl] =>
                let
                  val tupleIdx = getTupleTypeIdx ctx 2
-                 (* Box head if it's an unboxed constant (e.g., integer literal) *)
-                 val acc = doExpForAnyref fctx env (hd, acc)
+                 (* The head is boxed by NSyntaxFromCpsWasm *)
+                 val acc = doExp fctx env (hd, acc)
                  val acc = doExp fctx env (tl, acc)
                in
                  W.STRUCT_NEW tupleIdx :: acc
