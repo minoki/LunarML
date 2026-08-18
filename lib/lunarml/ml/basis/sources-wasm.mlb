@@ -38,6 +38,7 @@ wasm/array-prim.sml
 wasm/vector-prim.sml
 substring.sml
 wasm/char-1.sml
+vector.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
