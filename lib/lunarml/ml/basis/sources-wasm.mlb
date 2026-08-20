@@ -34,11 +34,14 @@ wasm/wasm-memory.sml
 ieee-real-0.sml
 math.sig
 mono-sequence.sml
-wasm/array-prim.sml
 wasm/vector-prim.sml
+wasm/array-prim.sml
 substring.sml
 wasm/char-1.sml
 vector.sml
+scan-num-utils.sml
+vector-slice.sml
+array-slice.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
