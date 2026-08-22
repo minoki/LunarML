@@ -42,6 +42,7 @@ vector.sml
 scan-num-utils.sml
 vector-slice.sml
 array-slice.sml
+wasm/real-1.sml
 os-path.sig
 io.sml
 wasi/text-io.sml

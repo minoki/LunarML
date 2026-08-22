@@ -68,16 +68,33 @@ datatype PrimOp = EQUAL (* = *)
                 | Word_toIntX_unchecked of word_width * int_width (* Word{w}.toIntX{i}.unchecked *)
                 | Word_fromInt of word_width * int_width (* Word{w}.fromInt{i} *)
                 | Word_toWord of word_width * word_width (* Word{w}.toWord{w} *)
+                | Real_posInf (* Real.posInf *)
+                | Real_negInf (* Real.negInf *)
+                | Real_EQUAL (* Real.== *)
                 | Real_PLUS (* Real.+ *)
                 | Real_MINUS (* Real.- *)
                 | Real_TIMES (* Real.* *)
                 | Real_DIVIDE (* Real./ *)
                 | Real_TILDE (* Real.~ *)
                 | Real_abs (* Real.abs *)
+                | Real_Math_sqrt (* Real.Math.sqrt *)
                 | Real_LT (* Real.< *)
                 | Real_LE (* Real.<= *)
                 | Real_GT (* Real.> *)
                 | Real_GE (* Real.>= *)
+                | Real_realFloor (* Real.realFloor *)
+                | Real_realCeil (* Real.realCeil *)
+                | Real_realTrunc (* Real.realTrunc *)
+                | Real_realRound (* Real.realRound *)
+                | Real_minimum (* Real.minimum *)
+                | Real_maximum (* Real.maximum *)
+                | Real_copySign (* Real.copySign *)
+                | Real_fromInt of int_width (* Real.fromInt{i} *)
+                | Real_fromWord of word_width (* Real.fromWord{w} *)
+                | Real_trunc_unchecked of int_width (* Real.trunc{.i}.unchecked *)
+                | Real_truncAsWord_unchecked of word_width (* Real.truncAsWord{.w}.unchecked *)
+                | Real_reinterpretAsWord64 (* Real.reinterpretAsWord64 *)
+                | Real_reinterpretFromWord64 (* Real.reinterpretFromWord64 *)
                 | Char_EQUAL (* Char.= *)
                 | Char_LT (* Char.< *)
                 | Char_LE (* Char.<= *)
@@ -582,16 +599,45 @@ fun toString EQUAL = "="
   | toString (Word_toWord (W64, WORD)) = "Word64.toWord"
   | toString (Word_toWord (W64, W32)) = "Word64.toWord32"
   | toString (Word_toWord (W64, W64)) = "Word64.toWord64"
+  | toString Real_posInf = "Real.posInf"
+  | toString Real_negInf = "Real.negInf"
+  | toString Real_EQUAL = "Real.=="
   | toString Real_PLUS = "Real.+"
   | toString Real_MINUS = "Real.-"
   | toString Real_TIMES = "Real.*"
   | toString Real_DIVIDE = "Real./"
   | toString Real_TILDE = "Real.~"
   | toString Real_abs = "Real.abs"
+  | toString Real_Math_sqrt = "Real.Math.sqrt"
   | toString Real_LT = "Real.<"
   | toString Real_LE = "Real.<="
   | toString Real_GT = "Real.>"
   | toString Real_GE = "Real.>="
+  | toString Real_realFloor = "Real.realFloor"
+  | toString Real_realCeil = "Real.realCeil"
+  | toString Real_realTrunc = "Real.realTrunc"
+  | toString Real_realRound = "Real.realRound"
+  | toString Real_minimum = "Real.minimum"
+  | toString Real_maximum = "Real.maximum"
+  | toString Real_copySign = "Real.copySign"
+  | toString (Real_fromInt INT) = "Real.fromInt"
+  | toString (Real_fromInt I32) = "Real.fromInt32"
+  | toString (Real_fromInt I54) = "Real.fromInt54"
+  | toString (Real_fromInt I64) = "Real.fromInt64"
+  | toString (Real_fromInt INT_INF) = "Real.fromIntInf"
+  | toString (Real_fromWord WORD) = "Real.fromWord"
+  | toString (Real_fromWord W32) = "Real.fromWord32"
+  | toString (Real_fromWord W64) = "Real.fromWord64"
+  | toString (Real_trunc_unchecked INT) = "Real.trunc.unchecked"
+  | toString (Real_trunc_unchecked I32) = "Real.trunc.i32.unchecked"
+  | toString (Real_trunc_unchecked I54) = "Real.trunc.i54.unchecked"
+  | toString (Real_trunc_unchecked I64) = "Real.trunc.i64.unchecked"
+  | toString (Real_trunc_unchecked INT_INF) = "Real.trunc.intInf.unchecked"
+  | toString (Real_truncAsWord_unchecked WORD) = "Real.truncAsWord.unchecked"
+  | toString (Real_truncAsWord_unchecked W32) = "Real.truncAsWord.w32.unchecked"
+  | toString (Real_truncAsWord_unchecked W64) = "Real.truncAsWord.w64.unchecked"
+  | toString Real_reinterpretAsWord64 = "Real.reinterpretAsWord64"
+  | toString Real_reinterpretFromWord64 = "Real.reinterpretFromWord64"
   | toString Char_EQUAL = "Char.="
   | toString Char_LT = "Char.<"
   | toString Char_LE = "Char.<="
@@ -1250,16 +1296,45 @@ fun fromString "=" = SOME EQUAL
   | fromString "Word64.toWord" = SOME (Word_toWord (W64, WORD))
   | fromString "Word64.toWord32" = SOME (Word_toWord (W64, W32))
   | fromString "Word64.toWord64" = SOME (Word_toWord (W64, W64))
+  | fromString "Real.posInf" = SOME Real_posInf
+  | fromString "Real.negInf" = SOME Real_negInf
+  | fromString "Real.==" = SOME Real_EQUAL
   | fromString "Real.+" = SOME Real_PLUS
   | fromString "Real.-" = SOME Real_MINUS
   | fromString "Real.*" = SOME Real_TIMES
   | fromString "Real./" = SOME Real_DIVIDE
   | fromString "Real.~" = SOME Real_TILDE
   | fromString "Real.abs" = SOME Real_abs
+  | fromString "Real.Math.sqrt" = SOME Real_Math_sqrt
   | fromString "Real.<" = SOME Real_LT
   | fromString "Real.<=" = SOME Real_LE
   | fromString "Real.>" = SOME Real_GT
   | fromString "Real.>=" = SOME Real_GE
+  | fromString "Real.realFloor" = SOME Real_realFloor
+  | fromString "Real.realCeil" = SOME Real_realCeil
+  | fromString "Real.realTrunc" = SOME Real_realTrunc
+  | fromString "Real.realRound" = SOME Real_realRound
+  | fromString "Real.minimum" = SOME Real_minimum
+  | fromString "Real.maximum" = SOME Real_maximum
+  | fromString "Real.copySign" = SOME Real_copySign
+  | fromString "Real.fromInt" = SOME (Real_fromInt INT)
+  | fromString "Real.fromInt32" = SOME (Real_fromInt I32)
+  | fromString "Real.fromInt54" = SOME (Real_fromInt I54)
+  | fromString "Real.fromInt64" = SOME (Real_fromInt I64)
+  | fromString "Real.fromIntInf" = SOME (Real_fromInt INT_INF)
+  | fromString "Real.fromWord" = SOME (Real_fromWord WORD)
+  | fromString "Real.fromWord32" = SOME (Real_fromWord W32)
+  | fromString "Real.fromWord64" = SOME (Real_fromWord W64)
+  | fromString "Real.trunc.unchecked" = SOME (Real_trunc_unchecked INT)
+  | fromString "Real.trunc.i32.unchecked" = SOME (Real_trunc_unchecked I32)
+  | fromString "Real.trunc.i54.unchecked" = SOME (Real_trunc_unchecked I54)
+  | fromString "Real.trunc.i64.unchecked" = SOME (Real_trunc_unchecked I64)
+  | fromString "Real.trunc.intInf.unchecked" = SOME (Real_trunc_unchecked INT_INF)
+  | fromString "Real.truncAsWord.unchecked" = SOME (Real_truncAsWord_unchecked WORD)
+  | fromString "Real.truncAsWord.w32.unchecked" = SOME (Real_truncAsWord_unchecked W32)
+  | fromString "Real.truncAsWord.w64.unchecked" = SOME (Real_truncAsWord_unchecked W64)
+  | fromString "Real.reinterpretAsWord64" = SOME Real_reinterpretAsWord64
+  | fromString "Real.reinterpretFromWord64" = SOME Real_reinterpretFromWord64
   | fromString "Char.=" = SOME Char_EQUAL
   | fromString "Char.<" = SOME Char_LT
   | fromString "Char.<=" = SOME Char_LE
@@ -1700,16 +1775,33 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Word_toIntX_unchecked _) = false
   | mayRaise (Word_fromInt _) = false
   | mayRaise (Word_toWord _) = false
+  | mayRaise Real_posInf = false
+  | mayRaise Real_negInf = false
+  | mayRaise Real_EQUAL = false
   | mayRaise Real_PLUS = false
   | mayRaise Real_MINUS = false
   | mayRaise Real_TIMES = false
   | mayRaise Real_DIVIDE = false
   | mayRaise Real_TILDE = false
   | mayRaise Real_abs = false
+  | mayRaise Real_Math_sqrt = false
   | mayRaise Real_LT = false
   | mayRaise Real_LE = false
   | mayRaise Real_GT = false
   | mayRaise Real_GE = false
+  | mayRaise Real_realFloor = false
+  | mayRaise Real_realCeil = false
+  | mayRaise Real_realTrunc = false
+  | mayRaise Real_realRound = false
+  | mayRaise Real_minimum = false
+  | mayRaise Real_maximum = false
+  | mayRaise Real_copySign = false
+  | mayRaise (Real_fromInt _) = false
+  | mayRaise (Real_fromWord _) = false
+  | mayRaise (Real_trunc_unchecked _) = false
+  | mayRaise (Real_truncAsWord_unchecked _) = false
+  | mayRaise Real_reinterpretAsWord64 = false
+  | mayRaise Real_reinterpretFromWord64 = false
   | mayRaise Char_EQUAL = false
   | mayRaise Char_LT = false
   | mayRaise Char_LE = false
@@ -1995,16 +2087,33 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Word_toIntX_unchecked _) = true
   | isDiscardable (Word_fromInt _) = true
   | isDiscardable (Word_toWord _) = true
+  | isDiscardable Real_posInf = true
+  | isDiscardable Real_negInf = true
+  | isDiscardable Real_EQUAL = true
   | isDiscardable Real_PLUS = true
   | isDiscardable Real_MINUS = true
   | isDiscardable Real_TIMES = true
   | isDiscardable Real_DIVIDE = true
   | isDiscardable Real_TILDE = true
   | isDiscardable Real_abs = true
+  | isDiscardable Real_Math_sqrt = true
   | isDiscardable Real_LT = true
   | isDiscardable Real_LE = true
   | isDiscardable Real_GT = true
   | isDiscardable Real_GE = true
+  | isDiscardable Real_realFloor = true
+  | isDiscardable Real_realCeil = true
+  | isDiscardable Real_realTrunc = true
+  | isDiscardable Real_realRound = true
+  | isDiscardable Real_minimum = true
+  | isDiscardable Real_maximum = true
+  | isDiscardable Real_copySign = true
+  | isDiscardable (Real_fromInt _) = true
+  | isDiscardable (Real_fromWord _) = true
+  | isDiscardable (Real_trunc_unchecked _) = true
+  | isDiscardable (Real_truncAsWord_unchecked _) = true
+  | isDiscardable Real_reinterpretAsWord64 = true
+  | isDiscardable Real_reinterpretFromWord64 = true
   | isDiscardable Char_EQUAL = true
   | isDiscardable Char_LT = true
   | isDiscardable Char_LE = true
@@ -2293,16 +2402,33 @@ fun isDiscardableWithArgs (Int_PLUS INT_INF, _) = true
   | isDiscardableWithArgs (Word_toIntX_unchecked _, [_]) = true
   | isDiscardableWithArgs (Word_fromInt _, [_]) = true
   | isDiscardableWithArgs (Word_toWord _, [_]) = true
+  | isDiscardableWithArgs (Real_posInf, []) = true
+  | isDiscardableWithArgs (Real_negInf, []) = true
+  | isDiscardableWithArgs (Real_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (Real_PLUS, [_, _]) = true
   | isDiscardableWithArgs (Real_MINUS, [_, _]) = true
   | isDiscardableWithArgs (Real_TIMES, [_, _]) = true
   | isDiscardableWithArgs (Real_DIVIDE, [_, _]) = true
   | isDiscardableWithArgs (Real_TILDE, [_]) = true
   | isDiscardableWithArgs (Real_abs, [_]) = true
+  | isDiscardableWithArgs (Real_Math_sqrt, [_]) = true
   | isDiscardableWithArgs (Real_LT, [_, _]) = true
   | isDiscardableWithArgs (Real_LE, [_, _]) = true
   | isDiscardableWithArgs (Real_GT, [_, _]) = true
   | isDiscardableWithArgs (Real_GE, [_, _]) = true
+  | isDiscardableWithArgs (Real_realFloor, [_]) = true
+  | isDiscardableWithArgs (Real_realCeil, [_]) = true
+  | isDiscardableWithArgs (Real_realTrunc, [_]) = true
+  | isDiscardableWithArgs (Real_realRound, [_]) = true
+  | isDiscardableWithArgs (Real_minimum, [_, _]) = true
+  | isDiscardableWithArgs (Real_maximum, [_, _]) = true
+  | isDiscardableWithArgs (Real_copySign, [_, _]) = true
+  | isDiscardableWithArgs (Real_fromInt _, [_]) = true
+  | isDiscardableWithArgs (Real_fromWord _, [_]) = true
+  | isDiscardableWithArgs (Real_trunc_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Real_truncAsWord_unchecked _, [_]) = true
+  | isDiscardableWithArgs (Real_reinterpretAsWord64, [_]) = true
+  | isDiscardableWithArgs (Real_reinterpretFromWord64, [_]) = true
   | isDiscardableWithArgs (Char_EQUAL, [_, _]) = true
   | isDiscardableWithArgs (Char_LT, [_, _]) = true
   | isDiscardableWithArgs (Char_LE, [_, _]) = true
@@ -2573,6 +2699,10 @@ fun fixIntWord { int, word }
         | Word_toIntX_unchecked (a1, a2) => Word_toIntX_unchecked (fixWord a1, fixInt a2)
         | Word_fromInt (a1, a2) => Word_fromInt (fixWord a1, fixInt a2)
         | Word_toWord (a1, a2) => Word_toWord (fixWord a1, fixWord a2)
+        | Real_fromInt a1 => Real_fromInt (fixInt a1)
+        | Real_fromWord a1 => Real_fromWord (fixWord a1)
+        | Real_trunc_unchecked a1 => Real_trunc_unchecked (fixInt a1)
+        | Real_truncAsWord_unchecked a1 => Real_truncAsWord_unchecked (fixWord a1)
         | Char_ord a1 => Char_ord (fixInt a1)
         | Char_chr_unchecked a1 => Char_chr_unchecked (fixInt a1)
         | Char7_ord a1 => Char7_ord (fixInt a1)
@@ -2682,16 +2812,33 @@ fun returnArity EQUAL = 1
   | returnArity (Word_toIntX_unchecked _) = 1
   | returnArity (Word_fromInt _) = 1
   | returnArity (Word_toWord _) = 1
+  | returnArity Real_posInf = 1
+  | returnArity Real_negInf = 1
+  | returnArity Real_EQUAL = 1
   | returnArity Real_PLUS = 1
   | returnArity Real_MINUS = 1
   | returnArity Real_TIMES = 1
   | returnArity Real_DIVIDE = 1
   | returnArity Real_TILDE = 1
   | returnArity Real_abs = 1
+  | returnArity Real_Math_sqrt = 1
   | returnArity Real_LT = 1
   | returnArity Real_LE = 1
   | returnArity Real_GT = 1
   | returnArity Real_GE = 1
+  | returnArity Real_realFloor = 1
+  | returnArity Real_realCeil = 1
+  | returnArity Real_realTrunc = 1
+  | returnArity Real_realRound = 1
+  | returnArity Real_minimum = 1
+  | returnArity Real_maximum = 1
+  | returnArity Real_copySign = 1
+  | returnArity (Real_fromInt _) = 1
+  | returnArity (Real_fromWord _) = 1
+  | returnArity (Real_trunc_unchecked _) = 1
+  | returnArity (Real_truncAsWord_unchecked _) = 1
+  | returnArity Real_reinterpretAsWord64 = 1
+  | returnArity Real_reinterpretFromWord64 = 1
   | returnArity Char_EQUAL = 1
   | returnArity Char_LT = 1
   | returnArity Char_LE = 1
@@ -3254,16 +3401,45 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [ty
   | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64], results = [word] }
   | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64], results = [word32] }
   | typeOf (Primitives.Word_toWord (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64], results = [word64] }
+  | typeOf Primitives.Real_posInf = { vars = [], args = vector [], results = [real] }
+  | typeOf Primitives.Real_negInf = { vars = [], args = vector [], results = [real] }
+  | typeOf Primitives.Real_EQUAL = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_MINUS = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_DIVIDE = { vars = [], args = vector [real, real], results = [real] }
   | typeOf Primitives.Real_TILDE = { vars = [], args = vector [real], results = [real] }
   | typeOf Primitives.Real_abs = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_Math_sqrt = { vars = [], args = vector [real], results = [real] }
   | typeOf Primitives.Real_LT = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_LE = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_GT = { vars = [], args = vector [real, real], results = [bool] }
   | typeOf Primitives.Real_GE = { vars = [], args = vector [real, real], results = [bool] }
+  | typeOf Primitives.Real_realFloor = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_realCeil = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_realTrunc = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_realRound = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_minimum = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_maximum = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_copySign = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf (Primitives.Real_fromInt Primitives.INT) = { vars = [], args = vector [int], results = [real] }
+  | typeOf (Primitives.Real_fromInt Primitives.I32) = { vars = [], args = vector [int32], results = [real] }
+  | typeOf (Primitives.Real_fromInt Primitives.I54) = { vars = [], args = vector [int54], results = [real] }
+  | typeOf (Primitives.Real_fromInt Primitives.I64) = { vars = [], args = vector [int64], results = [real] }
+  | typeOf (Primitives.Real_fromInt Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [real] }
+  | typeOf (Primitives.Real_fromWord Primitives.WORD) = { vars = [], args = vector [], results = [real] }
+  | typeOf (Primitives.Real_fromWord Primitives.W32) = { vars = [], args = vector [], results = [real] }
+  | typeOf (Primitives.Real_fromWord Primitives.W64) = { vars = [], args = vector [], results = [real] }
+  | typeOf (Primitives.Real_trunc_unchecked Primitives.INT) = { vars = [], args = vector [real], results = [int] }
+  | typeOf (Primitives.Real_trunc_unchecked Primitives.I32) = { vars = [], args = vector [real], results = [int32] }
+  | typeOf (Primitives.Real_trunc_unchecked Primitives.I54) = { vars = [], args = vector [real], results = [int54] }
+  | typeOf (Primitives.Real_trunc_unchecked Primitives.I64) = { vars = [], args = vector [real], results = [int64] }
+  | typeOf (Primitives.Real_trunc_unchecked Primitives.INT_INF) = { vars = [], args = vector [real], results = [intInf] }
+  | typeOf (Primitives.Real_truncAsWord_unchecked Primitives.WORD) = { vars = [], args = vector [real], results = [] }
+  | typeOf (Primitives.Real_truncAsWord_unchecked Primitives.W32) = { vars = [], args = vector [real], results = [] }
+  | typeOf (Primitives.Real_truncAsWord_unchecked Primitives.W64) = { vars = [], args = vector [real], results = [] }
+  | typeOf Primitives.Real_reinterpretAsWord64 = { vars = [], args = vector [real], results = [word64] }
+  | typeOf Primitives.Real_reinterpretFromWord64 = { vars = [], args = vector [word64], results = [real] }
   | typeOf Primitives.Char_EQUAL = { vars = [], args = vector [char, char], results = [bool] }
   | typeOf Primitives.Char_LT = { vars = [], args = vector [char, char], results = [bool] }
   | typeOf Primitives.Char_LE = { vars = [], args = vector [char, char], results = [bool] }

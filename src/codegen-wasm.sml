@@ -2414,14 +2414,45 @@ struct
           doUnary [] args (* no-op *)
 
       (* ---- Real (F64) arithmetic ---- *)
+      | Primitives.Real_posInf => W.F64_CONST Real.posInf :: acc
+      | Primitives.Real_negInf => W.F64_CONST Real.negInf :: acc
       | Primitives.Real_PLUS => doBinary [W.F64_BINOP W.FADD] args
       | Primitives.Real_MINUS => doBinary [W.F64_BINOP W.FSUB] args
       | Primitives.Real_TIMES => doBinary [W.F64_BINOP W.FMUL] args
       | Primitives.Real_DIVIDE => doBinary [W.F64_BINOP W.FDIV] args
       | Primitives.Real_TILDE => doUnary [W.F64_UNOP W.NEG] args
       | Primitives.Real_abs => doUnary [W.F64_UNOP W.ABS] args
+      | Primitives.Real_Math_sqrt => doUnary [W.F64_UNOP W.SQRT] args
+      | Primitives.Real_realFloor => doUnary [W.F64_UNOP W.FLOOR] args
+      | Primitives.Real_realCeil => doUnary [W.F64_UNOP W.CEIL] args
+      | Primitives.Real_realTrunc => doUnary [W.F64_UNOP W.TRUNC] args
+      | Primitives.Real_realRound => doUnary [W.F64_UNOP W.NEAREST] args
+      | Primitives.Real_minimum => doBinary [W.F64_BINOP W.FMIN] args
+      | Primitives.Real_maximum => doBinary [W.F64_BINOP W.FMAX] args
+      | Primitives.Real_copySign => doBinary [W.F64_BINOP W.FCOPYSIGN] args
+      | Primitives.Real_fromInt Primitives.I32 =>
+          doUnary [W.F64_CONVERT_I32 W.S] args
+      | Primitives.Real_fromInt Primitives.I64 =>
+          doUnary [W.F64_CONVERT_I64 W.S] args
+      | Primitives.Real_fromWord Primitives.W32 =>
+          doUnary [W.F64_CONVERT_I32 W.U] args
+      | Primitives.Real_fromWord Primitives.W64 =>
+          doUnary [W.F64_CONVERT_I64 W.U] args
+      | Primitives.Real_trunc_unchecked Primitives.I32 =>
+          doUnary [W.I32_TRUNC_F64 W.S] args
+      | Primitives.Real_trunc_unchecked Primitives.I64 =>
+          doUnary [W.I64_TRUNC_F64 W.S] args
+      | Primitives.Real_truncAsWord_unchecked Primitives.W32 =>
+          doUnary [W.I32_TRUNC_F64 W.U] args
+      | Primitives.Real_truncAsWord_unchecked Primitives.W64 =>
+          doUnary [W.I64_TRUNC_F64 W.U] args
+      | Primitives.Real_reinterpretAsWord64 =>
+          doUnary [W.F64_REINTERPRET_I64] args
+      | Primitives.Real_reinterpretFromWord64 =>
+          doUnary [W.I64_REINTERPRET_F64] args
 
       (* ---- Real comparison ---- *)
+      | Primitives.Real_EQUAL => doBinary [W.F64_RELOP W.FEQ] args
       | Primitives.Real_LT => doBinary [W.F64_RELOP W.FLT] args
       | Primitives.Real_LE => doBinary [W.F64_RELOP W.FLE] args
       | Primitives.Real_GT => doBinary [W.F64_RELOP W.FGT] args
