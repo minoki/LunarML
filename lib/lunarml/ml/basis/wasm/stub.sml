@@ -1,18 +1,14 @@
 signature ARRAY = sig end
-signature ARRAY_SLICE = sig end
 signature BOOL = sig end
 signature BYTE = sig end
 signature CHAR = sig end
 signature DATE = sig end
-signature INT_INF = sig end
-signature LIST = sig end
 signature MONO_ARRAY = sig end
 signature MONO_ARRAY_SLICE = sig end
 signature MONO_VECTOR = sig end
 signature MONO_VECTOR_SLICE = sig end
 signature PACK_REAL = sig end
 signature PACK_WORD = sig end
-signature REAL = sig end
 signature STRING = sig end
 signature TEXT = sig end
 signature TIME = sig end
@@ -20,19 +16,12 @@ signature TIMER = sig end
 signature UNSAFE_MONO_ARRAY = sig end
 signature UNSAFE_MONO_VECTOR = sig end
 signature VECTOR = sig end
-signature VECTOR_SLICE = sig end
-structure ArraySlice = struct end
 structure BinIO = struct end
 structure BoolArray = struct end
 structure BoolArraySlice = struct end
 structure BoolVector = struct end
 structure BoolVectorSlice = struct end
 structure Byte = struct end
-structure Char = struct
-  val chr : int -> char = fn _ => raise Fail "Char.chr: not implemented yet"
-  val ord : char -> int = fn _ => raise Fail "Char.ord: not implemented yet"
-  open Char
-end
 structure CharArraySlice = struct end
 structure CharVector = struct end
 structure CharVectorSlice = struct end
@@ -58,8 +47,6 @@ structure IntArray = struct end
 structure IntArraySlice = struct end
 structure IntVector = struct end
 structure IntVectorSlice = struct end
-structure IntInf = struct end
-structure LargeInt = struct end
 structure LargeReal = struct end
 structure Math = struct end
 structure OS = struct end
@@ -73,14 +60,6 @@ structure PackWord64Big = struct end
 structure PackWord64Little = struct end
 structure PackWord8Big = struct end
 structure PackWord8Little = struct end
-structure Real = struct
-  val ceil : real -> int = fn _ => raise Fail "Real.ceil: not implemented yet"
-  val floor : real -> int = fn _ => raise Fail "Real.floor: not implemented yet"
-  val round : real -> int = fn _ => raise Fail "Real.round: not implemented yet"
-  val trunc : real -> int = fn _ => raise Fail "Real.trunc: not implemented yet"
-  val fromInt : int -> real = fn _ => raise Fail "Real.fromInt: not implemented yet"
-  open Real
-end
 structure RealArray = struct end
 structure RealArraySlice = struct end
 structure RealVector = struct end
@@ -88,7 +67,6 @@ structure RealVectorSlice = struct end
 structure Text = struct end
 structure Time = struct end
 structure Timer = struct end
-structure VectorSlice = struct end
 structure WideChar = struct end
 structure WideCharArray = struct end
 structure WideCharArraySlice = struct end

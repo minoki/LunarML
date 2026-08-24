@@ -38,7 +38,7 @@ signature REAL = sig
     val isNormal : real -> bool
     val class : real -> IEEEReal.float_class
     val toManExp : real -> { man : real, exp : int }
-    (* val fromManExp : { man : real, exp : int } -> real *)
+    val fromManExp : { man : real, exp : int } -> real
     val split : real -> { whole : real, frac : real }
     val realMod : real -> real
     (* val nextAfter : real * real -> real *)
@@ -174,7 +174,7 @@ fun toInt IEEEReal.TO_NEGINF = floor
   | toInt IEEEReal.TO_NEAREST = round
 fun fromInt (x : int) : real = _primCall "Real.fromInt" (x)
 fun toManExp (x : real) : { man : real, exp : int } =
-  if x == 0.0 orelse x == posInf orelse x == negInf orelse x != x then
+  if x == 0.0 then
     { man = x, exp = 0 }
   else
     let
@@ -214,6 +214,62 @@ fun toManExp (x : real) : { man : real, exp : int } =
           val manWord64 = Word64.orb (0wx3fe0_0000_0000_0000, trailingSignificand)
           val manAbs = _primCall "Real.reinterpretFromWord64" (manWord64)
         in { man = copySign (manAbs, x), exp = exp }
+        end
+    end
+fun fromManExp { man : real, exp : int } : real =
+  if man == 0.0 then
+    man
+  else
+    let
+      (* Goal: x = man * radix^exp, 1.0 / radix <= man < 1 *)
+      (* radix^(exp-1) <= x < radix^exp *)
+      val bits = _primCall "Real.reinterpretAsWord64" (man)
+      val biasedExp = Word64.andb (bits, 0wx7ff0_0000_0000_0000) .Word64.>>. 0w52
+      val trailingSignificand = Word64.andb (bits, 0wx000f_ffff_ffff_ffff)
+    in
+      if biasedExp = 0wx7ff then
+        (* infinity, NaN *)
+        man
+      else
+        let
+          val (trailingSignificand, biasedExp') : Word64.word * int =
+            if biasedExp = 0w0 then
+              (* subnormal *)
+              (* abs x = trailingSignificand * 0x1p-1074 *)
+              let
+                fun loop i =
+                  if (trailingSignificand .Word64.>>. i) > 0w0 then
+                    (* 2^i <= trailingSignificand < 2^(i+1) *)
+                    (* 2^(i-1074) <= abs x < 2^(i-1074+1) *)
+                    let
+                      val biasedExp' = Word.toInt i - 51
+                      val trailingSignificand = Word64.andb (trailingSignificand .Word64.<<. (0w52 - i), 0wx000f_ffff_ffff_ffff)
+                    in (trailingSignificand, biasedExp')
+                    end
+                  else
+                    loop (i - 0w1)
+              in loop 0w51
+              end
+            else
+              (* normal *)
+              (trailingSignificand, Word64.toInt biasedExp)
+        in
+          (* abs x = (2^53 + trailingSignificand) * 2^(biasedExp - 1023 - 53) *)
+          (* 2^(biasedExp - 1023) <= abs x < 2^(biasedExp - 1023 + 1) *)
+          let
+            val biasedExp'' = biasedExp' + exp
+          in
+            if biasedExp'' <= 0 then
+              raise Fail "not implemented yet (underflow case)"
+            else if biasedExp'' >= 0x7ff then
+              raise Fail "not implemented yet (overflow case)"
+            else
+              let
+                val resultWord64 = Word64.orb (Word64.fromInt biasedExp'' .Word64.<<. 0w52, trailingSignificand)
+                val resultAbs = _primCall "Real.reinterpretFromWord64" (resultWord64)
+              in copySign (resultAbs, man)
+              end
+          end
         end
     end
 open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)

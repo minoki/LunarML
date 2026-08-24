@@ -91,3 +91,97 @@ _overload "Int" [int] { + = Int.+
                       , minInt = ~0x8000_0000
                       , maxInt = 0x7fff_ffff
                       };
+
+_equality _Prim.Int64.int = fn (x, y) => _primCall "Int64.=" (x, y);
+structure Int64 = struct
+type int = _Prim.Int64.int
+fun x < y = _primCall "Int64.<" (x, y)
+fun x <= y = _primCall "Int64.<=" (x, y)
+fun x > y = _primCall "Int64.>" (x, y)
+fun x >= y = _primCall "Int64.>=" (x, y)
+val MIN : int = ~0x8000_0000_0000_0000
+fun ~ (x : int) =
+  if x = MIN then
+    raise Overflow
+  else
+    _primCall "Int64.~.wrapping" (x)
+fun abs (x : int) =
+  if x >= 0 then
+    x
+  else
+    ~x
+fun x + y =
+  let val z = _primCall "Int64.+.wrapping" (x, y)
+  in
+    if (y > 0 andalso z < x) orelse (y < 0 andalso z > x) then
+      raise Overflow
+    else
+      z
+  end
+fun x - y =
+  let val z = _primCall "Int64.-.wrapping" (x, y)
+  in
+    if (y < 0 andalso z < x) orelse (y > 0 andalso z > x) then
+      raise Overflow
+    else
+      z
+  end
+fun x * y =
+  let val z = _primCall "Int64.*.wrapping" (x, y)
+  in
+    if (x = MIN andalso y = ~1) orelse (y = MIN andalso x = ~1) orelse (x <> 0 andalso _primCall "Int64.quot.unchecked" (z, x) <> y) orelse (y <> 0 andalso _primCall "Int64.quot.unchecked" (z, y) <> x) then
+      raise Overflow
+    else
+      z
+  end
+fun quot (x, y) =
+  if y = 0 then
+    raise Div
+  else if x = MIN andalso y = ~1 then
+    raise Overflow
+  else
+    _primCall "Int64.quot.unchecked" (x, y)
+fun rem (x, y) =
+  if y = 0 then
+    raise Div
+  else
+    _primCall "Int64.rem.unchecked" (x, y)
+fun x div y =
+  if y = 0 then
+    raise Div
+  else if x = MIN andalso y = ~1 then
+    raise Overflow
+  else
+    let val r = _primCall "Int64.rem.unchecked" (x, y)
+    in if (x >= 0 andalso y > 0) orelse (x <= 0 andalso y < 0) orelse r = 0 then
+         _primCall "Int64.quot.unchecked" (x, y)
+       else
+         _primCall "Int64.-.wrapping" (_primCall "Int64.quot.unchecked" (x, y), 1)
+    end
+fun x mod y =
+  if y = 0 then
+    raise Div
+  else
+    let val r = _primCall "Int64.rem.unchecked" (x, y)
+    in if (x >= 0 andalso y > 0) orelse (x <= 0 andalso y < 0) orelse r = 0 then
+         r
+       else
+         _primCall "Int64.+.wrapping" (r, y)
+    end
+fun fromInt (x : Int.int) = _primCall "Int.toInt64.unchecked" (x)
+end
+_overload "Int" [Int64.int] { + = Int64.+
+                            , - = Int64.-
+                            , * = Int64.*
+                            , div = Int64.div
+                            , mod = Int64.mod
+                            , ~ = Int64.~
+                            , abs = Int64.abs
+                            , < = Int64.<
+                            , <= = Int64.<=
+                            , > = Int64.>
+                            , >= = Int64.>=
+                            , fromInt = Int64.fromInt
+                            , minInt = ~0x8000_0000_0000_0000
+                            , maxInt = 0x7fff_ffff_ffff_ffff
+                            };

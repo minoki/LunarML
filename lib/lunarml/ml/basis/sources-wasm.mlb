@@ -18,7 +18,6 @@ wasm/int-prim.sml
 string-cvt.sig
 string-cvt-0.sml
 wasm/int-1.sml
-wasm/int.sml
 wasm/word-prim.sml
 wasm/word-1.sml
 wasm/word.sml
@@ -43,6 +42,11 @@ scan-num-utils.sml
 vector-slice.sml
 array-slice.sml
 wasm/real-1.sml
+string-cvt-1.sml
+wasm/int-inf.sml
+wasm/scan-num.sml
+large-int-is-int-inf.sml
+wasm/int.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
