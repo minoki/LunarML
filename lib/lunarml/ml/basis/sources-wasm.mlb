@@ -49,7 +49,14 @@ wasm/scan-num.sml
 large-int-is-int-inf.sml
 wasm/int.sml
 array.sml
+wasm/char-1.sml
+wasm/string-1.sml
+wasm/string-2.sml
+scan-text.sml
+string.sml
 os-path.sig
+os-path-unix.sml
+os-path-windows.sml
 io.sml
 wasi/text-io.sml
 wasm/stub.sml

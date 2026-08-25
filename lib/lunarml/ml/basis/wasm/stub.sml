@@ -1,7 +1,6 @@
 signature ARRAY = sig end
 signature BOOL = sig end
 signature BYTE = sig end
-signature CHAR = sig end
 signature DATE = sig end
 signature MONO_ARRAY = sig end
 signature MONO_ARRAY_SLICE = sig end
@@ -9,7 +8,6 @@ signature MONO_VECTOR = sig end
 signature MONO_VECTOR_SLICE = sig end
 signature PACK_REAL = sig end
 signature PACK_WORD = sig end
-signature STRING = sig end
 signature TEXT = sig end
 signature TIME = sig end
 signature TIMER = sig end
