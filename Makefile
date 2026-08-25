@@ -170,7 +170,7 @@ test-nodejs-cps: bin/lunarml
 	$(MAKE) -C test VARIANT=nodejs-cps NODE=$(NODE)
 
 test-wasmtime: bin/lunarml
-	$(MAKE) -C test VARIANT=wasmtime NODE=$(WASMTIME)
+	$(MAKE) -C test VARIANT=wasmtime WASMTIME=$(WASMTIME)
 
 validate-lua: bin/lunarml
 	bin/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen2.lua --print-timings --internal-consistency-check src/lunarml-main.mlb
