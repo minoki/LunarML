@@ -752,9 +752,10 @@ struct
                 W.STRUCT_NEW tupleIdx :: acc'
               end
           end
-      | N.ExnTag _ =>
-          (* Create a fresh ExnTagType struct instance for unique identity via ref.eq *)
-          W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
+      | N.ExnTag {name, payloadTy = _} =>
+          (* Create a fresh ExnTagType struct instance for unique identity via
+             ref.eq; the field holds the exception name for General.exnName *)
+          W.STRUCT_NEW (#exnTagTypeIdx ctx) :: doStringConst (fctx, name, acc)
       | N.Projection projection => doProjection fctx env (projection, acc)
       | N.Abs {contParam, params, body, resultTy = _, attr = _} =>
           doAbs fctx env (contParam, params, body, acc)
@@ -2753,7 +2754,25 @@ struct
 
       (* ---- General exn name ---- *)
       | Primitives.General_exnName =>
-          W.REF_NULL (W.AbsHeapType W.HEAP_NONE) :: acc (* TODO *)
+          (* Cast e to $SmlExn, get the tag, cast it to $ExnTag and read the
+             name field. *)
+          (case args of
+             [e] =>
+               let
+                 val smlExnTypeIdx = #smlExnTypeIdx ctx
+                 val exnTagTypeIdx = #exnTagTypeIdx ctx
+               in
+                 W.STRUCT_GET (exnTagTypeIdx, 0)
+                 ::
+                 W.REF_CAST
+                   {nullable = false, heaptype = W.TypeIdx exnTagTypeIdx}
+                 :: W.STRUCT_GET (smlExnTypeIdx, 0)
+                 ::
+                 W.REF_CAST
+                   {nullable = false, heaptype = W.TypeIdx smlExnTypeIdx}
+                 :: doExp fctx env (e, acc)
+               end
+           | _ => raise CodeGenError "General_exnName: expected 1 arg")
 
       (* ---- mkFn / call helpers ---- *)
       | Primitives.mkFn2 => raise CodeGenError "mkFn2: not yet implemented"
@@ -2886,9 +2905,15 @@ struct
                  (W.RefType {nullable = false, heaptype = W.AbsHeapType W.FUNC})
              }]
         }
-      (* ExnTagType: empty struct, used for exception tag identity via ref.eq *)
-      val exnTagType =
-        W.SubType {final = false, supertypes = [], body = W.StructType []}
+      (* ExnTagType: (struct (field name anyref)), used for exception tag
+         identity via ref.eq; the field holds the exception name as a $String
+         so that General.exnName can retrieve it. *)
+      val exnTagType = W.SubType
+        { final = false
+        , supertypes = []
+        , body = W.StructType
+            [{mut = W.CONST, storagetype = W.ValStorageType anyref}]
+        }
       (* SmlExnType: struct (field tag anyref) (field payload anyref) *)
       val smlExnType = W.SubType
         { final = false
@@ -3115,23 +3140,24 @@ struct
          as a SmlExn struct: {tag = new ExnTagType(), payload = null}.
          The instructions go at the END of initAcc (= BEGINNING of execution order after reversal). *)
       val predefExns =
-        [ InitialEnv.VId_Match
-        , InitialEnv.VId_Bind
-        , InitialEnv.VId_Div
-        , InitialEnv.VId_Overflow
-        , InitialEnv.VId_Size
-        , InitialEnv.VId_Subscript
+        [ (InitialEnv.VId_Match, "Match")
+        , (InitialEnv.VId_Bind, "Bind")
+        , (InitialEnv.VId_Div, "Div")
+        , (InitialEnv.VId_Overflow, "Overflow")
+        , (InitialEnv.VId_Size, "Size")
+        , (InitialEnv.VId_Subscript, "Subscript")
         ]
       val (env, initAcc) =
         List.foldl
-          (fn (vid, (e, acc)) =>
+          (fn ((vid, name), (e, acc)) =>
              let
                val localIdx = allocLocal startCtx anyref
-               (* Instructions in reverse (prepend last-first): set local, then create SmlExn, then null payload, then create tag *)
+               (* Instructions in reverse (prepend last-first): set local, then create SmlExn, then null payload, then create tag from its name *)
                val acc =
                  W.LOCAL_SET localIdx :: W.STRUCT_NEW (#smlExnTypeIdx ctx)
                  :: W.REF_NULL (W.AbsHeapType W.HEAP_NONE)
-                 :: W.STRUCT_NEW (#exnTagTypeIdx ctx) :: acc
+                 :: W.STRUCT_NEW (#exnTagTypeIdx ctx)
+                 :: doStringConst (startCtx, name, acc)
              in
                (envWithVar (e, vid, localIdx, NONE), acc)
              end) (env, []) predefExns
