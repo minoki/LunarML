@@ -1176,8 +1176,14 @@ struct
             List.map
               (fn (SOME _, ty) => SOME (allocLocal fctx (tyToWasmType ty))
                 | (NONE, _) => NONE) params
+          (* The BLOCK we are about to emit adds a label level: bump the labels
+             of the continuations already in scope so that `br`s to them from
+             inside the block stay correct. *)
           val env' = envWithCont
-            (env, name, BREAK_TO {label = 0, params = paramLocals})
+            ( bumpEnvConts 1 env
+            , name
+            , BREAK_TO {label = 0, params = paramLocals}
+            )
           (* Generate the code inside the block (rest of decs + final cont) *)
           val innerCode = List.rev
             (doLetDecs fctx env' (restDecs, finalCont, []))
