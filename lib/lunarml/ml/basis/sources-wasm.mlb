@@ -38,6 +38,7 @@ wasm/array-prim.sml
 substring.sml
 wasm/char-1.sml
 vector.sml
+wasm/vector-1.sml
 scan-num-utils.sml
 vector-slice.sml
 array-slice.sml
@@ -47,6 +48,7 @@ wasm/int-inf.sml
 wasm/scan-num.sml
 large-int-is-int-inf.sml
 wasm/int.sml
+array.sml
 os-path.sig
 io.sml
 wasi/text-io.sml
